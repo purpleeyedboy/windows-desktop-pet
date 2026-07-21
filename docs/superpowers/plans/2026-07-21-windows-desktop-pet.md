@@ -4,9 +4,13 @@
 
 **Goal:** Build a double-clickable Windows EXE that presents the supplied cat as a transparent, draggable, resizable desktop pet with three generated frame animations, Chinese speech bubbles, a context menu, and an always-on-top toggle.
 
-**Architecture:** A small PySide6 application separates deterministic state/layout logic from Qt widgets. Generated action sheets are processed into normalized transparent frames by a repeatable Pillow pipeline, while the application loads those bundled frames through a PyInstaller-safe asset resolver. The final one-file GUI EXE contains all pet assets and does not depend on the original temporary image path.
+**Architecture:** A small Tk 8.6 application separates deterministic state/layout logic from Windows widgets. Generated action sheets are processed into normalized transparent frames by a repeatable Pillow pipeline, while the application loads those bundled frames through a PyInstaller-safe asset resolver. The final one-file GUI EXE contains all pet assets and does not depend on the original temporary image path.
 
-**Tech Stack:** Python 3.11+, PySide6 6.x, Pillow 11.x, pytest 8.x, PyInstaller 6.x, Codex image generation.
+**Tech Stack:** Python 3.11+, Tk 8.6, Pillow 11.x, pytest 8.x, PyInstaller 6.x, Codex image generation, minimal Windows `ctypes` calls.
+
+## Execution Environment Adjustment
+
+The approved PySide6 design was tested through both the complete `PySide6` package and the smaller official `PySide6-Essentials` package. Both downloads reproducibly reached their maximum command windows without installing, while the package index remained reachable. Tk 8.6 is already installed and verified. Therefore all Qt-specific examples in Tasks 4-6 are superseded as follows: `QPixmap` becomes `PIL.Image.Image` plus `ImageTk.PhotoImage` at the widget boundary; `QTimer` becomes Tk `after`; `QRect` becomes the existing `Rect` model; `QMenu` becomes `tk.Menu`; `QLockFile` becomes a Win32 named mutex; Qt window flags become `overrideredirect(True)`, `attributes("-toolwindow", True)`, `attributes("-topmost", True)`, and `attributes("-transparentcolor", "#ff00ff")`. File names, user-visible behavior, test-first order, asset contracts, build output, and acceptance criteria remain unchanged.
 
 ## Global Constraints
 
@@ -109,7 +113,7 @@ build-backend = "setuptools.build_meta"
 name = "desktop-cat-pet"
 version = "1.0.0"
 requires-python = ">=3.11"
-dependencies = ["PySide6>=6.8,<7", "Pillow>=11,<12"]
+dependencies = ["Pillow>=11,<12"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "PyInstaller>=6.13,<7"]
