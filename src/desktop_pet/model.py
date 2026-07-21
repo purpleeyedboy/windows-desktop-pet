@@ -14,6 +14,10 @@ def clamp_height(value: int) -> int:
     return max(120, min(520, int(value)))
 
 
+def format_position(x: int, y: int) -> str:
+    return f"{int(x):+d}{int(y):+d}"
+
+
 class ActionCycle:
     def __init__(self) -> None:
         self._index = 0
