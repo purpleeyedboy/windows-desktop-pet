@@ -120,8 +120,10 @@ def test_find_frame_paths_requires_exact_thirty(tmp_path: Path):
     with pytest.raises(RuntimeError, match="30"):
         find_frame_paths(tmp_path, "jump")
 
-def test_load_frames_returns_three_thirty_frame_actions():
-    frames = load_frames()
+def test_load_frames_returns_three_thirty_frame_actions(tmp_path: Path):
+    for action in ("jump", "squash", "shake"):
+        make_action(tmp_path/action, count=30)
+    frames = load_frames(tmp_path)
     assert set(frames) == {"jump", "squash", "shake"}
     assert {len(value) for value in frames.values()} == {30}
 
@@ -170,7 +172,7 @@ The validator also checks RGBA, 512×768, Alpha extrema, manifest-mapped SHA-256
 
 Run: `.\.venv\Scripts\python.exe -m pytest tests\test_assets.py tests\test_validate_assets.py -q`
 
-Expected: all pass.
+Expected: all pass against temporary 30-frame fixtures; the real six-frame runtime tree intentionally remains invalid until Task 4 generates all 90 frames.
 
 ```powershell
 git add src/desktop_pet/assets.py tests/test_assets.py tools/validate_assets.py tests/test_validate_assets.py
