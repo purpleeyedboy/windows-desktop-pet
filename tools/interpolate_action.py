@@ -198,13 +198,37 @@ def _prepare_output_dir(output_dir: Path) -> Path:
     return output_root
 
 
+def _resolve_directory_roles(
+    keyframe_dir: Path, output_dir: Path, qa_dir: Path
+) -> tuple[Path, Path, Path]:
+    roles = {
+        "keyframe_dir": Path(keyframe_dir).resolve(),
+        "output_dir": Path(output_dir).resolve(),
+        "qa_dir": Path(qa_dir).resolve(),
+    }
+    conflicts = [
+        f"{first_role} and {second_role}"
+        for first_role, second_role in (
+            ("keyframe_dir", "output_dir"),
+            ("keyframe_dir", "qa_dir"),
+            ("output_dir", "qa_dir"),
+        )
+        if roles[first_role] == roles[second_role]
+    ]
+    if conflicts:
+        raise ValueError(
+            "animation directory role conflict: " + ", ".join(conflicts)
+        )
+    return roles["keyframe_dir"], roles["output_dir"], roles["qa_dir"]
+
+
 def build_action(
     keyframe_dir: Path, output_dir: Path, qa_dir: Path, action: str
 ) -> dict[str, object]:
     """Create 30 frames and QA artifacts while byte-copying all key positions."""
-    keyframe_dir = Path(keyframe_dir)
-    output_dir = Path(output_dir)
-    qa_dir = Path(qa_dir)
+    keyframe_dir, output_dir, qa_dir = _resolve_directory_roles(
+        keyframe_dir, output_dir, qa_dir
+    )
     keyframes = _load_keyframes(keyframe_dir)
     output_dir = _prepare_output_dir(output_dir)
 

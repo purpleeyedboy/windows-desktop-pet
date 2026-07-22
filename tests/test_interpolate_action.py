@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +45,21 @@ def make_keyframes(root: Path) -> Path:
             root / f"{index:02d}.png"
         )
     return root
+
+
+def relative_alias(path: Path) -> Path:
+    return Path(os.path.relpath(path.resolve(), Path.cwd()))
+
+
+def tree_snapshot(path: Path) -> dict[str, bytes] | None:
+    root = path.resolve()
+    if not root.exists():
+        return None
+    return {
+        candidate.relative_to(root).as_posix(): candidate.read_bytes()
+        for candidate in sorted(root.rglob("*"))
+        if candidate.is_file()
+    }
 
 
 def test_interpolate_pair_moves_monotonically_and_cleans_hidden_rgb():
@@ -118,6 +134,54 @@ def test_render_between_uses_flow_direction_instead_of_cross_dissolving():
     assert rendered.getpixel((3, 1)) == (240, 80, 20, 255)
     assert rendered.getpixel((1, 1))[3] == 0
     assert rendered.getpixel((5, 1))[3] == 0
+
+
+@pytest.mark.parametrize(
+    ("conflict", "expected_roles"),
+    (
+        ("output_is_keyframes", "keyframe_dir and output_dir"),
+        ("qa_is_output", "output_dir and qa_dir"),
+        ("qa_is_keyframes", "keyframe_dir and qa_dir"),
+    ),
+)
+def test_build_action_rejects_equal_resolved_directory_roles_before_writes(
+    tmp_path: Path, conflict: str, expected_roles: str
+):
+    keyframe_dir = make_keyframes(tmp_path / "keys").resolve()
+    output_dir = (tmp_path / "out").resolve()
+    qa_dir = (tmp_path / "qa").resolve()
+    if conflict == "output_is_keyframes":
+        output_dir = relative_alias(keyframe_dir)
+    elif conflict == "qa_is_output":
+        qa_dir = relative_alias(output_dir)
+    else:
+        qa_dir = relative_alias(keyframe_dir)
+
+    role_roots = {
+        path.resolve() for path in (keyframe_dir, output_dir, qa_dir)
+    }
+    before = {root: tree_snapshot(root) for root in role_roots}
+    keyframe_bytes = {
+        path.name: path.read_bytes() for path in sorted(keyframe_dir.glob("*.png"))
+    }
+
+    with pytest.raises((RuntimeError, ValueError), match=expected_roles):
+        build_action(keyframe_dir, output_dir, qa_dir, "jump")
+
+    assert {
+        path.name: path.read_bytes() for path in sorted(keyframe_dir.glob("*.png"))
+    } == keyframe_bytes
+    assert {root: tree_snapshot(root) for root in role_roots} == before
+    for root in role_roots:
+        assert not any(
+            (root / name).exists()
+            for name in (
+                "contact-sheet.png",
+                "normal.gif",
+                "slow.gif",
+                "stats.json",
+            )
+        )
 
 
 def test_build_action_preserves_keyframe_bytes(tmp_path: Path):
