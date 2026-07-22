@@ -13,6 +13,7 @@ EXPECTED_SIZE = (512, 768)
 FRAME_COUNT = 30
 EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
 EXPECTED_KEYFRAME_NAMES = tuple(f"{index:02d}.png" for index in range(6))
+KEYFRAME_POSITIONS = (0, 6, 12, 17, 23, 29)
 
 
 def transparent_rgb_is_zero(image: Image.Image) -> bool:
@@ -51,13 +52,19 @@ def validate_keyframe_hashes(
         if not isinstance(mappings, dict):
             errors.append(f"{action}: missing mapped SHA-256 values")
             continue
-        for keyframe_name in EXPECTED_KEYFRAME_NAMES:
+        for keyframe_index, keyframe_name in enumerate(EXPECTED_KEYFRAME_NAMES):
             mapping = mappings.get(keyframe_name)
             try:
                 final_name = mapping["final_name"]
                 expected_hash = mapping["sha256"]
             except (KeyError, TypeError):
                 errors.append(f"{action}/{keyframe_name}: missing mapped SHA-256 value")
+                continue
+            expected_final_name = f"{KEYFRAME_POSITIONS[keyframe_index]:02d}.png"
+            if final_name != expected_final_name:
+                errors.append(
+                    f"{action}/{keyframe_name}: must map to {expected_final_name}"
+                )
                 continue
             path = root / action / final_name
             if not path.is_file():
@@ -101,7 +108,7 @@ def validate_assets(root: Path, keyframe_root: Path | None = None) -> dict[str, 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
-    parser.add_argument("--keyframe-root", type=Path)
+    parser.add_argument("--keyframes", "--keyframe-root", dest="keyframe_root", type=Path)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     report = validate_assets(args.root, args.keyframe_root)

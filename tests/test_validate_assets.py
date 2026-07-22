@@ -70,6 +70,20 @@ def test_validator_rejects_missing_manifest_mapping(tmp_path: Path):
     assert any("missing mapped SHA-256" in error for error in report["errors"])
 
 
+def test_validator_rejects_misplaced_manifest_final_name(tmp_path: Path):
+    pet, keys = make_valid_thirty_frame_tree(tmp_path)
+    manifest_path = keys / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mapping = manifest["actions"]["jump"]["00.png"]
+    mapping["final_name"] = "06.png"
+    mapping["sha256"] = hashlib.sha256((pet / "jump" / "06.png").read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    report = validate_assets(pet, keys)
+
+    assert any("must map" in error for error in report["errors"])
+
+
 def test_validator_rejects_non_rgba_frame(tmp_path: Path):
     pet, keys = make_valid_thirty_frame_tree(tmp_path)
     Image.new("RGB", (512, 768), "white").save(pet / "jump" / "01.png")
@@ -137,3 +151,10 @@ def test_cli_writes_json_report(tmp_path: Path, monkeypatch, capsys):
         "total_frames": 90,
     }
     assert capsys.readouterr().out == "OK: 3 actions, 90 frames, 512x768 RGBA\n"
+
+
+def test_cli_accepts_keyframes_option(tmp_path: Path, monkeypatch):
+    pet, keys = make_valid_thirty_frame_tree(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["validate_assets.py", str(pet), "--keyframes", str(keys)])
+
+    assert main() == 0
