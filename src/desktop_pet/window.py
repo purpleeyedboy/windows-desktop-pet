@@ -4,17 +4,27 @@ import ctypes
 import os
 from random import Random
 import tkinter as tk
-from typing import Sequence
+from typing import Callable, Protocol, Sequence
 
-from PIL import Image, ImageTk
+from PIL import Image
 
 from .animation import AnimationController
-from .bubble import BubbleWindow, TRANSPARENT_KEY
+from .bubble import BubbleWindow
+from .layered_window import LayeredWindowRenderer
 from .model import ActionCycle, Rect, choose_phrase, clamp_height, format_position
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
 CLICK_THRESHOLD = 8
+
+
+class Renderer(Protocol):
+    def render(self, image: Image.Image, x: int, y: int) -> None: ...
+
+    def set_topmost(self, enabled: bool) -> None: ...
+
+
+RendererFactory = Callable[[int], Renderer]
 
 
 def screen_work_area(window_id: int, fallback: Rect) -> Rect:
@@ -52,6 +62,7 @@ class PetWindow:
         self,
         root: tk.Tk,
         frames: dict[str, Sequence[Image.Image]],
+        renderer_factory: RendererFactory = LayeredWindowRenderer,
     ) -> None:
         self.root = root
         self.frames = frames
@@ -60,28 +71,23 @@ class PetWindow:
         self.action_cycle = ActionCycle()
         self._rng = Random()
         self._current_image = frames["jump"][0]
-        self._photo: ImageTk.PhotoImage | None = None
+        self._resized_image = self._current_image
         self._press_pointer: tuple[int, int] | None = None
         self._press_window: tuple[int, int] | None = None
 
         root.title("桌面宠物")
         root.overrideredirect(True)
-        root.configure(background=TRANSPARENT_KEY)
+        root.configure(cursor="hand2")
         root.attributes("-topmost", True)
-        try:
-            root.attributes("-toolwindow", True)
-            root.attributes("-transparentcolor", TRANSPARENT_KEY)
-        except tk.TclError:
-            pass
-
-        self.label = tk.Label(
-            root,
-            background=TRANSPARENT_KEY,
-            borderwidth=0,
-            highlightthickness=0,
-            cursor="hand2",
+        root.update_idletasks()
+        self._window_rect = Rect(
+            root.winfo_x(),
+            root.winfo_y(),
+            1,
+            self.display_height,
         )
-        self.label.pack(fill="both", expand=True)
+        self.renderer = renderer_factory(root.winfo_id())
+        self.renderer.set_topmost(True)
         self.bubble = BubbleWindow(root)
         self.animation = AnimationController(
             {action: len(action_frames) for action, action_frames in frames.items()},
@@ -113,17 +119,16 @@ class PetWindow:
         return menu
 
     def _bind_events(self) -> None:
-        self.label.bind("<ButtonPress-1>", self._on_left_press)
-        self.label.bind("<B1-Motion>", self._on_left_motion)
-        self.label.bind("<ButtonRelease-1>", self._on_left_release)
-        self.label.bind("<Button-3>", self._on_context_menu)
-        self.label.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<ButtonPress-1>", self._on_left_press)
+        self.root.bind("<B1-Motion>", self._on_left_motion)
+        self.root.bind("<ButtonRelease-1>", self._on_left_release)
+        self.root.bind("<Button-3>", self._on_context_menu)
+        self.root.bind("<MouseWheel>", self._on_wheel)
 
     def _anchor(self) -> tuple[int, int]:
-        self.root.update_idletasks()
         return (
-            self.root.winfo_x() + self.root.winfo_width() // 2,
-            self.root.winfo_y() + self.root.winfo_height(),
+            self._window_rect.x + self._window_rect.width // 2,
+            self._window_rect.y + self._window_rect.height,
         )
 
     def _apply_image(
@@ -132,15 +137,32 @@ class PetWindow:
         anchor: tuple[int, int] | None = None,
     ) -> None:
         width = max(1, round(image.width * self.display_height / image.height))
-        resized = image.resize((width, self.display_height), Image.Resampling.LANCZOS)
-        self._photo = ImageTk.PhotoImage(resized, master=self.root)
-        self.label.configure(image=self._photo, width=width, height=self.display_height)
-        self.root.geometry(f"{width}x{self.display_height}")
-        if anchor is not None:
-            self.root.geometry(
-                f"{width}x{self.display_height}"
-                f"{format_position(anchor[0] - width // 2, anchor[1] - self.display_height)}"
-            )
+        self._resized_image = image.convert("RGBA").resize(
+            (width, self.display_height), Image.Resampling.LANCZOS
+        )
+        if anchor is None:
+            x, y = self._window_rect.x, self._window_rect.y
+        else:
+            x = anchor[0] - width // 2
+            y = anchor[1] - self.display_height
+        self._window_rect = Rect(x, y, width, self.display_height)
+        self.root.geometry(
+            f"{width}x{self.display_height}{format_position(x, y)}"
+        )
+        self.renderer.render(self._resized_image, x, y)
+
+    def _move_to(self, x: int, y: int) -> None:
+        self._window_rect = Rect(
+            x,
+            y,
+            self._window_rect.width,
+            self._window_rect.height,
+        )
+        self.root.geometry(
+            f"{self._window_rect.width}x{self._window_rect.height}"
+            f"{format_position(x, y)}"
+        )
+        self.renderer.render(self._resized_image, x, y)
 
     def _fallback_screen(self) -> Rect:
         return Rect(0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight())
@@ -150,19 +172,13 @@ class PetWindow:
         return screen_work_area(self.root.winfo_id(), self._fallback_screen())
 
     def pet_rect(self) -> Rect:
-        self.root.update_idletasks()
-        return Rect(
-            self.root.winfo_x(),
-            self.root.winfo_y(),
-            self.root.winfo_width(),
-            self.root.winfo_height(),
-        )
+        return self._window_rect
 
     def show_at_default_position(self) -> None:
         area = self.current_screen()
-        x = area.right - self.root.winfo_width() - 36
-        y = area.bottom - self.root.winfo_height() - 36
-        self.root.geometry(format_position(x, y))
+        x = area.right - self._window_rect.width - 36
+        y = area.bottom - self._window_rect.height - 36
+        self._move_to(x, y)
         self.root.deiconify()
         self.root.lift()
 
@@ -176,6 +192,7 @@ class PetWindow:
         self.always_on_top = bool(enabled)
         self._topmost_var.set(self.always_on_top)
         self.root.attributes("-topmost", self.always_on_top)
+        self.renderer.set_topmost(self.always_on_top)
         self.bubble.set_always_on_top(self.always_on_top)
         self.root.lift()
 
@@ -207,7 +224,7 @@ class PetWindow:
 
     def _on_left_press(self, event: tk.Event) -> None:
         self._press_pointer = (event.x_root, event.y_root)
-        self._press_window = (self.root.winfo_x(), self.root.winfo_y())
+        self._press_window = (self._window_rect.x, self._window_rect.y)
 
     def _on_left_motion(self, event: tk.Event) -> None:
         if self._press_pointer is None or self._press_window is None:
@@ -216,11 +233,9 @@ class PetWindow:
         delta_y = event.y_root - self._press_pointer[1]
         if abs(delta_x) + abs(delta_y) < CLICK_THRESHOLD:
             return
-        self.root.geometry(
-            format_position(
-                self._press_window[0] + delta_x,
-                self._press_window[1] + delta_y,
-            )
+        self._move_to(
+            self._press_window[0] + delta_x,
+            self._press_window[1] + delta_y,
         )
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
