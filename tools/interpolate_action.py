@@ -117,12 +117,24 @@ def render_between(
         _premultiplied_rgba(second), backward, 1.0 - time
     )
 
+    first_sample = np.divide(
+        first_warped,
+        first_valid,
+        out=np.zeros_like(first_warped),
+        where=first_valid > 1.0e-8,
+    )
+    second_sample = np.divide(
+        second_warped,
+        second_valid,
+        out=np.zeros_like(second_warped),
+        where=second_valid > 1.0e-8,
+    )
     first_weight = (1.0 - time) * first_valid
     second_weight = time * second_valid
     weight_sum = first_weight + second_weight
     safe_weight = np.maximum(weight_sum, 1.0e-8)
     blended = (
-        first_warped * first_weight + second_warped * second_weight
+        first_sample * first_weight + second_sample * second_weight
     ) / safe_weight
     blended = np.where(weight_sum > 1.0e-8, blended, 0.0)
 
@@ -175,6 +187,17 @@ def _load_keyframes(keyframe_dir: Path) -> list[Image.Image]:
     return frames
 
 
+def _prepare_output_dir(output_dir: Path) -> Path:
+    output_root = output_dir.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    for candidate in output_root.glob("*.png"):
+        resolved_candidate = candidate.resolve()
+        if resolved_candidate.parent != output_root or not candidate.is_file():
+            raise RuntimeError(f"unsafe managed PNG path: {candidate}")
+        candidate.unlink()
+    return output_root
+
+
 def build_action(
     keyframe_dir: Path, output_dir: Path, qa_dir: Path, action: str
 ) -> dict[str, object]:
@@ -183,7 +206,7 @@ def build_action(
     output_dir = Path(output_dir)
     qa_dir = Path(qa_dir)
     keyframes = _load_keyframes(keyframe_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = _prepare_output_dir(output_dir)
 
     for pair_index, intermediate_count in enumerate(INTERMEDIATE_COUNTS):
         final_position = FINAL_POSITIONS[pair_index]

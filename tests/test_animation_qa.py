@@ -30,6 +30,16 @@ def make_thirty_frames() -> list[Image.Image]:
     return frames
 
 
+def make_precise_metric_frames() -> list[Image.Image]:
+    frames = []
+    for index in range(30):
+        frame = Image.new("RGBA", FRAME_SIZE, (0, 0, 0, 0))
+        frame.putpixel((10 + index, 20), (255, 0, 0, 255))
+        frame.putpixel((11 + index, 20), (0, 255, 0, 128))
+        frames.append(frame)
+    return frames
+
+
 def test_qa_writer_creates_required_artifacts(tmp_path: Path):
     report = write_action_qa(make_thirty_frames(), tmp_path, "jump")
 
@@ -66,6 +76,23 @@ def test_qa_stats_include_required_per_frame_metrics(tmp_path: Path):
     assert all(frame["alpha_bbox"] for frame in saved["frames"])
     assert all(frame["effective_area"] > 0 for frame in saved["frames"])
     assert all(frame["largest_component_ratio"] == 1.0 for frame in saved["frames"])
+
+
+def test_qa_stats_have_exact_documented_metric_definitions(tmp_path: Path):
+    report = write_action_qa(make_precise_metric_frames(), tmp_path, "jump")
+    first = report["frames"][0]
+    second = report["frames"][1]
+
+    assert first["sha256"] == (
+        "8b45311457f4c6f5d425ae6e111819e3c2acbf536b58b6bce39789b46fa87f7f"
+    )
+    assert first["alpha_bbox"] == [10, 20, 12, 21]
+    assert first["alpha_centroid"] == [10.334204, 20.0]
+    assert first["effective_area"] == 1.501961
+    assert first["largest_component_ratio"] == 1.0
+    assert first["edge_chroma_count"] == 1
+    assert first["aligned_mask_iou"] is None
+    assert second["aligned_mask_iou"] == 1.0
 
 
 def test_qa_writer_requires_exactly_thirty_runtime_frames(tmp_path: Path):

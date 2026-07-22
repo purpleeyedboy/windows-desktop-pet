@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -8,6 +9,7 @@ from tools.interpolate_action import (
     INTERMEDIATE_COUNTS,
     build_action,
     interpolate_pair,
+    render_between,
 )
 
 
@@ -72,9 +74,58 @@ def test_interpolate_pair_requires_runtime_canvas():
         interpolate_pair(Image.new("RGBA", (32, 32)), Image.new("RGBA", (32, 32)), 1)
 
 
+def constant_horizontal_flow(
+    size: tuple[int, int], distance: float
+) -> np.ndarray:
+    width, height = size
+    flow = np.zeros((height, width, 2), dtype=np.float32)
+    flow[..., 0] = distance
+    return flow
+
+
+def test_render_between_counts_partial_border_samples_once():
+    size = (4, 2)
+    opaque_white = Image.new("RGBA", size, (255, 255, 255, 255))
+
+    rendered = render_between(
+        opaque_white,
+        opaque_white,
+        constant_horizontal_flow(size, 1.0),
+        constant_horizontal_flow(size, -1.0),
+        0.5,
+    )
+
+    assert set(rendered.getchannel("A").getdata()) == {255}
+    assert set(rendered.getdata()) == {(255, 255, 255, 255)}
+
+
+def test_render_between_uses_flow_direction_instead_of_cross_dissolving():
+    size = (7, 3)
+    first = Image.new("RGBA", size, (0, 0, 0, 0))
+    second = Image.new("RGBA", size, (0, 0, 0, 0))
+    first.putpixel((1, 1), (240, 80, 20, 255))
+    second.putpixel((5, 1), (240, 80, 20, 255))
+
+    rendered = render_between(
+        first,
+        second,
+        constant_horizontal_flow(size, 4.0),
+        constant_horizontal_flow(size, -4.0),
+        0.5,
+    )
+
+    assert rendered.getchannel("A").getbbox() == (3, 1, 4, 2)
+    assert rendered.getpixel((3, 1)) == (240, 80, 20, 255)
+    assert rendered.getpixel((1, 1))[3] == 0
+    assert rendered.getpixel((5, 1))[3] == 0
+
+
 def test_build_action_preserves_keyframe_bytes(tmp_path: Path):
     keys = make_keyframes(tmp_path / "keys")
     output = tmp_path / "out"
+    output.mkdir()
+    (output / "99.png").write_bytes(b"stale managed frame")
+    (output / "agent-report.md").write_text("keep me", encoding="utf-8")
 
     report = build_action(keys, output, tmp_path / "qa", "jump")
 
@@ -83,6 +134,7 @@ def test_build_action_preserves_keyframe_bytes(tmp_path: Path):
     assert [path.name for path in sorted(output.glob("*.png"))] == [
         f"{index:02d}.png" for index in range(30)
     ]
+    assert (output / "agent-report.md").read_text(encoding="utf-8") == "keep me"
     for source, final in enumerate(FINAL_POSITIONS):
         assert (output / f"{final:02d}.png").read_bytes() == (
             keys / f"{source:02d}.png"
