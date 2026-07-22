@@ -2,6 +2,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+import tools.process_ai_transitions as ai_transitions
 from tools.process_ai_transitions import (
     FINAL_POSITIONS,
     INTERMEDIATE_COUNTS,
@@ -62,6 +63,31 @@ def test_extract_transition_cells_uses_reading_order_and_requested_count():
     assert [cell.getpixel((50, 50))[0] for cell in cells] == [1, 2, 3, 4, 5]
 
 
+def test_extract_complete_cells_repacks_subjects_that_cross_grid_boundaries():
+    sheet = Image.new("RGB", (300, 200), (0, 0, 255))
+    draw = ImageDraw.Draw(sheet)
+    subjects = [
+        ((10, 15, 50, 85), (80, 120, 90)),
+        ((85, 15, 125, 85), (110, 120, 90)),
+        ((220, 15, 260, 85), (140, 120, 90)),
+        ((80, 115, 120, 185), (170, 120, 90)),
+        ((180, 115, 220, 185), (200, 120, 90)),
+    ]
+    for bbox, color in subjects:
+        draw.rectangle(bbox, fill=color)
+
+    cells = ai_transitions.extract_complete_transition_cells(sheet, count=5, margin=5)
+
+    assert len(cells) == 5
+    assert {cell.size for cell in cells} == {(100, 100)}
+    assert [cell.getpixel((50, 50))[0] for cell in cells] == [80, 110, 140, 170, 200]
+    for cell in cells:
+        bbox = cell.getchannel("A").getbbox()
+        assert bbox is not None
+        assert 5 <= bbox[0] < bbox[2] <= 95
+        assert 5 <= bbox[1] < bbox[3] <= 95
+
+
 def test_interpolate_bbox_uses_smoothstep_motion():
     start = (10, 100, 110, 300)
     end = (50, 20, 250, 220)
@@ -104,6 +130,36 @@ def test_render_transition_cell_despills_blue_boundary_without_touching_interior
     )
     center = rendered.getpixel((220, 520))
     assert center[:3] == (230, 160, 90)
+
+
+def test_render_transition_cell_keeps_only_largest_subject_component():
+    cell = Image.new("RGB", (100, 100), (0, 0, 255))
+    draw = ImageDraw.Draw(cell)
+    draw.rectangle((20, 20, 70, 90), fill=(230, 160, 90))
+    draw.rectangle((82, 3, 91, 12), fill=(230, 160, 90))
+
+    rendered = render_transition_cell(cell, (100, 200, 300, 600))
+    alpha = rendered.getchannel("A")
+    visited: set[tuple[int, int]] = set()
+    components = 0
+    for y in range(alpha.height):
+        for x in range(alpha.width):
+            if (x, y) in visited or alpha.getpixel((x, y)) == 0:
+                continue
+            components += 1
+            pending = [(x, y)]
+            visited.add((x, y))
+            while pending:
+                current_x, current_y = pending.pop()
+                for neighbor_y in range(max(0, current_y - 1), min(alpha.height, current_y + 2)):
+                    for neighbor_x in range(max(0, current_x - 1), min(alpha.width, current_x + 2)):
+                        point = (neighbor_x, neighbor_y)
+                        if point in visited or alpha.getpixel(point) == 0:
+                            continue
+                        visited.add(point)
+                        pending.append(point)
+
+    assert components == 1
 
 
 def test_assemble_action_creates_thirty_frames_and_preserves_keyframe_bytes(tmp_path: Path):

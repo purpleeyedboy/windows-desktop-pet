@@ -5,7 +5,7 @@ import shutil
 from collections import deque
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from tools.animation_qa import write_action_qa
 from tools.process_sprites import (
@@ -24,6 +24,100 @@ def extract_transition_cells(sheet: Image.Image, count: int) -> list[Image.Image
     if not 1 <= count <= 6:
         raise ValueError("transition count must be between 1 and 6")
     return split_grid(sheet, columns=3, rows=2)[:count]
+
+
+def extract_complete_transition_cells(
+    sheet: Image.Image,
+    count: int,
+    margin: int = 24,
+) -> list[Image.Image]:
+    if not 1 <= count <= 6:
+        raise ValueError("transition count must be between 1 and 6")
+    if sheet.width % 3 or sheet.height % 2:
+        raise ValueError("sheet dimensions must be divisible by the grid")
+    cell_size = (sheet.width // 3, sheet.height // 2)
+    if margin < 0 or margin * 2 >= min(cell_size):
+        raise ValueError("margin must leave positive space inside each cell")
+
+    keyed = remove_small_components(clear_border_chroma(sheet, tolerance=70))
+    alpha = keyed.getchannel("A")
+    width, height = keyed.size
+    values = alpha.tobytes()
+    visited = bytearray(width * height)
+    components: list[list[int]] = []
+    for index, value in enumerate(values):
+        if value == 0 or visited[index]:
+            continue
+        visited[index] = 1
+        pending = [index]
+        component: list[int] = []
+        while pending:
+            current = pending.pop()
+            component.append(current)
+            current_x = current % width
+            current_y = current // width
+            for neighbor_y in range(max(0, current_y - 1), min(height, current_y + 2)):
+                row = neighbor_y * width
+                for neighbor_x in range(max(0, current_x - 1), min(width, current_x + 2)):
+                    neighbor = row + neighbor_x
+                    if visited[neighbor] or values[neighbor] == 0:
+                        continue
+                    visited[neighbor] = 1
+                    pending.append(neighbor)
+        components.append(component)
+    if len(components) < count:
+        raise ValueError(f"expected {count} complete subjects, found {len(components)}")
+
+    selected = sorted(components, key=len, reverse=True)[:count]
+
+    def centroid(component: list[int]) -> tuple[float, float]:
+        return (
+            sum(index % width for index in component) / len(component),
+            sum(index // width for index in component) / len(component),
+        )
+
+    by_row = sorted(selected, key=lambda component: centroid(component)[1])
+    top_count = min(3, count)
+    ordered = sorted(by_row[:top_count], key=lambda component: centroid(component)[0])
+    ordered += sorted(by_row[top_count:], key=lambda component: centroid(component)[0])
+
+    cells: list[Image.Image] = []
+    for component in ordered:
+        xs = [index % width for index in component]
+        ys = [index // width for index in component]
+        left, top = min(xs), min(ys)
+        right, bottom = max(xs) + 1, max(ys) + 1
+        subject = keyed.crop((left, top, right, bottom))
+        subject_width, subject_height = subject.size
+        component_mask = bytearray(subject_width * subject_height)
+        for index in component:
+            x = index % width - left
+            y = index // width - top
+            component_mask[y * subject_width + x] = 255
+        mask = Image.frombytes("L", subject.size, bytes(component_mask))
+        subject.putalpha(ImageChops.multiply(subject.getchannel("A"), mask))
+        subject.paste((0, 0, 0, 0), mask=ImageChops.invert(mask))
+
+        available = (cell_size[0] - 2 * margin, cell_size[1] - 2 * margin)
+        scale = min(1.0, available[0] / subject.width, available[1] / subject.height)
+        if scale < 1.0:
+            subject = subject.resize(
+                (
+                    max(1, round(subject.width * scale)),
+                    max(1, round(subject.height * scale)),
+                ),
+                Image.Resampling.LANCZOS,
+            )
+        cell = Image.new("RGBA", cell_size, (0, 0, 0, 0))
+        cell.alpha_composite(
+            subject,
+            (
+                (cell_size[0] - subject.width) // 2,
+                (cell_size[1] - subject.height) // 2,
+            ),
+        )
+        cells.append(clean_transparent_rgb(cell))
+    return cells
 
 
 def interpolate_bbox(
@@ -94,6 +188,49 @@ def despill_connected_blue(image: Image.Image) -> Image.Image:
     return rgba
 
 
+def keep_largest_alpha_component(image: Image.Image) -> Image.Image:
+    rgba = image.convert("RGBA")
+    alpha = rgba.getchannel("A")
+    bbox = alpha.getbbox()
+    if bbox is None:
+        return rgba
+    width, height = rgba.size
+    values = alpha.tobytes()
+    visited = bytearray(width * height)
+    largest: list[int] = []
+    left, top, right, bottom = bbox
+    for y in range(top, bottom):
+        for x in range(left, right):
+            start = y * width + x
+            if visited[start] or values[start] == 0:
+                continue
+            visited[start] = 1
+            pending = [start]
+            component: list[int] = []
+            while pending:
+                index = pending.pop()
+                component.append(index)
+                current_x = index % width
+                current_y = index // width
+                for neighbor_y in range(max(top, current_y - 1), min(bottom, current_y + 2)):
+                    row = neighbor_y * width
+                    for neighbor_x in range(max(left, current_x - 1), min(right, current_x + 2)):
+                        neighbor = row + neighbor_x
+                        if visited[neighbor] or values[neighbor] == 0:
+                            continue
+                        visited[neighbor] = 1
+                        pending.append(neighbor)
+            if len(component) > len(largest):
+                largest = component
+
+    keep = bytearray(width * height)
+    for index in largest:
+        keep[index] = 255
+    keep_mask = Image.frombytes("L", rgba.size, bytes(keep))
+    rgba.paste((0, 0, 0, 0), mask=ImageChops.invert(keep_mask))
+    return rgba
+
+
 def render_transition_cell(
     cell: Image.Image,
     target_bbox: tuple[int, int, int, int],
@@ -103,7 +240,9 @@ def render_transition_cell(
         raise ValueError("target bbox must fit inside the 512x768 canvas")
 
     keyed = clear_border_chroma(cell, tolerance=70)
-    cleaned = despill_connected_blue(remove_small_components(keyed))
+    cleaned = keep_largest_alpha_component(
+        despill_connected_blue(remove_small_components(keyed))
+    )
     subject_bbox = cleaned.getchannel("A").getbbox()
     if subject_bbox is None:
         raise ValueError("transition cell is empty after chroma removal")
@@ -121,7 +260,9 @@ def render_transition_cell(
     y = bottom - size[1]
     output = Image.new("RGBA", FRAME_SIZE, (0, 0, 0, 0))
     output.alpha_composite(subject, (x, y))
-    output = despill_connected_blue(clean_transparent_rgb(output))
+    output = keep_largest_alpha_component(
+        despill_connected_blue(clean_transparent_rgb(output))
+    )
     pixels = output.load()
     for y in range(output.height):
         for x in range(output.width):
@@ -173,7 +314,7 @@ def assemble_action(
         if not source_path.is_file():
             raise FileNotFoundError(f"missing transition sheet: {source_path}")
         with Image.open(source_path) as sheet:
-            cells = extract_transition_cells(sheet, count)
+            cells = extract_complete_transition_cells(sheet, count)
 
         start_position = FINAL_POSITIONS[segment]
         shutil.copy2(
