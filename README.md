@@ -4,7 +4,7 @@
 
 ## 运行
 
-双击 `dist/桌面宠物.exe` 即可运行，无需安装 Python。程序默认无边框、透明并始终置顶；重复双击不会创建第二只桌宠。
+双击 `dist/桌面宠物.exe` 即可运行，无需安装 Python。程序使用 Windows 逐像素 Alpha 显示平滑透明轮廓，默认无边框并始终置顶；重复双击不会创建第二只桌宠。
 
 ## 操作
 
@@ -23,4 +23,4 @@
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-构建脚本会先验证 18 张透明动作帧并运行无需桌面会话的自动测试，然后生成 `dist/桌面宠物.exe`。窗口测试需在交互式 PowerShell 中运行：先设置当前 Python 的 `TCL_LIBRARY` 与 `TK_LIBRARY`，再执行 `python -m pytest tests/test_window.py -q`。
+构建脚本会先验证 90 张透明动作帧（3 组动作、每组 30 帧），并核对 18 张归档关键帧的 SHA-256 不变；随后运行自动测试并生成 `dist/桌面宠物.exe`。窗口测试需在交互式 PowerShell 中运行：先设置当前 Python 的 `TCL_LIBRARY` 与 `TK_LIBRARY`，再执行 `python -m pytest tests/test_window.py -q`。

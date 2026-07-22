@@ -29,7 +29,7 @@ if (-not $TkEnvironmentReady) {
 $env:TCL_LIBRARY = $tclLibrary
 $env:TK_LIBRARY = $tkLibrary
 
-& $python tools\validate_assets.py assets\pet
+& $python tools\validate_assets.py assets\pet --keyframe-root assets\keyframes
 if ($LASTEXITCODE -ne 0) { throw '动作素材验证失败' }
 
 & $python -m pytest -q --ignore=tests\test_window.py
