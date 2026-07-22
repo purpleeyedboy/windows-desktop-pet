@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "frame_size": [
+    512,
+    768
+  ],
+  "final_positions": [
+    0,
+    6,
+    12,
+    17,
+    23,
+    29
+  ],
+  "actions": {
+    "jump": {
+      "00.png": {
+        "sha256": "025ed35610172ef51ac9f41a2d6e72704694ad72b892fbb9691a732748ecaaf5",
+        "size": 283026,
+        "final_name": "00.png"
+      },
+      "01.png": {
+        "sha256": "442f5b8f7c5287e0fb4f8cb33d25393feab8a978c38a6c3e303714aa2ef8ba0f",
+        "size": 235258,
+        "final_name": "06.png"
+      },
+      "02.png": {
+        "sha256": "986d866cd16cc1ddc070b94745b7f86873b5370ac4575957cdc83bc695dd07c0",
+        "size": 196845,
+        "final_name": "12.png"
+      },
+      "03.png": {
+        "sha256": "ea921175480f94e8c5319c99817d2130795a1a2e8bbe69c13c46c55a57821958",
+        "size": 273333,
+        "final_name": "17.png"
+      },
+      "04.png": {
+        "sha256": "5d455ba06fd7644c45af178e38a2d643436a4adcc84b9eaed0a8de0a416227ed",
+        "size": 243486,
+        "final_name": "23.png"
+      },
+      "05.png": {
+        "sha256": "b2e859c94276980029f58aa9118aa9b1d7a36757080433df7fb0ebf9dd3277c0",
+        "size": 310772,
+        "final_name": "29.png"
+      }
+    },
+    "squash": {
+      "00.png": {
+        "sha256": "71ee173d1a286bad16c11ad4f8efd92f123502d1e32bb13a5dac267b3160f6d0",
+        "size": 326253,
+        "final_name": "00.png"
+      },
+      "01.png": {
+        "sha256": "8a17d057b7f9b490c48967797b683f65d0ce86bb6bbc6682d71ca1fb6d9d4552",
+        "size": 381927,
+        "final_name": "06.png"
+      },
+      "02.png": {
+        "sha256": "2b30ffed417e62361567e8f4285376062cce25a5e1fe4173357f2418793e02a6",
+        "size": 312331,
+        "final_name": "12.png"
+      },
+      "03.png": {
+        "sha256": "a3a7c680c8c784de991e717218b9eeb5a4a56136f7c2e17d358a3da5eae52d22",
+        "size": 306187,
+        "final_name": "17.png"
+      },
+      "04.png": {
+        "sha256": "0324e9a810f2351f06eff307b3819cf43399052a3dc07e51cd21543ae97e5fcc",
+        "size": 377281,
+        "final_name": "23.png"
+      },
+      "05.png": {
+        "sha256": "727c612a891124b89371d97e524cf1e7f1b20a511271105053e66877e2b468be",
+        "size": 327095,
+        "final_name": "29.png"
+      }
+    },
+    "shake": {
+      "00.png": {
+        "sha256": "4641a1c07e437173b1a75fa846b0ac443cd5d38ff709150d74d9b6b013c01211",
+        "size": 300754,
+        "final_name": "00.png"
+      },
+      "01.png": {
+        "sha256": "92587a7e7c31cb4ac6ef629cd3b598706a4cb0d90f8bfad98a5d62c5b018e558",
+        "size": 284049,
+        "final_name": "06.png"
+      },
+      "02.png": {
+        "sha256": "46557d647569de0617838586fea7d8b61f996457ba6d38055b455d7717dd30e0",
+        "size": 280314,
+        "final_name": "12.png"
+      },
+      "03.png": {
+        "sha256": "ea17a74c552e19e2e1e810b8e0150b551509363e5b9c07309bdde23058b23d08",
+        "size": 291933,
+        "final_name": "17.png"
+      },
+      "04.png": {
+        "sha256": "8645efbf61c40240af2114a37748b4b30d18a6bee14ba18c598b80b194cc9b4a",
+        "size": 290469,
+        "final_name": "23.png"
+      },
+      "05.png": {
+        "sha256": "27d3095b05f384cd386619be110e39912f293819935f24b302f7f8caff9e386e",
+        "size": 304110,
+        "final_name": "29.png"
+      }
+    }
+  }
+}
