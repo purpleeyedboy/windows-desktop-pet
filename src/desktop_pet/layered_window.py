@@ -6,7 +6,7 @@ import ctypes
 import os
 from ctypes import wintypes
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 WS_EX_TRANSPARENT = 0x00000020
@@ -77,18 +77,17 @@ class BITMAPINFO(ctypes.Structure):
 
 def rgba_to_premultiplied_bgra(image: Image.Image) -> bytes:
     rgba = image.convert("RGBA")
-    output = bytearray(rgba.width * rgba.height * 4)
-    for offset, (red, green, blue, alpha) in enumerate(rgba.getdata()):
-        base = offset * 4
-        output[base : base + 4] = bytes(
-            (
-                (blue * alpha + 127) // 255,
-                (green * alpha + 127) // 255,
-                (red * alpha + 127) // 255,
-                alpha,
-            )
-        )
-    return bytes(output)
+    red, green, blue, alpha = rgba.split()
+    premultiplied = Image.merge(
+        "RGBA",
+        (
+            ImageChops.multiply(red, alpha),
+            ImageChops.multiply(green, alpha),
+            ImageChops.multiply(blue, alpha),
+            alpha,
+        ),
+    )
+    return premultiplied.tobytes("raw", "BGRA")
 
 
 class LayeredWindowRenderer:

@@ -1,5 +1,6 @@
 import os
 from ctypes import wintypes
+from time import perf_counter
 
 import pytest
 from PIL import Image
@@ -23,6 +24,16 @@ def test_rgba_to_premultiplied_bgra_uses_integer_rounding():
     assert rgba_to_premultiplied_bgra(image) == bytes(
         (25, 50, 100, 128, 0, 0, 0, 0)
     )
+
+
+def test_premultiply_keeps_max_pet_size_realtime():
+    image = Image.new("RGBA", (347, 520), (200, 100, 50, 128))
+
+    started = perf_counter()
+    for _ in range(3):
+        rgba_to_premultiplied_bgra(image)
+
+    assert perf_counter() - started < 0.25
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows layered window contract")
