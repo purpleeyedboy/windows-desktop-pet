@@ -17,7 +17,7 @@ class AnimationController:
         scheduler: Scheduler,
         frame_changed: FrameCallback,
         finished: FinishedCallback,
-        interval_ms: int = 90,
+        interval_ms: int = 33,
     ) -> None:
         self._frame_counts = frame_counts
         self._schedule = scheduler

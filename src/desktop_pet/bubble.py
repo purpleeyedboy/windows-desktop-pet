@@ -6,24 +6,20 @@ from tkinter import font as tkfont
 from .model import Rect, format_position, place_bubble
 
 
-TRANSPARENT_KEY = "#ff00ff"
-
-
 class BubbleWindow:
     def __init__(self, parent: tk.Misc) -> None:
         self.window = tk.Toplevel(parent)
         self.window.withdraw()
         self.window.overrideredirect(True)
-        self.window.configure(background=TRANSPARENT_KEY)
+        self.window.configure(background="#ffffff")
         self.window.attributes("-topmost", True)
         try:
             self.window.attributes("-toolwindow", True)
-            self.window.attributes("-transparentcolor", TRANSPARENT_KEY)
         except tk.TclError:
             pass
         self.canvas = tk.Canvas(
             self.window,
-            background=TRANSPARENT_KEY,
+            background="#ffffff",
             borderwidth=0,
             highlightthickness=0,
         )

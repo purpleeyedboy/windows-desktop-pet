@@ -75,6 +75,14 @@ def test_bubble_is_opaque_and_placed_outside_pet(tk_root):
     bubble.destroy()
 
 
+def test_bubble_has_no_transparent_color_key(tk_root):
+    bubble = BubbleWindow(tk_root)
+
+    assert bubble.window.cget("background") == "#ffffff"
+    assert bubble.canvas.cget("background") == "#ffffff"
+    bubble.destroy()
+
+
 def test_window_contract_and_menu(tk_root, loaded_frames):
     window, _renderer = make_window(tk_root, loaded_frames)
     tk_root.update_idletasks()

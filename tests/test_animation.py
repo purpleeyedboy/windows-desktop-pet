@@ -6,9 +6,11 @@ from desktop_pet.animation import AnimationController
 class FakeScheduler:
     def __init__(self) -> None:
         self.callbacks: list[Callable[[], None]] = []
+        self.delays: list[int] = []
 
     def __call__(self, delay_ms: int, callback: Callable[[], None]) -> str:
         assert delay_ms > 0
+        self.delays.append(delay_ms)
         self.callbacks.append(callback)
         return f"after-{len(self.callbacks)}"
 
@@ -40,3 +42,14 @@ def test_controller_rejects_unknown_action():
     scheduler = FakeScheduler()
     controller = AnimationController({"jump": 3}, scheduler, lambda *_: None, lambda _: None)
     assert controller.play("shake") is False
+
+
+def test_default_interval_is_thirty_three_ms():
+    scheduler = FakeScheduler()
+    controller = AnimationController(
+        {"jump": 30}, scheduler, lambda *_: None, lambda _: None
+    )
+
+    controller.play("jump")
+
+    assert scheduler.delays == [33]
