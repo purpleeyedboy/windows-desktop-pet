@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "action": "shake",
+  "generator": "built-in imagegen",
+  "grid": {
+    "columns": 3,
+    "rows": 2,
+    "canvas_size": [1536, 1024],
+    "cell_size": [512, 512],
+    "reading_order": "row-major",
+    "chroma_key": "#0000FF"
+  },
+  "intermediate_counts": [5, 5, 4, 5, 5],
+  "final_keyframe_positions": [0, 6, 12, 17, 23, 29],
+  "prompt_summary": "Using each supplied pair of endpoint keyframes, generate only the requested evenly spaced head-and-upper-body shake transition poses of the same Devon Rex cat. Preserve face, green eyes, large ears, orange-white markings, curly fur, collar, body proportions, paws, tail and photorealistic cutout style. Put one coherent full cat in each occupied 3x2 cell on perfectly flat #0000FF. Keep feet stable and vary head tilt progressively. No double exposure, ghosting, duplicate anatomy, blur, smear, shadow, reflection, colored halo, text or watermark.",
+  "segments": [
+    {
+      "start_keyframe": "00.png",
+      "end_keyframe": "01.png",
+      "source": "segment_00_01.png",
+      "count": 5,
+      "sha256": "3dfe34dba93097fae20da54fd757ffa4555b42dbf7569dd5255be18cde306868",
+      "visual_qa": "pass: five progressive single-cat tilts"
+    },
+    {
+      "start_keyframe": "01.png",
+      "end_keyframe": "02.png",
+      "source": "segment_01_02.png",
+      "count": 5,
+      "sha256": "b179d7b191647021863d90f26363bf8a043d5c7f2faf412b34bfd62362c40dcc",
+      "visual_qa": "pass: continuous tilt with stable paws"
+    },
+    {
+      "start_keyframe": "02.png",
+      "end_keyframe": "03.png",
+      "source": "segment_02_03.png",
+      "generated_source": "exec-48383915.png",
+      "count": 4,
+      "sha256": "eab75fa751efabec313eddecf96b8e2c068de77bd91f08e085e3f443da10f4ab",
+      "postprocess_note": "Four complete generated cat components were reordered to chronological positions [top-left, top-middle, bottom-left, top-right] and centered with a 24 px safety margin.",
+      "visual_qa": "pass: tilt crosses through neutral without a same-side stall"
+    },
+    {
+      "start_keyframe": "03.png",
+      "end_keyframe": "04.png",
+      "source": "segment_03_04.png",
+      "count": 5,
+      "sha256": "0c7e505124078dce8d49604d0b26ae9462ea4d48453a60e50277e1ad352404c8",
+      "postprocess_note": "The assembly processor extracts complete components from the whole sheet before grid placement because the two bottom-row cats cross cell boundaries.",
+      "visual_qa": "pass after whole-sheet extraction: frames 21 and 22 are complete cats"
+    },
+    {
+      "start_keyframe": "04.png",
+      "end_keyframe": "05.png",
+      "source": "segment_04_05.png",
+      "count": 5,
+      "sha256": "96fb110c1746a2963ae348fdcde2f5c7313fc95b9c1e8fe57e8b4ca905a6d6aa",
+      "visual_qa": "pass: tilt converges evenly back to neutral"
+    }
+  ]
+}

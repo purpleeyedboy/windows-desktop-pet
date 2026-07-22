@@ -1,0 +1,96 @@
+{
+  "manifest_version": 1,
+  "action": "squash",
+  "generator": "built-in imagegen",
+  "layout": {
+    "columns": 3,
+    "rows": 2,
+    "cell_order": "row-major",
+    "canvas_size": [1536, 1024],
+    "cell_size": [512, 512],
+    "chroma_key": "#0000FF"
+  },
+  "postprocess": {
+    "purpose": "Normalize model-produced blue-screen variation without redrawing the cat, and hard-fill contractually unused cells.",
+    "strong_blue_rule": "B >= 160 and B - R >= 80 and B - G >= 80 becomes RGB(0,0,255)",
+    "unused_cells": "Filled completely with RGB(0,0,255).",
+    "public_source_modified": false
+  },
+  "segments": [
+    {
+      "id": "00-01",
+      "start_endpoint": "assets/keyframes/squash/00.png",
+      "end_endpoint": "assets/keyframes/squash/01.png",
+      "generated_source": "C:\\Users\\rog\\.codex\\generated_images\\019f895f-1f04-7971-99a4-95ecf9c8b79a\\exec-21bbe932-0a20-4241-9863-a460ace8107e.png",
+      "workspace_source": "qa/ai_sources/squash/segment_00_01.png",
+      "workspace_sha256": "0ea046a7d91885b8e37f834455cb6d7645fa3c36e8c8ae880ecf21e30dd67920",
+      "intermediate_count": 5,
+      "occupied_cells": [1, 2, 3, 4, 5],
+      "empty_cells": [6],
+      "attempt": 2,
+      "prompt": "Create a corrected production sprite transition sheet for a Windows desktop pet. Input images: Image 1 is the exact segment start keyframe; Image 2 is the exact segment end keyframe. Generate exactly FIVE chronological intermediate poses only, excluding both endpoints. Preserve the same Devon Rex cat identity, face, eyes, ears, muzzle, white-and-orange markings, curly fur, collar, proportions, tail, paws, photorealistic style, scale, and stable feet baseline. Each pose must be one opaque coherent cat with no double exposure or ghosting. Layout: exact 3 columns by 2 rows, row-major. Poses occupy cells 1-5; cell 6 bottom-right is empty. BACKGROUND IS A TECHNICAL COLOR FIELD: every background pixel must be RGB(0,0,255), with no vignette, gradient, glow, texture, floor, shadow, reflection, transparency, guides, text, or watermark. Motion: five evenly spaced intermediate poses inferred only from the endpoint difference, gradually widening and lowering. Avoid duplicate limbs, extra tail, split face, blur, smear, holes, colored halo, pink outline, or blue fringe.",
+      "visual_qa": "pass: five single-cat poses; gradual widening/lowering; stable identity; no ghost or double silhouette",
+      "postprocess_note": "Strong-blue normalization; cell 6 hard-filled blue."
+    },
+    {
+      "id": "01-02",
+      "start_endpoint": "assets/keyframes/squash/01.png",
+      "end_endpoint": "assets/keyframes/squash/02.png",
+      "generated_source": "C:\\Users\\rog\\.codex\\generated_images\\019f895f-1f04-7971-99a4-95ecf9c8b79a\\exec-d9a10d2c-b1f5-4267-91b4-fa4d7cec2572.png",
+      "workspace_source": "qa/ai_sources/squash/segment_01_02.png",
+      "workspace_sha256": "650f44100a1efd747404d58db57474b73d745aace5681bac5fdb011ec0562ecd",
+      "intermediate_count": 5,
+      "occupied_cells": [1, 2, 3, 4, 5],
+      "empty_cells": [6],
+      "attempt": 1,
+      "prompt": "Create one production sprite transition sheet for a Windows desktop pet. Image 1 is squash keyframe 01 and Image 2 is squash keyframe 02. Generate exactly FIVE chronological intermediate poses only, excluding both endpoints. The same Devon Rex cat must progressively compress downward and widen in five evenly spaced steps. Preserve the exact face, orange-and-white markings, green eyes, huge ears, muzzle, curly fur, collar, proportions, tail, paws, photorealistic style, and outline. Exact 3 columns by 2 rows, row-major; poses in cells 1-5 and cell 6 empty; centered full body, stable feet baseline, no clipping or overlap. Flat #0000FF background with no gradient, floor, shadow, reflection, transparency, guides, text, or watermark. One opaque coherent cat per occupied cell; avoid ghosting, duplicate limbs, extra tail, split face, blur, smear, holes, colored halo, pink outline, or blue fringe.",
+      "visual_qa": "pass: five single-cat poses; continuous downward compression and widening; no ghost or extra limbs",
+      "postprocess_note": "Strong-blue normalization; cell 6 hard-filled blue."
+    },
+    {
+      "id": "02-03",
+      "start_endpoint": "assets/keyframes/squash/02.png",
+      "end_endpoint": "assets/keyframes/squash/03.png",
+      "generated_source": "C:\\Users\\rog\\.codex\\generated_images\\019f895f-1f04-7971-99a4-95ecf9c8b79a\\exec-942a3fb3-d603-41f6-b984-5c872a183c60.png",
+      "workspace_source": "qa/ai_sources/squash/segment_02_03.png",
+      "workspace_sha256": "ee737296f480d9e9bfaabf7688f32247f0408aace76a7c9ea1e5928a8dcc8a23",
+      "intermediate_count": 4,
+      "occupied_cells": [1, 2, 3, 4],
+      "empty_cells": [5, 6],
+      "attempt": 2,
+      "prompt": "Correct ONLY the sprite-sheet layout while generating the same requested 02-to-03 transition. Input Image 1 is the fully compressed wide Devon Rex start and Image 2 is the tall narrow rebound end. Generate exactly FOUR intermediate poses, excluding endpoints, with a continuous natural rebound: progressively taller and narrower, head and chest rising, front paws grounded. Preserve face, green eyes, huge ears, orange-white markings, curly fur, collar, proportions, paws, tail, and photorealistic style. Mandatory 1536x1024 canvas divided conceptually into six 512x512 cells: poses centered at (256,256), (768,256), (1280,256), and (256,768); bottom-middle and bottom-right empty. Do not arrange four cats in one row. Flat technical #0000FF background; no gradient, shadow, reflection, transparency, guides, labels, text, or watermark. Avoid ghosting, duplicate limbs, extra tail, split face, blur, smear, holes, colored halo, pink outline, or blue fringe.",
+      "visual_qa": "pass after unused-cell enforcement: first four cells form compressed-to-tall rebound with one clear cat per cell",
+      "postprocess_note": "The model emitted a redundant fifth pose in contractually unused cell 5; cells 5 and 6 were hard-filled blue. No occupied-cell pixels were redrawn."
+    },
+    {
+      "id": "03-04",
+      "start_endpoint": "assets/keyframes/squash/03.png",
+      "end_endpoint": "assets/keyframes/squash/04.png",
+      "generated_source": "C:\\Users\\rog\\.codex\\generated_images\\019f895f-1f04-7971-99a4-95ecf9c8b79a\\exec-76da39b7-ecba-43dd-a998-893ed18d3ba3.png",
+      "workspace_source": "qa/ai_sources/squash/segment_03_04.png",
+      "workspace_sha256": "e62ef9f922fcc9a0ae655310c310d3acd92de9e30caf41c31987eaa246c2b50d",
+      "intermediate_count": 5,
+      "occupied_cells": [1, 2, 3, 4, 5],
+      "empty_cells": [6],
+      "attempt": 1,
+      "prompt": "Create one production sprite transition sheet from squash keyframe 03, the tall narrow rebound start, to squash keyframe 04, the wider settled end. Generate exactly FIVE chronological intermediate poses, excluding endpoints. The same cat settles in five stages: head and chest lower slightly, torso progressively widens, paws stay grounded. Preserve Devon Rex face, green eyes, huge ears, orange-white markings, muzzle, curly fur, collar, proportions, tail, paws, photorealistic style, and outline. Mandatory 1536x1024 3x2 map: poses in cells 1-5 and cell 6 empty; one centered full-body cat per occupied cell, consistent scale and baseline, no clipping. Flat technical #0000FF background; no gradient, shadow, reflection, transparency, guides, labels, text, or watermark. Avoid double exposure, ghosting, duplicate limbs, extra tail, split face, blur, smear, holes, colored halo, pink outline, or blue fringe.",
+      "visual_qa": "pass: five single-cat poses settle from tall/narrow to lower/wider with stable identity and no ghosting",
+      "postprocess_note": "Strong-blue normalization; cell 6 hard-filled blue."
+    },
+    {
+      "id": "04-05",
+      "start_endpoint": "assets/keyframes/squash/04.png",
+      "end_endpoint": "assets/keyframes/squash/05.png",
+      "generated_source": "C:\\Users\\rog\\.codex\\generated_images\\019f895f-1f04-7971-99a4-95ecf9c8b79a\\exec-0d2d1b72-5cb0-4ab3-8740-98f57cb52b32.png",
+      "workspace_source": "qa/ai_sources/squash/segment_04_05.png",
+      "workspace_sha256": "5ce09106d2e59a5a04889f768083cd0ebaa2293d0adb7f51c8347c8edaf2ef55",
+      "intermediate_count": 5,
+      "occupied_cells": [1, 2, 3, 4, 5],
+      "empty_cells": [6],
+      "attempt": 2,
+      "prompt": "Regenerate ONLY the 04-to-05 transition with evenly spaced deformation. Image 1 is the wider seated start and Image 2 is the narrower slightly taller end. Generate exactly FIVE intermediate poses at about 1/6, 2/6, 3/6, 4/6, and 5/6 of the total shape change. Torso width decreases smoothly; height increases smoothly; head recenters smoothly; no sudden jump between cells 3 and 4. Keep equal apparent scale and a stable paw baseline. Preserve the same Devon Rex face, green eyes, huge ears, orange-white markings, curly fur, collar, proportions, paws, tail, and photorealistic style. Mandatory 1536x1024 3x2 map: pose centers at (256,256), (768,256), (1280,256), (256,768), and (768,768); cell 6 empty. Flat #0000FF background; no gradient, shadow, reflection, transparency, guides, labels, text, or watermark. Avoid double exposure, duplicate limbs, extra tail, split face, blur, smear, holes, colored halo, pink outline, or blue fringe.",
+      "visual_qa": "pass on retry: five distinct progressively narrower/taller single-cat poses; stable identity; no ghosting",
+      "postprocess_note": "Strong-blue normalization; cell 6 hard-filled blue."
+    }
+  ]
+}
