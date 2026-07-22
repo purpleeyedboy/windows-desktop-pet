@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "action": "jump",
+  "generator": "built-in imagegen",
+  "grid": {
+    "columns": 3,
+    "rows": 2,
+    "reading_order": "row-major",
+    "chroma_key": "#0000FF"
+  },
+  "intermediate_counts": [5, 5, 4, 5, 5],
+  "final_keyframe_positions": [0, 6, 12, 17, 23, 29],
+  "prompt_summary": "Using the two supplied endpoint keyframes as identity and pose references, draw only the requested in-between poses of the same cat in a 3x2 row-major grid. Preserve face, pale green eyes, cream-orange and white coat pattern, curly short fur, body proportions, paws, tail visibility, and realistic cutout-photo appearance. Use one complete cat per occupied cell on perfectly flat solid #0000FF, with no shadow, labels, crossfade, duplicate anatomy, ghost, motion blur, halo, watermark, or text. Leave unused cells empty.",
+  "segments": [
+    {
+      "start_keyframe": "00.png",
+      "end_keyframe": "01.png",
+      "source": "segment_00_01.png",
+      "generated_source": "exec-6c0d2e7e-6ce0-4dc2-bc0a-532a07207e4d.png",
+      "count": 5,
+      "sha256": "cb392580fdd088dc20265c99fd501f807ff549b2d22d360d6fda67989c0fcdd1"
+    },
+    {
+      "start_keyframe": "01.png",
+      "end_keyframe": "02.png",
+      "source": "segment_01_02.png",
+      "generated_source": "exec-369cb504-dab1-412a-b634-570ec190eb35.png",
+      "count": 5,
+      "sha256": "47f586c1d446f265e9e38bb65b264bbd79d6a0167ac46070db2d8cbc606a0e80"
+    },
+    {
+      "start_keyframe": "02.png",
+      "end_keyframe": "03.png",
+      "source": "segment_02_03.png",
+      "generated_source": "exec-db49ee31-6fde-4192-81c4-65debdef9e84.png",
+      "count": 4,
+      "sha256": "2007aec970c51ee85239a79a7cdfb0e973fd7a6f861a1796978b737820415bdd"
+    },
+    {
+      "start_keyframe": "03.png",
+      "end_keyframe": "04.png",
+      "source": "segment_03_04.png",
+      "generated_source": "exec-c71c5834-64ea-49e1-96a3-f99da89a43b2.png",
+      "count": 5,
+      "sha256": "27e65b3d496d01e4a89bf9d49dc6d27e0d9ca3567d77372d667dbdb6d214b715"
+    },
+    {
+      "start_keyframe": "04.png",
+      "end_keyframe": "05.png",
+      "source": "segment_04_05.png",
+      "generated_source": "exec-0fe92bd4-0771-4f20-9400-5a3c0c2cbb49.png",
+      "count": 5,
+      "sha256": "e3102a2447b06ba7941629657330c2cfdf055f5be9e97f3b208d9b2ce72e98ab"
+    }
+  ]
+}
