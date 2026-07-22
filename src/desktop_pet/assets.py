@@ -8,14 +8,15 @@ from .paths import asset_path
 
 
 EXPECTED_SIZE = (512, 768)
+FRAME_COUNT = 30
+EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
 
 
 def find_frame_paths(root: Path, action: str) -> list[Path]:
     paths = sorted((root / action).glob("*.png"))
-    expected = [f"{index:02d}.png" for index in range(6)]
-    if [path.name for path in paths] != expected:
+    if tuple(path.name for path in paths) != EXPECTED_NAMES:
         raise RuntimeError(
-            f"{action} must contain exactly 6 frames named 00.png through 05.png"
+            f"{action} must contain exactly 30 frames named 00.png through 29.png"
         )
     return paths
 
