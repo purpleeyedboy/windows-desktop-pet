@@ -90,6 +90,7 @@ class BubbleWindow:
             center,
             (top + bottom) // 2,
             text=self._text,
+            width=max(1, width - 24),
             fill="#222222",
             font=self.font,
             anchor="center",
@@ -100,6 +101,10 @@ class BubbleWindow:
         width = max(132, min(260, self.font.measure(text) + 40))
         height = 76
         rect = place_bubble(pet_rect, (width, height), screen_rect)
+        if rect is None:
+            self.last_rect = None
+            self.hide()
+            return
         self.last_rect = rect
         self.window.geometry(
             f"{rect.width}x{rect.height}{format_position(rect.x, rect.y)}"
@@ -109,9 +114,8 @@ class BubbleWindow:
         self.window.deiconify()
         self.window.lift()
         self.visible = True
-        if self._hide_job is not None:
-            self.window.after_cancel(self._hide_job)
-        self._hide_job = self.window.after(1800, self.hide)
+        self._cancel_hide_job()
+        self._hide_job = self.window.after(1800, self._hide_after_timeout)
 
     def reposition(self, pet_rect: Rect, screen_rect: Rect) -> None:
         if not self.visible or self.last_rect is None:
@@ -121,6 +125,10 @@ class BubbleWindow:
             (self.last_rect.width, self.last_rect.height),
             screen_rect,
         )
+        if rect is None:
+            self.last_rect = None
+            self.hide()
+            return
         self.last_rect = rect
         self.window.geometry(
             f"{rect.width}x{rect.height}{format_position(rect.x, rect.y)}"
@@ -129,10 +137,25 @@ class BubbleWindow:
     def set_always_on_top(self, enabled: bool) -> None:
         self.window.attributes("-topmost", enabled)
 
+    def _cancel_hide_job(self) -> None:
+        job = self._hide_job
+        self._hide_job = None
+        if job is None:
+            return
+        try:
+            self.window.after_cancel(job)
+        except tk.TclError:
+            pass
+
+    def _hide_after_timeout(self) -> None:
+        self._hide_job = None
+        self.hide()
+
     def hide(self) -> None:
+        self._cancel_hide_job()
         self.window.withdraw()
         self.visible = False
-        self._hide_job = None
 
     def destroy(self) -> None:
+        self._cancel_hide_job()
         self.window.destroy()

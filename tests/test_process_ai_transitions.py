@@ -116,6 +116,25 @@ def test_render_transition_cell_removes_blue_and_cleans_hidden_rgb():
     )
 
 
+def test_render_transition_cell_preserves_aspect_ratio_and_centers_subject():
+    cell = Image.new('RGB', (100, 100), (0, 0, 255))
+    ImageDraw.Draw(cell).rectangle((20, 10, 39, 49), fill=(230, 160, 90))
+
+    rendered = render_transition_cell(cell, (100, 100, 200, 200))
+
+    assert rendered.getchannel('A').getbbox() == (125, 100, 175, 200)
+
+
+def test_render_transition_cell_fills_bbox_when_aspect_ratios_match():
+    cell = Image.new("RGB", (100, 100), (0, 0, 255))
+    ImageDraw.Draw(cell).ellipse((20, 10, 80, 90), fill=(230, 160, 90))
+    target_bbox = (100, 200, 222, 362)
+
+    rendered = render_transition_cell(cell, target_bbox)
+
+    assert rendered.getchannel("A").getbbox() == target_bbox
+
+
 def test_render_transition_cell_despills_blue_boundary_without_touching_interior():
     cell = Image.new("RGB", (20, 20), (0, 0, 255))
     draw = ImageDraw.Draw(cell)
@@ -128,7 +147,7 @@ def test_render_transition_cell_despills_blue_boundary_without_touching_interior
         alpha > 0 and blue > max(red, green) + 12
         for red, green, blue, alpha in rendered.getdata()
     )
-    center = rendered.getpixel((220, 520))
+    center = rendered.getpixel((220, 420))
     assert center[:3] == (230, 160, 90)
 
 

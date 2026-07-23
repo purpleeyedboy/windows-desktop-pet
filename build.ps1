@@ -32,8 +32,16 @@ $env:TK_LIBRARY = $tkLibrary
 & $python tools\validate_assets.py assets\pet --keyframe-root assets\keyframes
 if ($LASTEXITCODE -ne 0) { throw '动作素材验证失败' }
 
-& $python -m pytest -q --ignore=tests\test_window.py
+& $python -m pytest -q --ignore=tests\test_window.py --ignore=tests\test_layered_window.py
 if ($LASTEXITCODE -ne 0) { throw '自动测试失败' }
+
+# Keep every Tk interaction test in the release gate, but isolate Tcl
+# interpreters so one suite cannot leak GUI state into the next.
+& $python -m pytest -q tests\test_layered_window.py
+if ($LASTEXITCODE -ne 0) { throw '逐像素透明窗口测试失败' }
+
+& $python -m pytest -q tests\test_window.py
+if ($LASTEXITCODE -ne 0) { throw '桌宠交互测试失败' }
 
 foreach ($relativeTarget in @('build', 'dist')) {
     $target = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $relativeTarget))

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+from ctypes import wintypes
 from random import Random
 import tkinter as tk
 from typing import Callable, Protocol, Sequence
@@ -16,6 +17,51 @@ from .model import ActionCycle, Rect, choose_phrase, clamp_height, format_positi
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
 CLICK_THRESHOLD = 8
+MONITOR_DEFAULTTONEAREST = 2
+
+
+class WinRect(ctypes.Structure):
+    _fields_ = [
+        ("left", wintypes.LONG),
+        ("top", wintypes.LONG),
+        ("right", wintypes.LONG),
+        ("bottom", wintypes.LONG),
+    ]
+
+
+class MonitorInfo(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", WinRect),
+        ("rcWork", WinRect),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+def constrain_rect_to_area(rect: Rect, area: Rect) -> Rect:
+    if rect.width >= area.width:
+        x = area.x
+    else:
+        x = min(max(rect.x, area.x), area.right - rect.width)
+    if rect.height >= area.height:
+        y = area.y
+    else:
+        y = min(max(rect.y, area.y), area.bottom - rect.height)
+    return Rect(x, y, rect.width, rect.height)
+
+
+def _monitor_work_area(user32, monitor: int, fallback: Rect) -> Rect:
+    if not monitor:
+        return fallback
+    get_monitor_info = user32.GetMonitorInfoW
+    get_monitor_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
+    get_monitor_info.restype = wintypes.BOOL
+    info = MonitorInfo()
+    info.cbSize = ctypes.sizeof(MonitorInfo)
+    if not get_monitor_info(monitor, ctypes.byref(info)):
+        return fallback
+    work = info.rcWork
+    return Rect(work.left, work.top, work.right - work.left, work.bottom - work.top)
 
 
 class Renderer(Protocol):
@@ -30,31 +76,26 @@ RendererFactory = Callable[[int], Renderer]
 def screen_work_area(window_id: int, fallback: Rect) -> Rect:
     if os.name != "nt":
         return fallback
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    monitor_from_window = user32.MonitorFromWindow
+    monitor_from_window.argtypes = [wintypes.HWND, wintypes.DWORD]
+    monitor_from_window.restype = wintypes.HANDLE
+    monitor = monitor_from_window(window_id, MONITOR_DEFAULTTONEAREST)
+    return _monitor_work_area(user32, monitor, fallback)
 
-    class WinRect(ctypes.Structure):
-        _fields_ = [
-            ("left", ctypes.c_long),
-            ("top", ctypes.c_long),
-            ("right", ctypes.c_long),
-            ("bottom", ctypes.c_long),
-        ]
 
-    class MonitorInfo(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", ctypes.c_ulong),
-            ("rcMonitor", WinRect),
-            ("rcWork", WinRect),
-            ("dwFlags", ctypes.c_ulong),
-        ]
-
-    user32 = ctypes.windll.user32
-    monitor = user32.MonitorFromWindow(window_id, 2)
-    info = MonitorInfo()
-    info.cbSize = ctypes.sizeof(MonitorInfo)
-    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+def screen_work_area_for_rect(rect: Rect, fallback: Rect) -> Rect:
+    if os.name != "nt":
         return fallback
-    work = info.rcWork
-    return Rect(work.left, work.top, work.right - work.left, work.bottom - work.top)
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    monitor_from_rect = user32.MonitorFromRect
+    monitor_from_rect.argtypes = [ctypes.POINTER(WinRect), wintypes.DWORD]
+    monitor_from_rect.restype = wintypes.HANDLE
+    native_rect = WinRect(rect.x, rect.y, rect.right, rect.bottom)
+    monitor = monitor_from_rect(
+        ctypes.byref(native_rect), MONITOR_DEFAULTTONEAREST
+    )
+    return _monitor_work_area(user32, monitor, fallback)
 
 
 class PetWindow:
@@ -137,27 +178,49 @@ class PetWindow:
         anchor: tuple[int, int] | None = None,
     ) -> None:
         width = max(1, round(image.width * self.display_height / image.height))
-        self._resized_image = image.convert("RGBA").resize(
-            (width, self.display_height), Image.Resampling.LANCZOS
-        )
         if anchor is None:
             x, y = self._window_rect.x, self._window_rect.y
         else:
             x = anchor[0] - width // 2
             y = anchor[1] - self.display_height
-        self._window_rect = Rect(x, y, width, self.display_height)
+        proposed = Rect(x, y, width, self.display_height)
+        area = self.work_area_for(proposed)
+        max_height_by_width = max(
+            1, area.width * image.height // image.width
+        )
+        fitted_height = max(
+            1,
+            min(
+                self.display_height,
+                max(1, area.height),
+                max_height_by_width,
+            ),
+        )
+        if fitted_height != self.display_height:
+            self.display_height = fitted_height
+            width = max(1, round(image.width * fitted_height / image.height))
+            if anchor is not None:
+                x = anchor[0] - width // 2
+                y = anchor[1] - fitted_height
+            proposed = Rect(x, y, width, fitted_height)
+        self._resized_image = image.convert("RGBA").resize(
+            (width, self.display_height), Image.Resampling.LANCZOS
+        )
+        self._window_rect = constrain_rect_to_area(
+            proposed, area
+        )
+        x, y = self._window_rect.x, self._window_rect.y
         self.root.geometry(
             f"{width}x{self.display_height}{format_position(x, y)}"
         )
         self.renderer.render(self._resized_image, x, y)
 
     def _move_to(self, x: int, y: int) -> None:
-        self._window_rect = Rect(
-            x,
-            y,
-            self._window_rect.width,
-            self._window_rect.height,
+        proposed = Rect(x, y, self._window_rect.width, self._window_rect.height)
+        self._window_rect = constrain_rect_to_area(
+            proposed, self.work_area_for(proposed)
         )
+        x, y = self._window_rect.x, self._window_rect.y
         self.root.geometry(
             f"{self._window_rect.width}x{self._window_rect.height}"
             f"{format_position(x, y)}"
@@ -170,6 +233,9 @@ class PetWindow:
     def current_screen(self) -> Rect:
         self.root.update_idletasks()
         return screen_work_area(self.root.winfo_id(), self._fallback_screen())
+
+    def work_area_for(self, rect: Rect) -> Rect:
+        return screen_work_area_for_rect(rect, self._fallback_screen())
 
     def pet_rect(self) -> Rect:
         return self._window_rect
@@ -219,8 +285,7 @@ class PetWindow:
         self._apply_image(self._current_image, self._anchor())
 
     def _animation_finished(self, _action: str) -> None:
-        self._current_image = self.frames["jump"][0]
-        self._apply_image(self._current_image, self._anchor())
+        return
 
     def _on_left_press(self, event: tk.Event) -> None:
         self._press_pointer = (event.x_root, event.y_root)

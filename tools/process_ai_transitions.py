@@ -257,7 +257,7 @@ def render_transition_cell(
     )
     subject = subject.resize(size, Image.Resampling.LANCZOS)
     x = left + (target_width - size[0]) // 2
-    y = bottom - size[1]
+    y = top + (target_height - size[1]) // 2
     output = Image.new("RGBA", FRAME_SIZE, (0, 0, 0, 0))
     output.alpha_composite(subject, (x, y))
     output = keep_largest_alpha_component(

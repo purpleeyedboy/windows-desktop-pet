@@ -77,7 +77,7 @@ def place_bubble(
     size: tuple[int, int],
     screen: Rect,
     gap: int = 12,
-) -> Rect:
+) -> Rect | None:
     width, height = size
     candidates = (
         Rect(pet.x + (pet.width - width) // 2, pet.top - gap - height, width, height),
@@ -88,6 +88,30 @@ def place_bubble(
     for candidate in candidates:
         if screen.contains(candidate) and not candidate.intersects(pet):
             return candidate
-    x = max(screen.left, min(screen.right - width, pet.left - gap - width))
-    y = max(screen.top, min(screen.bottom - height, pet.top))
-    return Rect(x, y, width, height)
+
+    minimum_width = min(width, 72)
+    side_y = max(
+        screen.top,
+        min(screen.bottom - height, pet.y + (pet.height - height) // 3),
+    )
+    if screen.height >= height:
+        left_space = pet.left - gap - screen.left
+        if left_space >= minimum_width:
+            fitted_width = min(width, left_space)
+            candidate = Rect(
+                pet.left - gap - fitted_width,
+                side_y,
+                fitted_width,
+                height,
+            )
+            if screen.contains(candidate):
+                return candidate
+
+        right_space = screen.right - pet.right - gap
+        if right_space >= minimum_width:
+            fitted_width = min(width, right_space)
+            candidate = Rect(pet.right + gap, side_y, fitted_width, height)
+            if screen.contains(candidate):
+                return candidate
+
+    return None

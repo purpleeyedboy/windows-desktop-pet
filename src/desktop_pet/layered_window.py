@@ -13,6 +13,7 @@ WS_EX_TRANSPARENT = 0x00000020
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_LAYERED = 0x00080000
 GWL_EXSTYLE = -20
+GA_ROOT = 2
 BI_RGB = 0
 DIB_RGB_COLORS = 0
 AC_SRC_OVER = 0
@@ -98,6 +99,9 @@ class LayeredWindowRenderer:
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
         self._configure_functions()
+        top_level = self._user32.GetAncestor(self.hwnd, GA_ROOT)
+        if top_level:
+            self.hwnd = int(top_level)
         self._apply_layered_style()
 
     def _configure_functions(self) -> None:
@@ -117,6 +121,8 @@ class LayeredWindowRenderer:
             wintypes.DWORD,
         ]
         self._user32.UpdateLayeredWindow.restype = wintypes.BOOL
+        self._user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        self._user32.GetAncestor.restype = wintypes.HWND
         self._user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
         self._user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
         self._user32.SetWindowLongPtrW.argtypes = [

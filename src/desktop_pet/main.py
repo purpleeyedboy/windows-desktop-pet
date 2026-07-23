@@ -47,6 +47,26 @@ class SingleInstanceMutex:
         self._handle = None
 
 
+def enable_per_monitor_dpi_awareness() -> bool:
+    if os.name != "nt":
+        return False
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    set_context = getattr(user32, "SetProcessDpiAwarenessContext", None)
+    if set_context is not None:
+        set_context.argtypes = [ctypes.c_void_p]
+        set_context.restype = ctypes.c_bool
+        ctypes.set_last_error(0)
+        if set_context(ctypes.c_void_p(-4)):
+            return True
+    set_legacy = getattr(user32, "SetProcessDPIAware", None)
+    if set_legacy is None:
+        return False
+    set_legacy.argtypes = []
+    set_legacy.restype = ctypes.c_bool
+    ctypes.set_last_error(0)
+    return bool(set_legacy())
+
+
 def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
     if root is not None:
         messagebox.showerror("桌面宠物无法启动", message, parent=root)
@@ -56,6 +76,7 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
 
 
 def main() -> int:
+    enable_per_monitor_dpi_awareness()
     mutex = SingleInstanceMutex(build_mutex_name())
     root: tk.Tk | None = None
     try:
