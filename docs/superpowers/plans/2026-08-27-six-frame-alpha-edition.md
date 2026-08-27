@@ -65,7 +65,7 @@
 - Consumes: 18 张正式关键帧、逐像素 Alpha 渲染器和构建脚本。
 - Produces: 残边统计、测试证据、EXE 哈希和启动探针结果。
 
-- [ ] **Step 1: 写失败测试**：把正式关键帧残边复扫范围改为三组各 6 张，并断言检测总数为 0。
+- [ ] **Step 1: 写失败测试**：把正式关键帧残边复扫范围改为三组各 6 张，并断言 Alpha 不低于 32 的可见污染像素总数为 0。
 - [ ] **Step 2: 运行残边与分层窗口测试**：执行 `python -m pytest tests/test_clean_colored_edges.py tests/test_layered_window.py tests/test_window.py -q`。
 - [ ] **Step 3: 运行完整测试和素材验证**：执行 97 项回归及 `tools/validate_assets.py assets/keyframes --frame-count 6 --keyframe-layout direct --keyframe-root assets/keyframes --report qa/six-frame-alpha-validation.json`。
 - [ ] **Step 4: 构建并探测 EXE**：运行 `build.ps1`，启动发布 EXE，检查单实例、逐像素 Alpha 标志、无颜色键、初始/滚轮尺寸和正常退出。

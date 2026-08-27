@@ -44,12 +44,12 @@ def test_controller_rejects_unknown_action():
     assert controller.play("shake") is False
 
 
-def test_default_interval_is_thirty_three_ms():
+def test_default_interval_matches_original_six_frame_timing():
     scheduler = FakeScheduler()
     controller = AnimationController(
-        {"jump": 30}, scheduler, lambda *_: None, lambda _: None
+        {"jump": 6}, scheduler, lambda *_: None, lambda _: None
     )
 
     controller.play("jump")
 
-    assert scheduler.delays == [33]
+    assert scheduler.delays == [90]

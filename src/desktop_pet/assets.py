@@ -8,15 +8,19 @@ from .paths import asset_path
 
 
 EXPECTED_SIZE = (512, 768)
-FRAME_COUNT = 30
+FRAME_COUNT = 6
 EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
+
+
+def runtime_frame_root() -> Path:
+    return asset_path("assets", "keyframes")
 
 
 def find_frame_paths(root: Path, action: str) -> list[Path]:
     paths = sorted((root / action).glob("*.png"))
     if tuple(path.name for path in paths) != EXPECTED_NAMES:
         raise RuntimeError(
-            f"{action} must contain exactly 30 frames named 00.png through 29.png"
+            f"{action} must contain exactly 6 frames named 00.png through 05.png"
         )
     return paths
 
@@ -33,7 +37,7 @@ def validate_frame_file(path: Path) -> None:
 
 
 def load_frames(root: Path | None = None) -> dict[str, Sequence[Image.Image]]:
-    frame_root = root or asset_path("assets", "pet")
+    frame_root = root or runtime_frame_root()
     loaded: dict[str, Sequence[Image.Image]] = {}
     for action in ACTIONS:
         frames: list[Image.Image] = []

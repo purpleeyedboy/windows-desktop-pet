@@ -7,6 +7,11 @@ from pathlib import Path
 
 from PIL import Image
 
+try:
+    from tools.clean_colored_edges import contamination_mask
+except ModuleNotFoundError:
+    from clean_colored_edges import contamination_mask
+
 
 ACTIONS = ("jump", "squash", "shake")
 EXPECTED_SIZE = (512, 768)
@@ -33,8 +38,22 @@ def border_is_transparent(image: Image.Image) -> bool:
     return not any((top, bottom, left, right))
 
 
+def visible_colored_edge_count(image: Image.Image, minimum_alpha: int = 32) -> int:
+    rgba = image.convert("RGBA")
+    contamination = contamination_mask(rgba)
+    alpha = rgba.getchannel("A")
+    return sum(
+        1
+        for marked, opacity in zip(contamination.getdata(), alpha.getdata())
+        if marked and opacity >= minimum_alpha
+    )
+
+
 def validate_keyframe_hashes(
-    root: Path, keyframe_root: Path, errors: list[str]
+    root: Path,
+    keyframe_root: Path,
+    errors: list[str],
+    keyframe_layout: str = "mapped",
 ) -> None:
     try:
         manifest = json.loads((keyframe_root / "manifest.json").read_text(encoding="utf-8"))
@@ -55,17 +74,26 @@ def validate_keyframe_hashes(
         for keyframe_index, keyframe_name in enumerate(EXPECTED_KEYFRAME_NAMES):
             mapping = mappings.get(keyframe_name)
             try:
-                final_name = mapping["final_name"]
                 expected_hash = mapping["sha256"]
             except (KeyError, TypeError):
                 errors.append(f"{action}/{keyframe_name}: missing mapped SHA-256 value")
                 continue
-            expected_final_name = f"{KEYFRAME_POSITIONS[keyframe_index]:02d}.png"
-            if final_name != expected_final_name:
-                errors.append(
-                    f"{action}/{keyframe_name}: must map to {expected_final_name}"
-                )
-                continue
+            if keyframe_layout == "direct":
+                final_name = keyframe_name
+            else:
+                try:
+                    final_name = mapping["final_name"]
+                except (KeyError, TypeError):
+                    errors.append(
+                        f"{action}/{keyframe_name}: missing mapped SHA-256 value"
+                    )
+                    continue
+                expected_final_name = f"{KEYFRAME_POSITIONS[keyframe_index]:02d}.png"
+                if final_name != expected_final_name:
+                    errors.append(
+                        f"{action}/{keyframe_name}: must map to {expected_final_name}"
+                    )
+                    continue
             path = root / action / final_name
             if not path.is_file():
                 errors.append(f"{action}/{final_name}: missing mapped keyframe")
@@ -77,15 +105,23 @@ def validate_keyframe_hashes(
                 )
 
 
-def validate_assets(root: Path, keyframe_root: Path | None = None) -> dict[str, object]:
+def validate_assets(
+    root: Path,
+    keyframe_root: Path | None = None,
+    frame_count: int = FRAME_COUNT,
+    keyframe_layout: str = "mapped",
+) -> dict[str, object]:
     errors: list[str] = []
     total_frames = 0
+    expected_names = tuple(f"{index:02d}.png" for index in range(frame_count))
     for action in ACTIONS:
         action_dir = root / action
         paths = sorted(action_dir.glob("*.png"))
         total_frames += len(paths)
-        if tuple(path.name for path in paths) != EXPECTED_NAMES:
-            errors.append(f"{action}: expected exactly 00.png through 29.png")
+        if tuple(path.name for path in paths) != expected_names:
+            errors.append(
+                f"{action}: expected exactly 00.png through {frame_count - 1:02d}.png"
+            )
             continue
         for path in paths:
             with Image.open(path) as image:
@@ -100,8 +136,13 @@ def validate_assets(root: Path, keyframe_root: Path | None = None) -> dict[str, 
                     errors.append(f"{path}: transparent RGB must be black")
                 if not border_is_transparent(image):
                     errors.append(f"{path}: outer border must be transparent")
+                contamination = visible_colored_edge_count(image)
+                if contamination:
+                    errors.append(
+                        f"{path}: colored edge contamination ({contamination} pixels)"
+                    )
     if keyframe_root is not None:
-        validate_keyframe_hashes(root, keyframe_root, errors)
+        validate_keyframe_hashes(root, keyframe_root, errors, keyframe_layout)
     return {"errors": errors, "actions": len(ACTIONS), "total_frames": total_frames}
 
 
@@ -109,16 +150,27 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     parser.add_argument("--keyframes", "--keyframe-root", dest="keyframe_root", type=Path)
+    parser.add_argument("--frame-count", type=int, default=FRAME_COUNT)
+    parser.add_argument(
+        "--keyframe-layout",
+        choices=("mapped", "direct"),
+        default="mapped",
+    )
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
-    report = validate_assets(args.root, args.keyframe_root)
+    report = validate_assets(
+        args.root,
+        args.keyframe_root,
+        frame_count=args.frame_count,
+        keyframe_layout=args.keyframe_layout,
+    )
     if args.report is not None:
         args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     errors = report["errors"]
     if errors:
         print("\n".join(errors))
         return 1
-    print("OK: 3 actions, 90 frames, 512x768 RGBA")
+    print(f"OK: 3 actions, {report['total_frames']} frames, 512x768 RGBA")
     return 0
 
 

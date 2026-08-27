@@ -167,3 +167,23 @@ def test_real_shake_keyframe_has_no_detectable_spill_after_one_cleanup(index: in
         cleaned, _ = clean_colored_edge(source)
 
     assert sum(1 for value in contamination_mask(cleaned).getdata() if value) == 0
+
+
+def test_six_frame_release_keyframes_have_no_visible_colored_edge_contamination() -> None:
+    visible_pixels: list[tuple[str, int]] = []
+    keyframe_root = PROJECT_ROOT / "assets" / "keyframes"
+
+    for path in sorted(keyframe_root.glob("*/*.png")):
+        with Image.open(path) as source:
+            image = source.convert("RGBA")
+        contamination = contamination_mask(image)
+        alpha = image.getchannel("A")
+        count = sum(
+            1
+            for marked, opacity in zip(contamination.getdata(), alpha.getdata())
+            if marked and opacity >= 32
+        )
+        if count:
+            visible_pixels.append((path.relative_to(keyframe_root).as_posix(), count))
+
+    assert visible_pixels == []
