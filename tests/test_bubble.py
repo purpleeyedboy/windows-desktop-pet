@@ -1,14 +1,16 @@
-from PIL import ImageChops
+import pytest
+from PIL import ImageChops, ImageDraw
 
 from desktop_pet.bubble import BubbleComposer
 from desktop_pet.bubble_layout import (
     BUBBLE_BODY_SIZE,
     BUBBLE_FONT_SIZE,
+    BUBBLE_TEXT_COLOR,
     BUBBLE_TEXT_SAFE_RECT,
 )
 from desktop_pet.dialogue import DIALOGUE_FONT_SIZE, MAX_PHRASE_WIDTH
+from desktop_pet.font_runs import FontRunResolver, draw_layout
 from desktop_pet.model import BubblePlacement, Rect, place_oriented_bubble
-from desktop_pet.paths import asset_path
 
 
 DIRECTIONS = ("down", "up", "left", "right")
@@ -59,6 +61,66 @@ def test_composer_returns_rgba_with_transparent_corners_and_visible_text():
     )
 
 
+def test_composer_renders_user_kaomoji_inside_the_safe_rectangle():
+    composer = BubbleComposer()
+    image = composer.render("₍^. .^₎⟆", "down")
+    blank = composer.render("", "down")
+    expected = blank.copy()
+    layout = FontRunResolver.for_kaomoji(40).layout(
+        "₍^. .^₎⟆", context="kaomoji"
+    )
+    draw_layout(
+        ImageDraw.Draw(expected),
+        layout,
+        BUBBLE_TEXT_SAFE_RECT,
+        BUBBLE_TEXT_COLOR,
+    )
+    text_bbox = ImageChops.difference(
+        image.convert("RGB"), blank.convert("RGB")
+    ).getbbox()
+
+    assert image.mode == "RGBA"
+    assert text_bbox is not None
+    left, top, right, bottom = text_bbox
+    assert left >= 24 and right <= 256
+    assert top >= 51 and bottom <= 101
+    assert (
+        ImageChops.difference(
+            image.convert("RGB"), expected.convert("RGB")
+        ).getbbox()
+        is None
+    )
+
+
+def test_composer_renders_chinese_inside_the_same_safe_rectangle():
+    composer = BubbleComposer()
+    image = composer.render("猫猫今天要起飞", "up")
+    blank = composer.render("", "up")
+    text_bbox = ImageChops.difference(
+        image.convert("RGB"), blank.convert("RGB")
+    ).getbbox()
+
+    assert text_bbox is not None
+    assert text_bbox[0] >= 24 and text_bbox[2] <= 256
+    assert text_bbox[1] >= 51 and text_bbox[3] <= 101
+
+
+def test_directional_output_sizes_match_approved_contract():
+    composer = BubbleComposer()
+
+    assert composer.size_for("down") == (280, 158)
+    assert composer.size_for("up") == (280, 140)
+    assert composer.size_for("left") == (280, 140)
+    assert composer.size_for("right") == (280, 140)
+
+
+def test_composer_rejects_overwide_text_instead_of_shrinking_at_full_scale():
+    composer = BubbleComposer()
+
+    with pytest.raises(ValueError, match="safe width"):
+        composer.render("猫猫猫猫猫猫猫猫猫猫", "down", scale=1.0)
+
+
 def test_composer_preserves_the_body_aspect_ratio_and_directional_tail_sizes():
     composer = BubbleComposer()
 
@@ -83,12 +145,7 @@ def test_each_directional_tail_is_visibly_connected_to_the_body():
     } == {direction: 1 for direction in DIRECTIONS}
 
 
-def test_composer_uses_the_bundled_font_and_shared_production_layout_contract():
-    composer = BubbleComposer()
-
-    assert composer.font_path == asset_path(
-        "assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"
-    )
+def test_composer_uses_the_shared_production_layout_contract():
     assert DIALOGUE_FONT_SIZE == BUBBLE_FONT_SIZE == 28
     assert MAX_PHRASE_WIDTH == BUBBLE_TEXT_SAFE_RECT[2] - BUBBLE_TEXT_SAFE_RECT[0]
 

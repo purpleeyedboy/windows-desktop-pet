@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import tkinter as tk
-from pathlib import Path
 from typing import Callable, Protocol
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from .bubble_layout import (
     BUBBLE_BODY_SIZE,
     BUBBLE_FONT_SIZE,
+    BUBBLE_KAOMOJI_FONT_SIZE,
     BUBBLE_SOURCE_BODY_SIZE,
     BUBBLE_SOURCE_TAIL_OVERLAP,
     BUBBLE_SOURCE_TAIL_SIZE,
     BUBBLE_TEXT_COLOR,
     BUBBLE_TEXT_SAFE_RECT,
 )
+from .dialogue import is_kaomoji_phrase
+from .font_runs import FontRunResolver, draw_layout
 from .layered_window import LayeredWindowRenderer
 from .model import (
     BubblePlacement,
@@ -42,9 +44,7 @@ class BubbleComposer:
     """Compose the approved image skin, directional tail, and runtime text."""
 
     def __init__(self) -> None:
-        self.font_path: Path = asset_path(
-            "assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"
-        )
+        self._resolvers: dict[tuple[str, int], FontRunResolver] = {}
         self._body = self._load_rgba("cat-ear-bow-body.png")
         self._tails = {
             direction: self._load_rgba(f"tail-{direction}.png")
@@ -162,23 +162,42 @@ class BubbleComposer:
         )
         safe_width = right - left
         safe_height = bottom - top
-        draw = ImageDraw.Draw(image)
-        starting_size = max(1, round(BUBBLE_FONT_SIZE * body_scale))
-        font = ImageFont.truetype(self.font_path, starting_size)
-        for font_size in range(starting_size, 0, -1):
-            if font_size != starting_size:
-                font = ImageFont.truetype(self.font_path, font_size)
-            bounds = draw.textbbox((0, 0), text, font=font)
-            if (
-                bounds[2] - bounds[0] <= safe_width
-                and bounds[3] - bounds[1] <= safe_height
-            ):
-                break
-        center = (
-            body_offset[0] + (left + right) / 2,
-            body_offset[1] + (top + bottom) / 2,
+        kind = "kaomoji" if is_kaomoji_phrase(text) else "chinese"
+        base_size = (
+            BUBBLE_KAOMOJI_FONT_SIZE if kind == "kaomoji" else BUBBLE_FONT_SIZE
         )
-        draw.text(center, text, font=font, fill=BUBBLE_TEXT_COLOR, anchor="mm")
+        font_size = max(1, round(base_size * body_scale))
+        cache_key = (kind, font_size)
+        resolver = self._resolvers.get(cache_key)
+        if resolver is None:
+            factory = (
+                FontRunResolver.for_kaomoji
+                if kind == "kaomoji"
+                else FontRunResolver.for_chinese
+            )
+            resolver = self._resolvers.setdefault(cache_key, factory(font_size))
+        layout = resolver.layout(text, context=kind)
+        ink_height = layout.ink_bbox[3] - layout.ink_bbox[1]
+        if layout.total_advance > safe_width:
+            raise ValueError(
+                f"{kind} text width {layout.total_advance:.2f} exceeds safe width {safe_width}"
+            )
+        if ink_height > safe_height + 1:
+            raise ValueError(
+                f"{kind} text height {ink_height} exceeds safe height {safe_height} + 1"
+            )
+        safe_rect = (
+            body_offset[0] + left,
+            body_offset[1] + top,
+            body_offset[0] + right,
+            body_offset[1] + bottom,
+        )
+        draw_layout(
+            ImageDraw.Draw(image),
+            layout,
+            safe_rect,
+            BUBBLE_TEXT_COLOR,
+        )
 
 
 class BubbleWindow:
