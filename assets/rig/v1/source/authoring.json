@@ -1,0 +1,62 @@
+{
+  "canvas": [
+    512,
+    768
+  ],
+  "landmarks": {
+    "ear_left_tip": [
+      38,
+      222
+    ],
+    "ear_left_root": [
+      87,
+      310
+    ],
+    "ear_right_tip": [
+      223,
+      213
+    ],
+    "ear_right_root": [
+      194,
+      312
+    ],
+    "eye_left": [
+      82,
+      351
+    ],
+    "eye_right": [
+      161,
+      347
+    ],
+    "nose": [
+      118,
+      397
+    ],
+    "jaw": [
+      122,
+      451
+    ],
+    "neck_left": [
+      93,
+      454
+    ],
+    "neck_right": [
+      205,
+      454
+    ],
+    "chest_left": [
+      108,
+      555
+    ],
+    "chest_right": [
+      207,
+      555
+    ]
+  },
+  "masks": [
+    "body-fill-mask.png",
+    "dynamic-head-neck-mask.png",
+    "eye-left-mask.png",
+    "eye-right-mask.png"
+  ]
+}

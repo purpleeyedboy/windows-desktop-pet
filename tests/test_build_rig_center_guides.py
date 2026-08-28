@@ -15,7 +15,7 @@ def test_guides_have_fixed_masks_and_preserve_outside_pixels(tmp_path: Path) -> 
         dynamic = opened.copy()
     assert dynamic.mode == "L" and dynamic.getbbox() == (24, 202, 264, 565)
     with Image.open(masks / "body-fill-mask.png") as body_fill:
-        assert body_fill.getbbox() == (88, 365, 236, 551)
+        assert body_fill.getbbox() == (100, 365, 236, 551)
         assert ImageChops.subtract(body_fill, dynamic).getbbox() is None
     with Image.open(masks / "eye-left-mask.png") as left, Image.open(masks / "eye-right-mask.png") as right:
         assert ImageChops.multiply(left, right).getbbox() is None
