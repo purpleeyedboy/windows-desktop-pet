@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
-from PIL import ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from desktop_pet.bubble_layout import (
     BUBBLE_FONT_SIZE,
@@ -90,7 +90,11 @@ def load_phrase_pools(path: Path | None = None) -> dict[str, tuple[str, ...]]:
         raw = json.load(stream)
     if not isinstance(raw, dict):
         raise ValueError(f"dialogue root in {source} must be an object")
-    pools = {action: tuple(values) for action, values in raw.items()}
+    pools: dict[str, tuple[str, ...]] = {}
+    for action, values in raw.items():
+        if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+            raise ValueError(f"action {action!r} phrases must be a sequence")
+        pools[action] = tuple(values)
     validate_phrase_pools(pools)
     return pools
 
@@ -117,6 +121,25 @@ def validate_phrase_font_coverage(
                         f"action {action!r} phrase \"{phrase}\" has missing glyph U+{ord(character):04X} "
                         f"in font {Path(source).name!r}"
                     )
+            bounds = font.getbbox(phrase)
+            mask = Image.new(
+                "L",
+                (
+                    max(1, bounds[2] - bounds[0]),
+                    max(1, bounds[3] - bounds[1]),
+                ),
+            )
+            ImageDraw.Draw(mask).text(
+                (-bounds[0], -bounds[1]),
+                phrase,
+                font=font,
+                fill=255,
+            )
+            if mask.getbbox() is None:
+                raise ValueError(
+                    f"action {action!r} phrase {phrase!r} rendered an empty glyph mask "
+                    f"in font {Path(source).name!r}"
+                )
             width = float(font.getlength(phrase))
             if not MIN_PHRASE_WIDTH <= width <= MAX_PHRASE_WIDTH:
                 raise ValueError(

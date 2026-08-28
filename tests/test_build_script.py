@@ -1,3 +1,4 @@
+import codecs
 from pathlib import Path
 
 
@@ -10,13 +11,44 @@ def test_build_validates_six_direct_archived_keyframes():
     assert "--keyframe-layout direct" in script
 
 
-def test_pyinstaller_packages_only_six_frame_keyframes_with_distinct_name():
+def test_build_script_has_utf8_bom_for_windows_powershell_5():
+    script_bytes = Path("build.ps1").read_bytes()
+
+    assert script_bytes.startswith(codecs.BOM_UTF8)
+
+
+def test_pyinstaller_packages_complete_runtime_data_with_release_name():
     spec = Path("desktop_pet.spec").read_text(encoding="utf-8")
 
-    assert '"keyframes"' in spec
-    assert '"assets/keyframes"' in spec
+    for source, destination in (
+        ('"assets" / "keyframes"', '"assets/keyframes"'),
+        ('"assets" / "bubble"', '"assets/bubble"'),
+        ('"assets" / "fonts"', '"assets/fonts"'),
+        ('"assets" / "dialogue"', '"assets/dialogue"'),
+        ('"THIRD_PARTY_NOTICES.txt"', '"."'),
+    ):
+        assert source in spec
+        assert destination in spec
     assert '"assets" / "pet"' not in spec
-    assert 'name="桌面宠物-6帧无粉边版"' in spec
+    assert 'name="桌面宠物-6帧猫耳气泡版"' in spec
+
+
+def test_build_runs_release_gates_before_pyinstaller_in_required_order():
+    script = Path("build.ps1").read_text(encoding="utf-8")
+
+    assets = script.index(r"tools\validate_assets.py")
+    dialogue = script.index(r"tools\validate_dialogue.py")
+    pytest = script.index("-m pytest")
+    pyinstaller = script.index("-m PyInstaller")
+
+    assert assets < dialogue < pytest < pyinstaller
+    assert "--basetemp" in script
+
+
+def test_pyinstaller_spec_builds_exactly_one_file():
+    spec = Path("desktop_pet.spec").read_text(encoding="utf-8")
+
+    assert "COLLECT(" not in spec
 
 
 def test_pyinstaller_excludes_offline_image_tooling():

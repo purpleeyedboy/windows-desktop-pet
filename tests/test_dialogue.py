@@ -1,6 +1,10 @@
+import json
 from random import Random
+import subprocess
+import sys
 
 import pytest
+from PIL import ImageFont
 
 from desktop_pet.dialogue import (
     DialogueChooser,
@@ -56,6 +60,23 @@ def test_packaged_dialogue_uses_only_glyphs_in_the_bundled_font():
     assert 120 <= minimum_width <= maximum_width <= 230
 
 
+def test_all_packaged_phrases_fit_the_production_bubble_font():
+    pools = load_phrase_pools()
+    font = ImageFont.truetype(
+        asset_path("assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"),
+        28,
+    )
+
+    widths = [
+        font.getlength(text)
+        for values in pools.values()
+        for text in values
+    ]
+
+    assert min(widths) >= 120
+    assert max(widths) <= 230
+
+
 def test_font_coverage_validation_rejects_missing_glyph_with_action_and_phrase():
     phrase = "本喵飞飞\U0010ffff飞"
 
@@ -68,6 +89,33 @@ def test_load_phrase_pools_reads_an_explicit_utf8_json_path():
 
     assert pools["jump"][0] == "猫猫要摸云朵啦"
     assert isinstance(pools["jump"], tuple)
+
+
+def test_load_phrase_pools_normalizes_non_iterable_json_pool_to_value_error(tmp_path):
+    dialogue_path = tmp_path / "phrases.json"
+    dialogue_path.write_text(
+        json.dumps({"jump": 17, "squash": [], "shake": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="jump.*sequence"):
+        load_phrase_pools(dialogue_path)
+
+
+def test_dialogue_cli_reports_production_width_statistics_and_action_counts():
+    result = subprocess.run(
+        [sys.executable, "tools/validate_dialogue.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "jump: 200 phrases" in result.stdout
+    assert "squash: 200 phrases" in result.stdout
+    assert "shake: 200 phrases" in result.stdout
+    assert "font width min/median/max:" in result.stdout
 
 
 def test_dialogue_chooser_uses_only_requested_action_and_avoids_immediate_repeat():
