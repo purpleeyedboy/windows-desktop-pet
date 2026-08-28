@@ -115,12 +115,15 @@ if ($exeFiles.Count -ne 1) {
     throw "Expected exactly one EXE in dist, found $($exeFiles.Count)"
 }
 
-$expectedExe = Join-Path $projectRoot 'dist\桌面宠物-6帧猫耳气泡版.exe'
+$expectedExe = Join-Path $projectRoot 'dist\桌面宠物-6帧猫耳颜文字版.exe'
 if (-not [System.IO.Path]::GetFullPath($exeFiles[0].FullName).Equals(
     [System.IO.Path]::GetFullPath($expectedExe),
     [System.StringComparison]::OrdinalIgnoreCase
 )) {
     throw "Unexpected EXE name: $($exeFiles[0].Name)"
 }
+
+& $python tools\verify_release_archive.py $expectedExe
+if ($LASTEXITCODE -ne 0) { throw 'PyInstaller 单文件归档资源验证失败' }
 
 $exeFiles[0] | Select-Object FullName, Length, LastWriteTime

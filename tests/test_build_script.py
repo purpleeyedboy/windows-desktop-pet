@@ -30,7 +30,7 @@ def test_pyinstaller_packages_complete_runtime_data_with_release_name():
         assert source in spec
         assert destination in spec
     assert '"assets" / "pet"' not in spec
-    assert 'name="桌面宠物-6帧猫耳气泡版"' in spec
+    assert 'name="桌面宠物-6帧猫耳颜文字版"' in spec
 
 
 def test_build_runs_release_gates_before_pyinstaller_in_required_order():
@@ -43,6 +43,15 @@ def test_build_runs_release_gates_before_pyinstaller_in_required_order():
 
     assert assets < dialogue < pytest < pyinstaller
     assert "--basetemp" in script
+
+
+def test_build_verifies_archive_after_pyinstaller():
+    script = Path("build.ps1").read_text(encoding="utf-8")
+
+    build = script.index("-m PyInstaller")
+    archive = script.index(r"tools\verify_release_archive.py")
+
+    assert build < archive
 
 
 def test_build_cleans_only_its_validated_pytest_temp_root_in_finally():
