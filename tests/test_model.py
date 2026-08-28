@@ -1,6 +1,4 @@
-from random import Random
-
-from desktop_pet.model import ActionCycle, Rect, clamp_height, choose_phrase, place_bubble
+from desktop_pet.model import ActionCycle, Rect, clamp_height, place_bubble
 
 
 def test_clamp_height_enforces_contract():
@@ -18,14 +16,6 @@ def test_action_cycle_repeats_fixed_order():
         "jump",
         "squash",
     ]
-
-
-def test_phrase_is_from_action_pool():
-    assert choose_phrase("jump", Random(7)) in {
-        "看我起飞！",
-        "今天也要跳高高！",
-        "猫猫升空！",
-    }
 
 
 def test_bubble_prefers_above_without_overlap():

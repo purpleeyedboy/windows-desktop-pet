@@ -11,8 +11,9 @@ from PIL import Image
 
 from .animation import AnimationController
 from .bubble import BubbleWindow
+from .dialogue import DialogueChooser, load_phrase_pools
 from .layered_window import LayeredWindowRenderer
-from .model import ActionCycle, Rect, choose_phrase, clamp_height, format_position
+from .model import ActionCycle, Rect, clamp_height, format_position
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -111,6 +112,7 @@ class PetWindow:
         self.always_on_top = True
         self.action_cycle = ActionCycle()
         self._rng = Random()
+        self.dialogue = DialogueChooser(load_phrase_pools(), self._rng)
         self._current_image = frames["jump"][0]
         self._resized_image = self._current_image
         self._press_pointer: tuple[int, int] | None = None
@@ -277,7 +279,7 @@ class PetWindow:
         action = self.action_cycle.next()
         if not self.animation.play(action):
             return
-        phrase = choose_phrase(action, self._rng)
+        phrase = self.dialogue.choose(action)
         self.bubble.show_message(phrase, self.pet_rect(), self.current_screen())
 
     def show_frame(self, action: str, index: int) -> None:

@@ -206,6 +206,64 @@ def test_click_cycles_actions_but_drag_does_not(tk_root, loaded_frames, monkeypa
     assert played == ["jump", "squash"]
 
 
+def test_each_successful_action_uses_its_matching_dialogue_pool(
+    tk_root,
+    loaded_frames,
+    monkeypatch,
+):
+    window, _renderer = make_window(tk_root, loaded_frames)
+    chosen: list[str] = []
+    shown: list[str] = []
+    monkeypatch.setattr(
+        window.animation,
+        "play",
+        lambda action: True,
+    )
+    monkeypatch.setattr(
+        window.dialogue,
+        "choose",
+        lambda action: chosen.append(action) or f"{action}猫猫台词",
+    )
+    monkeypatch.setattr(
+        window.bubble,
+        "show_message",
+        lambda text, *_args: shown.append(text),
+    )
+
+    window.trigger_next_action()
+    window.trigger_next_action()
+    window.trigger_next_action()
+
+    assert chosen == ["jump", "squash", "shake"]
+    assert shown == ["jump猫猫台词", "squash猫猫台词", "shake猫猫台词"]
+
+
+def test_failed_action_start_does_not_choose_or_show_dialogue(
+    tk_root,
+    loaded_frames,
+    monkeypatch,
+):
+    window, _renderer = make_window(tk_root, loaded_frames)
+    chosen: list[str] = []
+    shown: list[str] = []
+    monkeypatch.setattr(window.animation, "play", lambda _action: False)
+    monkeypatch.setattr(
+        window.dialogue,
+        "choose",
+        lambda action: chosen.append(action) or "不该显示的台词",
+    )
+    monkeypatch.setattr(
+        window.bubble,
+        "show_message",
+        lambda text, *_args: shown.append(text),
+    )
+
+    window.trigger_next_action()
+
+    assert chosen == []
+    assert shown == []
+
+
 def test_finished_animation_keeps_its_last_frame(tk_root, loaded_frames):
     final_frame = Image.new("RGBA", (512, 768), (17, 34, 51, 255))
     loaded_frames["squash"] = (*loaded_frames["squash"][:-1], final_frame)

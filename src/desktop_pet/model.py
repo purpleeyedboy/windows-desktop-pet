@@ -1,13 +1,5 @@
 from dataclasses import dataclass
-from random import Random
-
-
 ACTIONS = ("jump", "squash", "shake")
-PHRASES = {
-    "jump": ("看我起飞！", "今天也要跳高高！", "猫猫升空！"),
-    "squash": ("压扁了也能弹回来！", "软乎乎的一团！", "我还能再弹一下！"),
-    "shake": ("抖抖精神！", "左右都要照顾到！", "今天也要精神满满！"),
-}
 
 
 def clamp_height(value: int) -> int:
@@ -26,10 +18,6 @@ class ActionCycle:
         action = ACTIONS[self._index]
         self._index = (self._index + 1) % len(ACTIONS)
         return action
-
-
-def choose_phrase(action: str, rng: Random) -> str:
-    return rng.choice(PHRASES[action])
 
 
 @dataclass(frozen=True)
