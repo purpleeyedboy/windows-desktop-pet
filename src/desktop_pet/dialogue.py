@@ -8,15 +8,19 @@ from typing import Mapping, Protocol, Sequence
 
 from PIL import ImageFont
 
+from desktop_pet.bubble_layout import (
+    BUBBLE_FONT_SIZE,
+    BUBBLE_TEXT_SAFE_RECT,
+)
 from desktop_pet.paths import asset_path
 
 
 ACTIONS = ("jump", "squash", "shake")
 PHRASES_PER_ACTION = 200
 CAT_FIRST_PERSON_MARKERS = ("我", "本喵", "本猫", "猫猫")
-DIALOGUE_FONT_SIZE = 28
+DIALOGUE_FONT_SIZE = BUBBLE_FONT_SIZE
 MIN_PHRASE_WIDTH = 120
-MAX_PHRASE_WIDTH = 230
+MAX_PHRASE_WIDTH = BUBBLE_TEXT_SAFE_RECT[2] - BUBBLE_TEXT_SAFE_RECT[0]
 
 
 class _ChoiceRng(Protocol):

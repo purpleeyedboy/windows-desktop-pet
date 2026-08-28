@@ -83,47 +83,60 @@ def test_constrain_rect_to_area_handles_bottom_right_overflow():
     assert constrained == Rect(1720, 740, 200, 300)
 
 
-def test_bubble_is_opaque_and_placed_outside_pet(tk_root):
-    bubble = BubbleWindow(tk_root)
+def test_bubble_window_uses_rgba_renderer_without_canvas(tk_root):
+    renderer = FakeRenderer(tk_root.winfo_id())
+    bubble = BubbleWindow(tk_root, renderer_factory=lambda _hwnd: renderer)
     pet = Rect(500, 500, 200, 300)
     screen = Rect(0, 0, 1200, 900)
-    bubble.show_message("看我起飞！", pet, screen)
+    bubble.show_message("猫猫今天要起飞", pet, screen)
     tk_root.update_idletasks()
+
     assert bubble.last_rect is not None
     assert not bubble.last_rect.intersects(pet)
     assert screen.contains(bubble.last_rect)
-    assert bubble.canvas.itemcget(bubble.body_item, "fill") == "#ffffff"
+    assert not hasattr(bubble, "canvas")
+    assert renderer.calls[-1][0].mode == "RGBA"
+    assert renderer.calls[-1][1:] == (bubble.last_rect.x, bubble.last_rect.y)
     bubble.destroy()
 
 
-def test_bubble_has_no_transparent_color_key(tk_root):
-    bubble = BubbleWindow(tk_root)
+def test_bubble_window_has_no_color_key_or_rectangular_background(tk_root):
+    renderer = FakeRenderer(tk_root.winfo_id())
+    bubble = BubbleWindow(tk_root, renderer_factory=lambda _hwnd: renderer)
 
-    assert bubble.window.cget("background") == "#ffffff"
-    assert bubble.canvas.cget("background") == "#ffffff"
+    bubble.show_message(
+        "猫猫今天要起飞",
+        Rect(500, 500, 200, 300),
+        Rect(0, 0, 1200, 900),
+    )
+    image = renderer.calls[-1][0]
+
+    assert image.getpixel((0, 0))[3] == 0
+    assert image.getchannel("A").getextrema() == (0, 255)
+    assert not hasattr(bubble, "canvas")
     bubble.destroy()
 
 
-def test_narrowed_bubble_wraps_text_inside_its_body(tk_root):
-    bubble = BubbleWindow(tk_root)
+def test_bubble_window_scales_the_image_for_small_screen_fallback(tk_root):
+    renderer = FakeRenderer(tk_root.winfo_id())
+    bubble = BubbleWindow(tk_root, renderer_factory=lambda _hwnd: renderer)
     pet = Rect(226, 40, 347, 520)
     screen = Rect(0, 0, 800, 600)
 
-    bubble.show_message("压扁了也能弹回来！", pet, screen)
+    bubble.show_message("本喵压扁也回弹", pet, screen)
     tk_root.update_idletasks()
 
     assert bubble.last_rect is not None
-    text_item = next(
-        item for item in bubble.canvas.find_all() if bubble.canvas.type(item) == "text"
-    )
-    assert float(bubble.canvas.itemcget(text_item, "width")) == (
-        bubble.last_rect.width - 24
-    )
+    rendered = renderer.calls[-1][0]
+    assert rendered.size == (bubble.last_rect.width, bubble.last_rect.height)
+    assert not bubble.last_rect.intersects(pet)
+    assert screen.contains(bubble.last_rect)
     bubble.destroy()
 
 
 def test_bubble_stays_hidden_when_screen_has_no_safe_area(tk_root):
-    bubble = BubbleWindow(tk_root)
+    renderer = FakeRenderer(tk_root.winfo_id())
+    bubble = BubbleWindow(tk_root, renderer_factory=lambda _hwnd: renderer)
     occupied = Rect(0, 0, 200, 200)
 
     bubble.show_message("这里太挤啦！", occupied, occupied)
@@ -137,7 +150,8 @@ def test_bubble_stays_hidden_when_screen_has_no_safe_area(tk_root):
 def test_hiding_for_no_space_cancels_the_old_hide_timer(
     tk_root, monkeypatch
 ):
-    bubble = BubbleWindow(tk_root)
+    renderer = FakeRenderer(tk_root.winfo_id())
+    bubble = BubbleWindow(tk_root, renderer_factory=lambda _hwnd: renderer)
     jobs: dict[str, object] = {}
     next_job = 0
 

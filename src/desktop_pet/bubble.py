@@ -1,141 +1,269 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import font as tkfont
+from pathlib import Path
+from typing import Callable, Protocol
 
-from .model import Rect, format_position, place_bubble
+from PIL import Image, ImageDraw, ImageFont
+
+from .bubble_layout import (
+    BUBBLE_BODY_SIZE,
+    BUBBLE_FONT_SIZE,
+    BUBBLE_SOURCE_BODY_SIZE,
+    BUBBLE_SOURCE_TAIL_OVERLAP,
+    BUBBLE_SOURCE_TAIL_SIZE,
+    BUBBLE_TEXT_COLOR,
+    BUBBLE_TEXT_SAFE_RECT,
+)
+from .layered_window import LayeredWindowRenderer
+from .model import (
+    BubblePlacement,
+    Rect,
+    TailDirection,
+    format_position,
+    place_oriented_bubble,
+)
+from .paths import asset_path
+
+
+DIRECTIONS: tuple[TailDirection, ...] = ("down", "up", "left", "right")
+
+
+class Renderer(Protocol):
+    def render(self, image: Image.Image, x: int, y: int) -> None: ...
+
+    def set_topmost(self, enabled: bool) -> None: ...
+
+
+RendererFactory = Callable[[int], Renderer]
+
+
+class BubbleComposer:
+    """Compose the approved image skin, directional tail, and runtime text."""
+
+    def __init__(self) -> None:
+        self.font_path: Path = asset_path(
+            "assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"
+        )
+        self._body = self._load_rgba("cat-ear-bow-body.png")
+        self._tails = {
+            direction: self._load_rgba(f"tail-{direction}.png")
+            for direction in DIRECTIONS
+        }
+        if self._body.size != BUBBLE_SOURCE_BODY_SIZE:
+            raise ValueError(
+                f"bubble body must be {BUBBLE_SOURCE_BODY_SIZE}, found {self._body.size}"
+            )
+        for direction, tail in self._tails.items():
+            if tail.size != BUBBLE_SOURCE_TAIL_SIZE:
+                raise ValueError(
+                    f"bubble {direction} tail must be {BUBBLE_SOURCE_TAIL_SIZE}, found {tail.size}"
+                )
+
+    @staticmethod
+    def _load_rgba(name: str) -> Image.Image:
+        with Image.open(asset_path("assets", "bubble", name)) as source:
+            return source.convert("RGBA")
+
+    @staticmethod
+    def _validated_scale(scale: float) -> float:
+        value = float(scale)
+        if value <= 0:
+            raise ValueError("bubble scale must be positive")
+        return value
+
+    def _dimensions(
+        self, tail_direction: TailDirection, scale: float
+    ) -> tuple[tuple[int, int], tuple[int, int], int, tuple[int, int]]:
+        scale = self._validated_scale(scale)
+        body_width = max(1, round(BUBBLE_BODY_SIZE[0] * scale))
+        body_height = max(
+            1,
+            round(
+                body_width
+                * BUBBLE_SOURCE_BODY_SIZE[1]
+                / BUBBLE_SOURCE_BODY_SIZE[0]
+            ),
+        )
+        source_scale = body_width / BUBBLE_SOURCE_BODY_SIZE[0]
+        tail_size = (
+            max(1, round(BUBBLE_SOURCE_TAIL_SIZE[0] * source_scale)),
+            max(1, round(BUBBLE_SOURCE_TAIL_SIZE[1] * source_scale)),
+        )
+        overlap = min(
+            tail_size[0] - 1 if tail_size[0] > 1 else 0,
+            max(1, round(BUBBLE_SOURCE_TAIL_OVERLAP * source_scale)),
+        )
+        if tail_direction == "down":
+            output_size = (body_width, body_height + tail_size[1] - overlap)
+        else:
+            output_size = (body_width, body_height)
+        return (body_width, body_height), tail_size, overlap, output_size
+
+    def size_for(
+        self, tail_direction: TailDirection, scale: float = 1.0
+    ) -> tuple[int, int]:
+        if tail_direction not in DIRECTIONS:
+            raise ValueError(f"unsupported tail direction: {tail_direction!r}")
+        return self._dimensions(tail_direction, scale)[3]
+
+    def sizes(self, scale: float = 1.0) -> dict[TailDirection, tuple[int, int]]:
+        return {direction: self.size_for(direction, scale) for direction in DIRECTIONS}
+
+    def render(
+        self,
+        text: str,
+        tail_direction: TailDirection,
+        scale: float = 1.0,
+    ) -> Image.Image:
+        if tail_direction not in DIRECTIONS:
+            raise ValueError(f"unsupported tail direction: {tail_direction!r}")
+        body_size, tail_size, overlap, output_size = self._dimensions(
+            tail_direction, scale
+        )
+        body = self._body.resize(body_size, Image.Resampling.LANCZOS)
+        tail = self._tails[tail_direction].resize(
+            tail_size, Image.Resampling.LANCZOS
+        )
+        image = Image.new("RGBA", output_size, (0, 0, 0, 0))
+        body_offset = [0, 0]
+        if tail_direction == "down":
+            tail_offset = (
+                (body_size[0] - tail_size[0]) // 2,
+                body_size[1] - overlap,
+            )
+        elif tail_direction == "up":
+            tail_offset = ((body_size[0] - tail_size[0]) // 2, overlap)
+        elif tail_direction == "left":
+            tail_offset = (0, (body_size[1] - tail_size[1]) // 2)
+        else:
+            tail_offset = (
+                body_size[0] - tail_size[0],
+                (body_size[1] - tail_size[1]) // 2,
+            )
+
+        image.alpha_composite(body, tuple(body_offset))
+        image.alpha_composite(tail, tail_offset)
+        self._draw_text(image, str(text), tuple(body_offset), body_size)
+        return image
+
+    def _draw_text(
+        self,
+        image: Image.Image,
+        text: str,
+        body_offset: tuple[int, int],
+        body_size: tuple[int, int],
+    ) -> None:
+        if not text:
+            return
+        body_scale = body_size[0] / BUBBLE_BODY_SIZE[0]
+        left, top, right, bottom = (
+            round(value * body_scale) for value in BUBBLE_TEXT_SAFE_RECT
+        )
+        safe_width = right - left
+        safe_height = bottom - top
+        draw = ImageDraw.Draw(image)
+        starting_size = max(1, round(BUBBLE_FONT_SIZE * body_scale))
+        font = ImageFont.truetype(self.font_path, starting_size)
+        for font_size in range(starting_size, 0, -1):
+            if font_size != starting_size:
+                font = ImageFont.truetype(self.font_path, font_size)
+            bounds = draw.textbbox((0, 0), text, font=font)
+            if (
+                bounds[2] - bounds[0] <= safe_width
+                and bounds[3] - bounds[1] <= safe_height
+            ):
+                break
+        center = (
+            body_offset[0] + (left + right) / 2,
+            body_offset[1] + (top + bottom) / 2,
+        )
+        draw.text(center, text, font=font, fill=BUBBLE_TEXT_COLOR, anchor="mm")
 
 
 class BubbleWindow:
-    def __init__(self, parent: tk.Misc) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        renderer_factory: RendererFactory = LayeredWindowRenderer,
+    ) -> None:
         self.window = tk.Toplevel(parent)
         self.window.withdraw()
         self.window.overrideredirect(True)
-        self.window.configure(background="#ffffff")
         self.window.attributes("-topmost", True)
         try:
             self.window.attributes("-toolwindow", True)
         except tk.TclError:
             pass
-        self.canvas = tk.Canvas(
-            self.window,
-            background="#ffffff",
-            borderwidth=0,
-            highlightthickness=0,
-        )
-        self.canvas.pack(fill="both", expand=True)
-        self.font = tkfont.Font(
-            root=self.window,
-            family="Microsoft YaHei UI",
-            size=11,
-            weight="bold",
-        )
-        self.body_item = 0
+        self.window.update_idletasks()
+        self.renderer = renderer_factory(self.window.winfo_id())
+        self.renderer.set_topmost(True)
+        self.composer = BubbleComposer()
         self.last_rect: Rect | None = None
         self._text = ""
         self._hide_job: str | None = None
         self.visible = False
 
-    def _draw_rounded_body(self, width: int, height: int) -> None:
-        self.canvas.delete("all")
-        radius = 16
-        left, top, right, bottom = 2, 2, width - 2, height - 14
-        points = (
-            left + radius,
-            top,
-            right - radius,
-            top,
-            right,
-            top,
-            right,
-            top + radius,
-            right,
-            bottom - radius,
-            right,
-            bottom,
-            right - radius,
-            bottom,
-            left + radius,
-            bottom,
-            left,
-            bottom,
-            left,
-            bottom - radius,
-            left,
-            top + radius,
-            left,
-            top,
+    def _placement(
+        self, pet_rect: Rect, screen_rect: Rect
+    ) -> tuple[BubblePlacement, float] | None:
+        sizes = self.composer.sizes()
+        placement = place_oriented_bubble(pet_rect, sizes, screen_rect)
+        if placement is None:
+            return None
+        expected = sizes[placement.tail_direction]
+        if (
+            placement.rect.width == expected[0]
+            and placement.rect.height == expected[1]
+        ):
+            return placement, 1.0
+        scale = min(
+            placement.rect.width / expected[0],
+            placement.rect.height / expected[1],
         )
-        self.body_item = self.canvas.create_polygon(
-            points,
-            smooth=True,
-            splinesteps=24,
-            fill="#ffffff",
-            outline="#333333",
-            width=1,
+        scaled = place_oriented_bubble(
+            pet_rect, self.composer.sizes(scale), screen_rect
         )
-        center = width // 2
-        self.canvas.create_polygon(
-            center - 8,
-            bottom - 1,
-            center + 9,
-            bottom - 1,
-            center,
-            height - 2,
-            fill="#ffffff",
-            outline="#333333",
-            width=1,
-        )
-        self.canvas.create_text(
-            center,
-            (top + bottom) // 2,
-            text=self._text,
-            width=max(1, width - 24),
-            fill="#222222",
-            font=self.font,
-            anchor="center",
-        )
+        return (scaled, scale) if scaled is not None else None
 
-    def show_message(self, text: str, pet_rect: Rect, screen_rect: Rect) -> None:
-        self._text = text
-        width = max(132, min(260, self.font.measure(text) + 40))
-        height = 76
-        rect = place_bubble(pet_rect, (width, height), screen_rect)
-        if rect is None:
-            self.last_rect = None
-            self.hide()
-            return
+    def _render_at(self, placement: BubblePlacement, scale: float) -> None:
+        image = self.composer.render(self._text, placement.tail_direction, scale)
+        rect = placement.rect
+        if image.size != (rect.width, rect.height):
+            rect = Rect(rect.x, rect.y, image.width, image.height)
         self.last_rect = rect
         self.window.geometry(
             f"{rect.width}x{rect.height}{format_position(rect.x, rect.y)}"
         )
-        self.canvas.configure(width=rect.width, height=rect.height)
-        self._draw_rounded_body(rect.width, rect.height)
         self.window.deiconify()
         self.window.lift()
+        self.renderer.render(image, rect.x, rect.y)
         self.visible = True
+
+    def show_message(self, text: str, pet_rect: Rect, screen_rect: Rect) -> None:
+        self._text = text
+        result = self._placement(pet_rect, screen_rect)
+        if result is None:
+            self.last_rect = None
+            self.hide()
+            return
+        self._render_at(*result)
         self._cancel_hide_job()
         self._hide_job = self.window.after(1800, self._hide_after_timeout)
 
     def reposition(self, pet_rect: Rect, screen_rect: Rect) -> None:
         if not self.visible or self.last_rect is None:
             return
-        rect = place_bubble(
-            pet_rect,
-            (self.last_rect.width, self.last_rect.height),
-            screen_rect,
-        )
-        if rect is None:
+        result = self._placement(pet_rect, screen_rect)
+        if result is None:
             self.last_rect = None
             self.hide()
             return
-        self.last_rect = rect
-        self.window.geometry(
-            f"{rect.width}x{rect.height}{format_position(rect.x, rect.y)}"
-        )
+        self._render_at(*result)
 
     def set_always_on_top(self, enabled: bool) -> None:
         self.window.attributes("-topmost", enabled)
+        self.renderer.set_topmost(bool(enabled))
 
     def _cancel_hide_job(self) -> None:
         job = self._hide_job
@@ -153,9 +281,16 @@ class BubbleWindow:
 
     def hide(self) -> None:
         self._cancel_hide_job()
-        self.window.withdraw()
+        try:
+            self.window.withdraw()
+        except tk.TclError:
+            pass
         self.visible = False
 
     def destroy(self) -> None:
         self._cancel_hide_job()
-        self.window.destroy()
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        self.visible = False

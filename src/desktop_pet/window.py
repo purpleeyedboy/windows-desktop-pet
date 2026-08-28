@@ -131,7 +131,7 @@ class PetWindow:
         )
         self.renderer = renderer_factory(root.winfo_id())
         self.renderer.set_topmost(True)
-        self.bubble = BubbleWindow(root)
+        self.bubble = BubbleWindow(root, renderer_factory=renderer_factory)
         self.animation = AnimationController(
             {action: len(action_frames) for action, action_frames in frames.items()},
             root.after,

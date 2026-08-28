@@ -1,0 +1,10 @@
+"""Shared production layout values for dialogue validation and rendering."""
+
+BUBBLE_BODY_SIZE = (280, 140)
+BUBBLE_FONT_SIZE = 28
+BUBBLE_TEXT_SAFE_RECT = (25, 52, 255, 100)
+BUBBLE_TEXT_COLOR = (104, 53, 67, 255)
+
+BUBBLE_SOURCE_BODY_SIZE = (768, 384)
+BUBBLE_SOURCE_TAIL_SIZE = (80, 80)
+BUBBLE_SOURCE_TAIL_OVERLAP = 30

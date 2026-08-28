@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal, Mapping
 ACTIONS = ("jump", "squash", "shake")
 
 
@@ -60,46 +61,98 @@ class Rect:
         )
 
 
+TailDirection = Literal["down", "up", "left", "right"]
+
+
+@dataclass(frozen=True)
+class BubblePlacement:
+    rect: Rect
+    tail_direction: TailDirection
+
+
+def place_oriented_bubble(
+    pet: Rect,
+    sizes: Mapping[TailDirection, tuple[int, int]],
+    screen: Rect,
+    gap: int = 12,
+) -> BubblePlacement | None:
+    """Place a complete directional bubble, preferring above then either side."""
+    down_width, down_height = sizes["down"]
+    right_width, right_height = sizes["right"]
+    left_width, left_height = sizes["left"]
+    up_width, up_height = sizes["up"]
+    candidates: tuple[BubblePlacement, ...] = (
+        BubblePlacement(
+            Rect(
+                pet.x + (pet.width - down_width) // 2,
+                pet.top - gap - down_height,
+                down_width,
+                down_height,
+            ),
+            "down",
+        ),
+        BubblePlacement(
+            Rect(
+                pet.left - gap - right_width,
+                pet.y + (pet.height - right_height) // 3,
+                right_width,
+                right_height,
+            ),
+            "right",
+        ),
+        BubblePlacement(
+            Rect(
+                pet.right + gap,
+                pet.y + (pet.height - left_height) // 3,
+                left_width,
+                left_height,
+            ),
+            "left",
+        ),
+        BubblePlacement(
+            Rect(
+                pet.x + (pet.width - up_width) // 2,
+                pet.bottom + gap,
+                up_width,
+                up_height,
+            ),
+            "up",
+        ),
+    )
+    for placement in candidates:
+        if screen.contains(placement.rect) and not placement.rect.intersects(pet):
+            return placement
+
+    side_options: tuple[tuple[TailDirection, int, int, int], ...] = (
+        ("right", right_width, right_height, pet.left - gap - screen.left),
+        ("left", left_width, left_height, screen.right - pet.right - gap),
+    )
+    for direction, width, height, available_width in side_options:
+        if screen.height < height or available_width < min(width, 72):
+            continue
+        fitted_width = min(width, available_width)
+        side_y = max(
+            screen.top,
+            min(screen.bottom - height, pet.y + (pet.height - height) // 3),
+        )
+        x = pet.left - gap - fitted_width if direction == "right" else pet.right + gap
+        rect = Rect(x, side_y, fitted_width, height)
+        if screen.contains(rect) and not rect.intersects(pet):
+            return BubblePlacement(rect, direction)
+
+    return None
+
+
 def place_bubble(
     pet: Rect,
     size: tuple[int, int],
     screen: Rect,
     gap: int = 12,
 ) -> Rect | None:
-    width, height = size
-    candidates = (
-        Rect(pet.x + (pet.width - width) // 2, pet.top - gap - height, width, height),
-        Rect(pet.left - gap - width, pet.y + (pet.height - height) // 3, width, height),
-        Rect(pet.right + gap, pet.y + (pet.height - height) // 3, width, height),
-        Rect(pet.x + (pet.width - width) // 2, pet.bottom + gap, width, height),
+    placement = place_oriented_bubble(
+        pet,
+        {direction: size for direction in ("down", "up", "left", "right")},
+        screen,
+        gap,
     )
-    for candidate in candidates:
-        if screen.contains(candidate) and not candidate.intersects(pet):
-            return candidate
-
-    minimum_width = min(width, 72)
-    side_y = max(
-        screen.top,
-        min(screen.bottom - height, pet.y + (pet.height - height) // 3),
-    )
-    if screen.height >= height:
-        left_space = pet.left - gap - screen.left
-        if left_space >= minimum_width:
-            fitted_width = min(width, left_space)
-            candidate = Rect(
-                pet.left - gap - fitted_width,
-                side_y,
-                fitted_width,
-                height,
-            )
-            if screen.contains(candidate):
-                return candidate
-
-        right_space = screen.right - pet.right - gap
-        if right_space >= minimum_width:
-            fitted_width = min(width, right_space)
-            candidate = Rect(pet.right + gap, side_y, fitted_width, height)
-            if screen.contains(candidate):
-                return candidate
-
-    return None
+    return placement.rect if placement is not None else None
