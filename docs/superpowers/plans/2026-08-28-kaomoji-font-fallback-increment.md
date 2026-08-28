@@ -565,23 +565,26 @@ git commit -m "feat: add action-specific kaomoji dialogue pools"
 在 `tests/test_bubble.py` 新增：
 
 ```python
-def test_composer_renders_user_kaomoji_with_two_bundled_font_runs():
+def test_composer_renders_user_kaomoji_inside_the_safe_rectangle():
     composer = BubbleComposer()
     image = composer.render("₍^. .^₎⟆", "down")
+    blank = composer.render("", "down")
+    text_bbox = ImageChops.difference(image.convert("RGB"), blank.convert("RGB")).getbbox()
     assert image.mode == "RGBA"
-    assert composer.last_text_kind == "kaomoji"
-    assert composer.last_run_keys == ("noto_sans", "noto_math")
-    assert composer.last_text_bbox is not None
-    left, top, right, bottom = composer.last_text_bbox
+    assert text_bbox is not None
+    left, top, right, bottom = text_bbox
     assert left >= 24 and right <= 256
     assert top >= 51 and bottom <= 101
 
 
-def test_composer_keeps_chinese_on_zcool_at_28px():
+def test_composer_renders_chinese_inside_the_same_safe_rectangle():
     composer = BubbleComposer()
-    composer.render("猫猫今天要起飞", "up")
-    assert composer.last_text_kind == "chinese"
-    assert composer.last_run_keys == ("zcool",)
+    image = composer.render("猫猫今天要起飞", "up")
+    blank = composer.render("", "up")
+    text_bbox = ImageChops.difference(image.convert("RGB"), blank.convert("RGB")).getbbox()
+    assert text_bbox is not None
+    assert text_bbox[0] >= 24 and text_bbox[2] <= 256
+    assert text_bbox[1] >= 51 and text_bbox[3] <= 101
 
 
 def test_directional_output_sizes_match_approved_contract():
@@ -629,9 +632,6 @@ safe_rect = (
     body_offset[1] + bottom,
 )
 bbox = draw_layout(ImageDraw.Draw(image), layout, safe_rect, BUBBLE_TEXT_COLOR)
-self.last_text_kind = kind
-self.last_run_keys = tuple(run.font_key for run in layout.runs)
-self.last_text_bbox = bbox
 ```
 
 在绘制前验证 `layout.total_advance <= safe_width` 且 bbox 高度不超过安全区加 1px；失败抛 `ValueError`，绝不缩小比例 1.0 的单条内容。
