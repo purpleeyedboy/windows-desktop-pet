@@ -70,11 +70,13 @@ def boundary_background_mask(image: Image.Image) -> list[bool]:
 
 def is_visible_turquoise_spill(pixel: tuple[int, int, int, int]) -> bool:
     red, green, blue, alpha = pixel
-    return alpha >= 64 and green - red >= 35 and green - blue >= 20
+    # The composite can reveal a green key fringe at any non-zero opacity.
+    # Do not leave low-alpha pixels outside the same cleanup contract.
+    return alpha > 0 and green - red >= 35 and green - blue >= 20
 
 
 def suppress_visible_turquoise_spill(image: Image.Image) -> Image.Image:
-    """Rebuild only visible turquoise-key remnants from adjacent non-key colours."""
+    """Rebuild turquoise-key remnants at every non-zero opacity from safe neighbours."""
     rgba = image.convert("RGBA")
     width, height = rgba.size
     pixels = list(rgba.getdata())

@@ -56,3 +56,15 @@ def test_bubble_component_assets_have_no_visible_turquoise_chroma_spill() -> Non
                 if alpha >= 64 and green - red >= 35 and green - blue >= 20:
                     contaminated.append(f"{name}@{index}=({red},{green},{blue},{alpha})")
     assert contaminated == []
+
+
+def test_bubble_component_assets_have_no_low_alpha_turquoise_edge_residue() -> None:
+    """Even translucent antialias pixels must not preserve the green-screen hue."""
+    contaminated: list[str] = []
+    for name in EXPECTED:
+        path = BUBBLE_ROOT / name
+        with Image.open(path) as source:
+            for index, (red, green, blue, alpha) in enumerate(source.convert("RGBA").getdata()):
+                if alpha > 0 and green - red >= 35 and green - blue >= 20:
+                    contaminated.append(f"{name}@{index}=({red},{green},{blue},{alpha})")
+    assert contaminated == []
