@@ -1,13 +1,18 @@
 from random import Random
 
 import pytest
-from PIL import ImageFont
 
-from desktop_pet.dialogue import DialogueChooser, load_phrase_pools, validate_phrase_pools
+from desktop_pet.dialogue import (
+    DialogueChooser,
+    load_phrase_pools,
+    validate_phrase_font_coverage,
+    validate_phrase_pools,
+)
 from desktop_pet.paths import asset_path
 
 
 ACTIONS = ("jump", "squash", "shake")
+FIRST_PERSON_MARKERS = ("我", "本喵", "本猫", "猫猫")
 
 
 def _valid_pools() -> dict[str, tuple[str, ...]]:
@@ -33,24 +38,29 @@ def test_packaged_dialogue_has_three_global_unique_200_phrase_pools():
     assert all(isinstance(values, tuple) for values in pools.values())
 
 
-def test_packaged_dialogue_uses_only_glyphs_in_the_bundled_font():
+def test_packaged_dialogue_has_explicit_cat_first_person_in_every_phrase():
     pools = load_phrase_pools()
-    font = ImageFont.truetype(
-        asset_path("assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"),
-        28,
-    )
-    missing_mask = bytes(font.getmask(chr(0x10FFFF)))
-    unsupported = sorted(
-        {
-            character
-            for phrases in pools.values()
-            for phrase in phrases
-            for character in phrase
-            if bytes(font.getmask(character)) == missing_mask
-        }
+
+    assert all(
+        any(marker in phrase for marker in FIRST_PERSON_MARKERS)
+        for phrases in pools.values()
+        for phrase in phrases
     )
 
-    assert unsupported == []
+
+def test_packaged_dialogue_uses_only_glyphs_in_the_bundled_font():
+    pools = load_phrase_pools()
+
+    minimum_width, maximum_width = validate_phrase_font_coverage(pools)
+
+    assert 120 <= minimum_width <= maximum_width <= 230
+
+
+def test_font_coverage_validation_rejects_missing_glyph_with_action_and_phrase():
+    phrase = "本喵飞飞\U0010ffff飞"
+
+    with pytest.raises(ValueError, match=f"jump.*{phrase}.*missing glyph"):
+        validate_phrase_font_coverage({"jump": (phrase,)})
 
 
 def test_load_phrase_pools_reads_an_explicit_utf8_json_path():
@@ -106,6 +116,15 @@ def test_dialogue_validation_identifies_bad_phrase_and_action(bad_phrase, messag
     pools["jump"] = (bad_phrase, *pools["jump"][1:])
 
     with pytest.raises(ValueError, match=message):
+        validate_phrase_pools(pools)
+
+
+def test_dialogue_validation_rejects_phrase_without_cat_first_person_marker():
+    pools = _valid_pools()
+    phrase = "今天天天真开心"
+    pools["jump"] = (phrase, *pools["jump"][1:])
+
+    with pytest.raises(ValueError, match=f"jump.*{phrase}.*first-person"):
         validate_phrase_pools(pools)
 
 

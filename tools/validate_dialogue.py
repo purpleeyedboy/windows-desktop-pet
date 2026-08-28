@@ -9,19 +9,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from desktop_pet.dialogue import ACTIONS, load_phrase_pools, validate_phrase_pools  # noqa: E402
+from desktop_pet.dialogue import (  # noqa: E402
+    ACTIONS,
+    load_phrase_pools,
+    validate_phrase_font_coverage,
+    validate_phrase_pools,
+)
 
 
 def main() -> int:
     try:
         pools = load_phrase_pools(ROOT / "assets" / "dialogue" / "phrases.json")
         validate_phrase_pools(pools)
+        minimum_width, maximum_width = validate_phrase_font_coverage(
+            pools,
+            ROOT / "assets" / "fonts" / "ZCOOLKuaiLe-Regular.ttf",
+        )
     except (OSError, ValueError) as exc:
         print(f"dialogue validation failed: {exc}", file=sys.stderr)
         return 1
 
     for action in ACTIONS:
         print(f"{action}: {len(pools[action])} phrases")
+    print(f"font width range: {minimum_width:.1f}-{maximum_width:.1f}px")
     unique_count = len({phrase for phrases in pools.values() for phrase in phrases})
     print(f"dialogue validation passed: {unique_count} unique phrases")
     return 0

@@ -6,11 +6,17 @@ import json
 from pathlib import Path
 from typing import Mapping, Protocol, Sequence
 
+from PIL import ImageFont
+
 from desktop_pet.paths import asset_path
 
 
 ACTIONS = ("jump", "squash", "shake")
 PHRASES_PER_ACTION = 200
+CAT_FIRST_PERSON_MARKERS = ("我", "本喵", "本猫", "猫猫")
+DIALOGUE_FONT_SIZE = 28
+MIN_PHRASE_WIDTH = 120
+MAX_PHRASE_WIDTH = 230
 
 
 class _ChoiceRng(Protocol):
@@ -49,6 +55,11 @@ def validate_phrase_pools(pools: Mapping[str, Sequence[str]]) -> None:
                 raise ValueError(
                     f"action {action!r} phrase {phrase!r} has length {len(phrase)}; expected 6-10"
                 )
+            if not any(marker in phrase for marker in CAT_FIRST_PERSON_MARKERS):
+                raise ValueError(
+                    f"action {action!r} phrase {phrase!r} lacks an explicit cat first-person marker; "
+                    f"expected one of {CAT_FIRST_PERSON_MARKERS}"
+                )
             if phrase in seen:
                 raise ValueError(
                     f"action {action!r} phrase {phrase!r} duplicates action {seen[phrase]!r}"
@@ -78,6 +89,41 @@ def load_phrase_pools(path: Path | None = None) -> dict[str, tuple[str, ...]]:
     pools = {action: tuple(values) for action, values in raw.items()}
     validate_phrase_pools(pools)
     return pools
+
+
+def validate_phrase_font_coverage(
+    pools: Mapping[str, Sequence[str]],
+    font_path: Path | None = None,
+    font_size: int = DIALOGUE_FONT_SIZE,
+) -> tuple[float, float]:
+    """Validate production-font glyph coverage and bubble-safe phrase widths."""
+    source = font_path or asset_path("assets", "fonts", "ZCOOLKuaiLe-Regular.ttf")
+    font = ImageFont.truetype(source, font_size)
+    missing_mask = font.getmask(chr(0x10FFFF), mode="L")
+    missing_signature = (missing_mask.size, bytes(missing_mask))
+    widths: list[float] = []
+
+    for action, phrases in pools.items():
+        for phrase in phrases:
+            for character in phrase:
+                character_mask = font.getmask(character, mode="L")
+                signature = (character_mask.size, bytes(character_mask))
+                if signature == missing_signature:
+                    raise ValueError(
+                        f"action {action!r} phrase \"{phrase}\" has missing glyph U+{ord(character):04X} "
+                        f"in font {Path(source).name!r}"
+                    )
+            width = float(font.getlength(phrase))
+            if not MIN_PHRASE_WIDTH <= width <= MAX_PHRASE_WIDTH:
+                raise ValueError(
+                    f"action {action!r} phrase {phrase!r} has rendered width {width:.1f}px; "
+                    f"expected {MIN_PHRASE_WIDTH}-{MAX_PHRASE_WIDTH}px"
+                )
+            widths.append(width)
+
+    if not widths:
+        raise ValueError("font coverage validation requires at least one phrase")
+    return min(widths), max(widths)
 
 
 class DialogueChooser:
