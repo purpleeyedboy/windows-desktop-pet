@@ -192,12 +192,22 @@ class BubbleComposer:
             body_offset[0] + right,
             body_offset[1] + bottom,
         )
-        draw_layout(
+        bbox = draw_layout(
             ImageDraw.Draw(image),
             layout,
             safe_rect,
             BUBBLE_TEXT_COLOR,
         )
+        if (
+            bbox[0] < safe_rect[0] - 1
+            or bbox[1] < safe_rect[1] - 1
+            or bbox[2] > safe_rect[2] + 1
+            or bbox[3] > safe_rect[3] + 1
+        ):
+            raise ValueError(
+                f"{kind} drawn text bbox {bbox} exceeds safe rectangle "
+                f"{safe_rect} with 1px tolerance"
+            )
 
 
 class BubbleWindow:

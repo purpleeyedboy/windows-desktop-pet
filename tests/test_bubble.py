@@ -1,6 +1,7 @@
 import pytest
 from PIL import ImageChops, ImageDraw
 
+import desktop_pet.bubble as bubble_module
 from desktop_pet.bubble import BubbleComposer
 from desktop_pet.bubble_layout import (
     BUBBLE_BODY_SIZE,
@@ -119,6 +120,28 @@ def test_composer_rejects_overwide_text_instead_of_shrinking_at_full_scale():
 
     with pytest.raises(ValueError, match="safe width"):
         composer.render("猫猫猫猫猫猫猫猫猫猫", "down", scale=1.0)
+
+
+@pytest.mark.parametrize(
+    "unsafe_bbox",
+    [
+        (23, 52, 255, 100),
+        (25, 50, 255, 100),
+        (25, 52, 257, 100),
+        (25, 52, 255, 102),
+    ],
+)
+def test_composer_rejects_drawn_text_bbox_outside_safe_rectangle(
+    monkeypatch, unsafe_bbox
+):
+    monkeypatch.setattr(
+        bubble_module,
+        "draw_layout",
+        lambda *_args, **_kwargs: unsafe_bbox,
+    )
+
+    with pytest.raises(ValueError, match="drawn text bbox.*safe rectangle"):
+        BubbleComposer().render("猫猫今天要起飞", "down")
 
 
 def test_composer_preserves_the_body_aspect_ratio_and_directional_tail_sizes():
