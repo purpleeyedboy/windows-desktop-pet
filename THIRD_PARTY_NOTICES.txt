@@ -1,0 +1,33 @@
+Third-Party Notices
+===================
+
+ZCOOL KuaiLe Regular (ZCOOLKuaiLe-Regular.ttf)
+------------------------------------------------
+
+Official source repository:
+https://github.com/google/fonts/tree/main/ofl/zcoolkuaile
+
+Font URL:
+https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf
+
+License URL:
+https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/OFL.txt
+
+Metadata URL:
+https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/METADATA.pb
+
+Upstream copyright (from METADATA.pb and OFL.txt):
+Copyright 2018 The ZCOOL KuaiLe Project Authors (https://github.com/googlefonts/zcool-kuaile)
+
+License: SIL Open Font License 1.1. The complete license text is bundled at
+assets/fonts/OFL.txt.
+
+Verified files from google/fonts main:
+- assets/fonts/ZCOOLKuaiLe-Regular.ttf
+  - byte length: 1514968
+  - SHA-256: 812a6fc1fe54b6d73a419245c32dfeba8aa33104d5be90d1cf6af082007cb71d
+  - Git blob SHA-1: 3cf6cd927ee910d46875de173efdaac4330e84ac
+- assets/fonts/OFL.txt
+  - byte length: 4398
+  - SHA-256: 538078469839b4a2e7ad22bef4ebe41681a4e53749bb2a072144024f1d6d703d
+  - Git blob SHA-1: fe1432fe7e56b24842d855a8ddbde0911a844d7f
