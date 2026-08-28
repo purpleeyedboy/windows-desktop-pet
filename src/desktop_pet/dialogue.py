@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 from typing import Mapping, Protocol, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from desktop_pet.bubble_layout import (
+    BUBBLE_BODY_SIZE,
     BUBBLE_FONT_SIZE,
     BUBBLE_TEXT_SAFE_RECT,
 )
+from desktop_pet.font_runs import FontRunResolver, TextLayout, draw_layout
 from desktop_pet.paths import asset_path
 
 
@@ -21,10 +27,44 @@ CAT_FIRST_PERSON_MARKERS = ("我", "本喵", "本猫", "猫猫")
 DIALOGUE_FONT_SIZE = BUBBLE_FONT_SIZE
 MIN_PHRASE_WIDTH = 120
 MAX_PHRASE_WIDTH = BUBBLE_TEXT_SAFE_RECT[2] - BUBBLE_TEXT_SAFE_RECT[0]
+KAOMOJI_PER_ACTION = 20
+CHINESE_PER_ACTION = 180
+CHINESE_WIDTH_RANGE = (120, 230)
+KAOMOJI_WIDTH_RANGE = (60, 230)
+KAOMOJI_ALLOWED = frozenset("₍₎⟆()^._ -\\/▽◇oOx=<>;~u3@⌒")
+
+
+@dataclass(frozen=True)
+class WidthStats:
+    minimum: float
+    median: float
+    maximum: float
+
+
+@dataclass(frozen=True)
+class DialogueRenderStats:
+    chinese_count: int
+    kaomoji_count: int
+    chinese: WidthStats
+    kaomoji: WidthStats
 
 
 class _ChoiceRng(Protocol):
     def choice(self, values: Sequence[str]) -> str: ...
+
+
+def is_kaomoji_phrase(text: str) -> bool:
+    if not isinstance(text, str) or text != text.strip() or not 6 <= len(text) <= 10:
+        return False
+    if not set(text) <= KAOMOJI_ALLOWED:
+        return False
+    if any(unicodedata.category(ch).startswith("C") or unicodedata.combining(ch) for ch in text):
+        return False
+    if re.search(r"[A-Za-z]{2}", text):
+        return False
+    return (("(" in text and ")" in text) or ("₍" in text and "₎" in text)) and any(
+        eye in text for eye in ("^", "x", "o", "O", "@", ">", "<", ";", "-", "~", "u", "_")
+    )
 
 
 def validate_phrase_pools(pools: Mapping[str, Sequence[str]]) -> None:
@@ -50,6 +90,8 @@ def validate_phrase_pools(pools: Mapping[str, Sequence[str]]) -> None:
                 f"found {len(phrases)}"
             )
 
+        kaomoji_count = 0
+        chinese_count = 0
         for phrase in phrases:
             if not isinstance(phrase, str):
                 raise ValueError(f"action {action!r} has non-string phrase {phrase!r}")
@@ -59,11 +101,15 @@ def validate_phrase_pools(pools: Mapping[str, Sequence[str]]) -> None:
                 raise ValueError(
                     f"action {action!r} phrase {phrase!r} has length {len(phrase)}; expected 6-10"
                 )
-            if not any(marker in phrase for marker in CAT_FIRST_PERSON_MARKERS):
+            if is_kaomoji_phrase(phrase):
+                kaomoji_count += 1
+            elif not any(marker in phrase for marker in CAT_FIRST_PERSON_MARKERS):
                 raise ValueError(
                     f"action {action!r} phrase {phrase!r} lacks an explicit cat first-person marker; "
                     f"expected one of {CAT_FIRST_PERSON_MARKERS}"
                 )
+            else:
+                chinese_count += 1
             if phrase in seen:
                 raise ValueError(
                     f"action {action!r} phrase {phrase!r} duplicates action {seen[phrase]!r}"
@@ -73,6 +119,13 @@ def validate_phrase_pools(pools: Mapping[str, Sequence[str]]) -> None:
                 visual_length_count += 1
             elif first_visual_outlier is None:
                 first_visual_outlier = (action, phrase)
+
+        if kaomoji_count != KAOMOJI_PER_ACTION or chinese_count != CHINESE_PER_ACTION:
+            raise ValueError(
+                f"action {action!r} must contain exactly {CHINESE_PER_ACTION} Chinese and "
+                f"{KAOMOJI_PER_ACTION} kaomoji phrases; found {chinese_count} Chinese and "
+                f"{kaomoji_count} kaomoji"
+            )
 
     required = (len(seen) * 9 + 9) // 10
     if visual_length_count < required:
@@ -99,58 +152,80 @@ def load_phrase_pools(path: Path | None = None) -> dict[str, tuple[str, ...]]:
     return pools
 
 
-def validate_phrase_font_coverage(
+def _width_stats(widths: Sequence[float], label: str) -> WidthStats:
+    if not widths:
+        raise ValueError(f"render validation requires at least one {label} phrase")
+    return WidthStats(min(widths), float(median(widths)), max(widths))
+
+
+def _validate_layout(
+    action: str,
+    phrase: str,
+    layout: TextLayout,
+    width_range: tuple[int, int],
+) -> float:
+    if layout.ink_bbox == (0, 0, 0, 0):
+        raise ValueError(f"action {action!r} phrase {phrase!r} rendered an empty ink bbox")
+    minimum, maximum = width_range
+    if not minimum <= layout.total_advance <= maximum:
+        raise ValueError(
+            f"action {action!r} phrase {phrase!r} has rendered width "
+            f"{layout.total_advance:.1f}px; expected {minimum}-{maximum}px"
+        )
+    ink_height = layout.ink_bbox[3] - layout.ink_bbox[1]
+    safe_height = BUBBLE_TEXT_SAFE_RECT[3] - BUBBLE_TEXT_SAFE_RECT[1]
+    if ink_height > safe_height:
+        raise ValueError(
+            f"action {action!r} phrase {phrase!r} has ink height {ink_height}px; "
+            f"expected at most {safe_height}px"
+        )
+    image = Image.new("L", BUBBLE_BODY_SIZE, 0)
+    positioned_bbox = draw_layout(
+        ImageDraw.Draw(image),
+        layout,
+        BUBBLE_TEXT_SAFE_RECT,
+        255,
+    )
+    if image.getbbox() is None:
+        raise ValueError(f"action {action!r} phrase {phrase!r} rendered an empty glyph mask")
+    left, top, right, bottom = BUBBLE_TEXT_SAFE_RECT
+    if not (
+        left <= positioned_bbox[0]
+        and top <= positioned_bbox[1]
+        and positioned_bbox[2] <= right
+        and positioned_bbox[3] <= bottom
+    ):
+        raise ValueError(
+            f"action {action!r} phrase {phrase!r} has ink bbox {positioned_bbox}; "
+            f"expected inside {BUBBLE_TEXT_SAFE_RECT}"
+        )
+    return layout.total_advance
+
+
+def validate_phrase_rendering(
     pools: Mapping[str, Sequence[str]],
-    font_path: Path | None = None,
-    font_size: int = DIALOGUE_FONT_SIZE,
-) -> tuple[float, float]:
-    """Validate production-font glyph coverage and bubble-safe phrase widths."""
-    source = font_path or asset_path("assets", "fonts", "ZCOOLKuaiLe-Regular.ttf")
-    font = ImageFont.truetype(source, font_size)
-    missing_mask = font.getmask(chr(0x10FFFF), mode="L")
-    missing_signature = (missing_mask.size, bytes(missing_mask))
-    widths: list[float] = []
+) -> DialogueRenderStats:
+    """Validate bundled font runs, widths, and 48px safe-area ink bounds."""
+    chinese_resolver = FontRunResolver.for_chinese(28)
+    kaomoji_resolver = FontRunResolver.for_kaomoji(40)
+    chinese_widths: list[float] = []
+    kaomoji_widths: list[float] = []
 
     for action, phrases in pools.items():
         for phrase in phrases:
-            for character in phrase:
-                character_mask = font.getmask(character, mode="L")
-                signature = (character_mask.size, bytes(character_mask))
-                if signature == missing_signature:
-                    raise ValueError(
-                        f"action {action!r} phrase \"{phrase}\" has missing glyph U+{ord(character):04X} "
-                        f"in font {Path(source).name!r}"
-                    )
-            bounds = font.getbbox(phrase)
-            mask = Image.new(
-                "L",
-                (
-                    max(1, bounds[2] - bounds[0]),
-                    max(1, bounds[3] - bounds[1]),
-                ),
-            )
-            ImageDraw.Draw(mask).text(
-                (-bounds[0], -bounds[1]),
-                phrase,
-                font=font,
-                fill=255,
-            )
-            if mask.getbbox() is None:
-                raise ValueError(
-                    f"action {action!r} phrase {phrase!r} rendered an empty glyph mask "
-                    f"in font {Path(source).name!r}"
-                )
-            width = float(font.getlength(phrase))
-            if not MIN_PHRASE_WIDTH <= width <= MAX_PHRASE_WIDTH:
-                raise ValueError(
-                    f"action {action!r} phrase {phrase!r} has rendered width {width:.1f}px; "
-                    f"expected {MIN_PHRASE_WIDTH}-{MAX_PHRASE_WIDTH}px"
-                )
-            widths.append(width)
+            kaomoji = is_kaomoji_phrase(phrase)
+            resolver = kaomoji_resolver if kaomoji else chinese_resolver
+            width_range = KAOMOJI_WIDTH_RANGE if kaomoji else CHINESE_WIDTH_RANGE
+            layout = resolver.layout(phrase, context=f"action {action!r} phrase {phrase!r}")
+            width = _validate_layout(action, phrase, layout, width_range)
+            (kaomoji_widths if kaomoji else chinese_widths).append(width)
 
-    if not widths:
-        raise ValueError("font coverage validation requires at least one phrase")
-    return min(widths), max(widths)
+    return DialogueRenderStats(
+        chinese_count=len(chinese_widths),
+        kaomoji_count=len(kaomoji_widths),
+        chinese=_width_stats(chinese_widths, "Chinese"),
+        kaomoji=_width_stats(kaomoji_widths, "kaomoji"),
+    )
 
 
 class DialogueChooser:

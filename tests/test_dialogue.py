@@ -4,12 +4,12 @@ import subprocess
 import sys
 
 import pytest
-from PIL import ImageFont
 
 from desktop_pet.dialogue import (
     DialogueChooser,
+    is_kaomoji_phrase,
     load_phrase_pools,
-    validate_phrase_font_coverage,
+    validate_phrase_rendering,
     validate_phrase_pools,
 )
 from desktop_pet.paths import asset_path
@@ -20,10 +20,20 @@ FIRST_PERSON_MARKERS = ("我", "本喵", "本猫", "猫猫")
 
 
 def _valid_pools() -> dict[str, tuple[str, ...]]:
-    phrases = [f"{chr(0x4E00 + index)}猫猫天天开心" for index in range(600)]
+    chinese = [f"{chr(0x4E00 + index)}猫猫天天开心" for index in range(540)]
+    eyes = "^xoO@><;-"
+    kaomoji = [f"(={left}^{right}=)" for left in eyes for right in eyes][:60]
     return {
-        action: tuple(phrases[offset : offset + 200])
-        for action, offset in zip(ACTIONS, (0, 200, 400), strict=True)
+        action: tuple(
+            chinese[chinese_offset : chinese_offset + 180]
+            + kaomoji[kaomoji_offset : kaomoji_offset + 20]
+        )
+        for action, chinese_offset, kaomoji_offset in zip(
+            ACTIONS,
+            (0, 180, 360),
+            (0, 20, 40),
+            strict=True,
+        )
     }
 
 
@@ -38,50 +48,44 @@ def test_packaged_dialogue_has_three_global_unique_200_phrase_pools():
     flattened = [phrase for values in pools.values() for phrase in values]
     assert len(set(flattened)) == 600
     assert all(6 <= len(phrase) <= 10 for phrase in flattened)
-    assert sum(7 <= len(phrase) <= 9 for phrase in flattened) >= 540
+    assert sum(7 <= len(phrase) <= 9 for phrase in flattened) == 596
     assert all(isinstance(values, tuple) for values in pools.values())
 
 
-def test_packaged_dialogue_has_explicit_cat_first_person_in_every_phrase():
+def test_packaged_dialogue_has_exact_180_chinese_and_20_kaomoji_per_action():
     pools = load_phrase_pools()
+    for action, phrases in pools.items():
+        kaomoji = [text for text in phrases if is_kaomoji_phrase(text)]
+        chinese = [text for text in phrases if not is_kaomoji_phrase(text)]
+        assert len(kaomoji) == 20
+        assert len(chinese) == 180
+        assert all(any(marker in text for marker in FIRST_PERSON_MARKERS) for text in chinese)
 
-    assert all(
-        any(marker in phrase for marker in FIRST_PERSON_MARKERS)
-        for phrases in pools.values()
-        for phrase in phrases
-    )
 
-
-def test_packaged_dialogue_uses_only_glyphs_in_the_bundled_font():
+def test_user_kaomoji_style_is_packaged_and_uses_no_system_fallback():
     pools = load_phrase_pools()
-
-    minimum_width, maximum_width = validate_phrase_font_coverage(pools)
-
-    assert 120 <= minimum_width <= maximum_width <= 230
+    assert "₍^. .^₎⟆" in pools["jump"]
+    assert is_kaomoji_phrase("₍^. .^₎⟆")
 
 
-def test_all_packaged_phrases_fit_the_production_bubble_font():
-    pools = load_phrase_pools()
-    font = ImageFont.truetype(
-        asset_path("assets", "fonts", "ZCOOLKuaiLe-Regular.ttf"),
-        28,
-    )
+@pytest.mark.parametrize("text", ["猫猫冲呀(^.^)", "🎉(^.^)", "(^.^)\u200d", "ab(^.^)"])
+def test_kaomoji_classifier_rejects_mixed_text_emoji_and_format_controls(text):
+    assert not is_kaomoji_phrase(text)
 
-    widths = [
-        font.getlength(text)
-        for values in pools.values()
-        for text in values
-    ]
 
-    assert min(widths) >= 120
-    assert max(widths) <= 230
+def test_render_validation_reports_split_counts_and_widths():
+    stats = validate_phrase_rendering(load_phrase_pools())
+    assert stats.chinese_count == 540
+    assert stats.kaomoji_count == 60
+    assert 120 <= stats.chinese.minimum <= stats.chinese.maximum <= 230
+    assert 60 <= stats.kaomoji.minimum <= stats.kaomoji.maximum <= 230
 
 
 def test_font_coverage_validation_rejects_missing_glyph_with_action_and_phrase():
     phrase = "本喵飞飞\U0010ffff飞"
 
-    with pytest.raises(ValueError, match=f"jump.*{phrase}.*missing glyph"):
-        validate_phrase_font_coverage({"jump": (phrase,)})
+    with pytest.raises(ValueError, match=r"jump.*missing bundled glyph U\+10FFFF"):
+        validate_phrase_rendering({"jump": (phrase,)})
 
 
 def test_load_phrase_pools_reads_an_explicit_utf8_json_path():
@@ -112,10 +116,11 @@ def test_dialogue_cli_reports_production_width_statistics_and_action_counts():
     )
 
     assert result.returncode == 0, result.stderr
-    assert "jump: 200 phrases" in result.stdout
-    assert "squash: 200 phrases" in result.stdout
-    assert "shake: 200 phrases" in result.stdout
-    assert "font width min/median/max:" in result.stdout
+    assert "jump: 180 Chinese + 20 kaomoji" in result.stdout
+    assert "squash: 180 Chinese + 20 kaomoji" in result.stdout
+    assert "shake: 180 Chinese + 20 kaomoji" in result.stdout
+    assert "Chinese width min/median/max:" in result.stdout
+    assert "Kaomoji width min/median/max:" in result.stdout
 
 
 def test_dialogue_cli_reports_bad_json_pool_as_one_clean_stderr_error(tmp_path):
