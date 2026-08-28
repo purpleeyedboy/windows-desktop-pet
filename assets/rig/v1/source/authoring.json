@@ -58,5 +58,17 @@
     "dynamic-head-neck-mask.png",
     "eye-left-mask.png",
     "eye-right-mask.png"
-  ]
+  ],
+  "ai_fill": {
+    "tool": "OpenAI image generation image edit",
+    "body_guide": "guides/body-fill-guide.png",
+    "body_prompt": "Edit the supplied 2:3 cat image guide. Replace only the solid neon-green internal region with the anatomically plausible shoulder, upper chest, and torso fur that would exist behind the removed head and neck of this exact orange-and-white Devon Rex cat. Continue the same short curly fur texture, orange tabby markings, white chest, lighting direction, focus, and photographic detail. Do not add a head, face, eye, ear, collar, bell, leg, text, outline, colored fringe, or background. Preserve the canvas composition and transparent surroundings. The result is a hidden fill source; all non-green content should remain visually aligned with the reference.",
+    "body_output": "ai/body-fill-raw.png",
+    "body_output_sha256": "83ea36a0196124148cf4e67bdcbc63ca82f6d35e247fc4fcccb59ba130db76df",
+    "eye_guide": "guides/eye-fill-guide.png",
+    "eye_prompt": "Edit the supplied 2:3 cat image guide. Replace only the two solid neon-green iris regions with the natural eye-socket content behind movable irises for this exact cat: pale green-gray eye interior, subtle eyelid shadow, and the original short fur and lighting at each eye. Keep both eye shapes, eye corners, eyelids, face, nose, markings, proportions, camera, and transparent background aligned exactly. Do not add pupils, irises, extra highlights, extra eyes, text, outline, or colored fringe. This is a hidden underlay, not a new expression.",
+    "eye_output": "ai/eye-fill-raw.png",
+    "eye_output_sha256": "c6f879c1f015df4b03f237da334b43ccca182e93aa6f6461ae66ff4604068e43",
+    "outside_mask_policy": "discard all generated pixels outside fixed masks"
+  }
 }
