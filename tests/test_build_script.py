@@ -45,6 +45,27 @@ def test_build_runs_release_gates_before_pyinstaller_in_required_order():
     assert "--basetemp" in script
 
 
+def test_build_cleans_only_its_validated_pytest_temp_root_in_finally():
+    script = Path("build.ps1").read_text(encoding="utf-8")
+
+    temp_root = script.index("$pytestTempRoot =")
+    validation = script.index("$insidePytestTempBase", temp_root)
+    create = script.index("New-Item -ItemType Directory -Path $pytestTempRoot", validation)
+    try_block = script.index("try {", create)
+    core_tests = script.index("-m pytest", try_block)
+    finally_block = script.index("finally {", core_tests)
+    cleanup = script.index(
+        "Remove-Item -LiteralPath $pytestTempRoot -Recurse -Force",
+        finally_block,
+    )
+    pyinstaller = script.index("-m PyInstaller", cleanup)
+
+    assert temp_root < validation < create < try_block
+    assert try_block < core_tests < finally_block < cleanup < pyinstaller
+    assert "$pytestTempPrefix" in script
+    assert "StartsWith(" in script[validation:create]
+
+
 def test_pyinstaller_spec_builds_exactly_one_file():
     spec = Path("desktop_pet.spec").read_text(encoding="utf-8")
 

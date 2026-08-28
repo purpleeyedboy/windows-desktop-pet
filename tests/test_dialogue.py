@@ -118,6 +118,34 @@ def test_dialogue_cli_reports_production_width_statistics_and_action_counts():
     assert "font width min/median/max:" in result.stdout
 
 
+def test_dialogue_cli_reports_bad_json_pool_as_one_clean_stderr_error(tmp_path):
+    dialogue_path = tmp_path / "bad-phrases.json"
+    dialogue_path.write_text(
+        json.dumps({"jump": 17, "squash": [], "shake": []}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tools/validate_dialogue.py",
+            "--dialogue",
+            str(dialogue_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == (
+        "dialogue validation failed: "
+        "action 'jump' phrases must be a sequence\n"
+    )
+
+
 def test_dialogue_chooser_uses_only_requested_action_and_avoids_immediate_repeat():
     pools = {
         "jump": ("跳高高看云朵", "猫猫今天要起飞"),

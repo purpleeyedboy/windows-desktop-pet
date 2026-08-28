@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 from statistics import median
@@ -21,10 +22,18 @@ from desktop_pet.dialogue import (  # noqa: E402
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dialogue",
+        type=Path,
+        default=ROOT / "assets" / "dialogue" / "phrases.json",
+        help="UTF-8 dialogue JSON to validate",
+    )
+    args = parser.parse_args(argv)
     font_path = ROOT / "assets" / "fonts" / "ZCOOLKuaiLe-Regular.ttf"
     try:
-        pools = load_phrase_pools(ROOT / "assets" / "dialogue" / "phrases.json")
+        pools = load_phrase_pools(args.dialogue)
         validate_phrase_pools(pools)
         minimum_width, maximum_width = validate_phrase_font_coverage(
             pools,

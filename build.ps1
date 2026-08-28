@@ -35,21 +35,63 @@ if ($LASTEXITCODE -ne 0) { throw '动作素材验证失败' }
 & $python tools\validate_dialogue.py
 if ($LASTEXITCODE -ne 0) { throw '600 句台词、生产字体缺字或像素宽度验证失败' }
 
-$pytestTempRoot = Join-Path (
-    [System.IO.Path]::GetTempPath()
-) ("desktop-pet-release-tests-" + [System.Guid]::NewGuid().ToString('N'))
+$pytestTempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$pytestTempPrefix = $pytestTempBase
+if (-not $pytestTempPrefix.EndsWith(
+    [System.IO.Path]::DirectorySeparatorChar.ToString(),
+    [System.StringComparison]::Ordinal
+)) {
+    $pytestTempPrefix += [System.IO.Path]::DirectorySeparatorChar
+}
+$pytestTempRoot = [System.IO.Path]::GetFullPath((Join-Path (
+    $pytestTempBase
+) ("desktop-pet-release-tests-" + [System.Guid]::NewGuid().ToString('N'))))
+$insidePytestTempBase = (
+    $pytestTempRoot.StartsWith(
+        $pytestTempPrefix,
+        [System.StringComparison]::OrdinalIgnoreCase
+    ) -and
+    -not $pytestTempRoot.Equals(
+        $pytestTempBase,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )
+)
+if (-not $insidePytestTempBase) {
+    throw "拒绝使用系统临时目录外的 pytest 路径：$pytestTempRoot"
+}
 New-Item -ItemType Directory -Path $pytestTempRoot | Out-Null
 
-& $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'core') --ignore=tests\test_window.py --ignore=tests\test_layered_window.py
-if ($LASTEXITCODE -ne 0) { throw '自动测试失败' }
+try {
+    & $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'core') --ignore=tests\test_window.py --ignore=tests\test_layered_window.py
+    if ($LASTEXITCODE -ne 0) { throw '自动测试失败' }
 
-# Keep every Tk interaction test in the release gate, but isolate Tcl
-# interpreters so one suite cannot leak GUI state into the next.
-& $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'layered-window') tests\test_layered_window.py
-if ($LASTEXITCODE -ne 0) { throw '逐像素透明窗口测试失败' }
+    # Keep every Tk interaction test in the release gate, but isolate Tcl
+    # interpreters so one suite cannot leak GUI state into the next.
+    & $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'layered-window') tests\test_layered_window.py
+    if ($LASTEXITCODE -ne 0) { throw '逐像素透明窗口测试失败' }
 
-& $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'window') tests\test_window.py
-if ($LASTEXITCODE -ne 0) { throw '桌宠交互测试失败' }
+    & $python -m pytest -q -p no:cacheprovider --basetemp (Join-Path $pytestTempRoot 'window') tests\test_window.py
+    if ($LASTEXITCODE -ne 0) { throw '桌宠交互测试失败' }
+}
+finally {
+    $cleanupTarget = [System.IO.Path]::GetFullPath($pytestTempRoot)
+    $cleanupInsidePytestTempBase = (
+        $cleanupTarget.StartsWith(
+            $pytestTempPrefix,
+            [System.StringComparison]::OrdinalIgnoreCase
+        ) -and
+        -not $cleanupTarget.Equals(
+            $pytestTempBase,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+    )
+    if (-not $cleanupInsidePytestTempBase) {
+        throw "拒绝清理系统临时目录外的 pytest 路径：$cleanupTarget"
+    }
+    if (Test-Path -LiteralPath $cleanupTarget) {
+        Remove-Item -LiteralPath $pytestTempRoot -Recurse -Force
+    }
+}
 
 foreach ($relativeTarget in @('build', 'dist')) {
     $target = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $relativeTarget))
