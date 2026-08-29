@@ -30,3 +30,11 @@ Task R2: complete (commits 15f09a2..3571c73, spec and quality review approved; c
 Task R3: complete (commits 3571c73..3fe889a, Important RGB/checkerboard finding repaired with user-authorized deterministic fixed-mask Alpha; re-review approved)
 Task R4: complete (commits 3fe889a..735f8d2, Critical zero-body-fill contribution and three Important findings fixed; re-review approved; Minors for final review: stronger mask-outside test point, explicit input mode/size checks, replace-phase group transaction)
 Task R5: pending
+
+## Neutral eye aperture-warp feasibility
+
+Plan: docs/superpowers/plans/2026-08-29-neutral-eyeball-follow-feasibility.md
+Implementation base: 10f83f7
+Task N1: complete (remote candidate commit 28afa454e805c70b6b2133f6a63fc710a9b05217; user-directed screen-left neutral underlay alignment corrected by an area-preserving 2 px source shift; 29 focused/full tests passed; 13 named outputs deterministic; static user visual acceptance still pending)
+Task N2: pending (requires explicit user acceptance of `qa/neutral-eye-v1/candidate/layer-contact-sheet.png` before any deterministic GIF work)
+R5: remains blocked; no head directions, blink, tilt, runtime, packaging, or EXE work started
