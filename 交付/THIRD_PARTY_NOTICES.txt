@@ -1,0 +1,41 @@
+Third-Party Notices
+===================
+
+All bundled fonts are redistributed under the SIL Open Font License 1.1.
+Each binary and its license text below is pinned by byte length and SHA-256.
+
+ZCOOL KuaiLe Regular
+--------------------
+
+- Local font: assets/fonts/ZCOOLKuaiLe-Regular.ttf
+- Official font URL: https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/ZCOOLKuaiLe-Regular.ttf
+- Byte length: 1514968
+- SHA-256: 812a6fc1fe54b6d73a419245c32dfeba8aa33104d5be90d1cf6af082007cb71d
+- Local OFL path: assets/fonts/licenses/ZCOOLKuaiLe-OFL-1.1.txt
+- License URL: https://raw.githubusercontent.com/google/fonts/main/ofl/zcoolkuaile/OFL.txt
+- License byte length: 4398
+- License SHA-256: 538078469839b4a2e7ad22bef4ebe41681a4e53749bb2a072144024f1d6d703d
+
+Noto Sans Variable
+------------------
+
+- Local font: assets/fonts/NotoSans-Variable.ttf
+- Official font URL: https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth,wght%5D.ttf
+- Byte length: 2049096
+- SHA-256: bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d
+- Local OFL path: assets/fonts/licenses/NotoSans-OFL-1.1.txt
+- License URL: https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/OFL.txt
+- License byte length: 4396
+- License SHA-256: cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a
+
+Noto Sans Math Regular
+----------------------
+
+- Local font: assets/fonts/NotoSansMath-Regular.ttf
+- Official font URL: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansmath/NotoSansMath-Regular.ttf
+- Byte length: 1015396
+- SHA-256: 3f495fe933c06786e4d5f6d86b8ee70b6753a68ee3b9d87528726de0f6e2c47d
+- Local OFL path: assets/fonts/licenses/NotoSansMath-OFL-1.1.txt
+- License URL: https://raw.githubusercontent.com/google/fonts/main/ofl/notosansmath/OFL.txt
+- License byte length: 4380
+- License SHA-256: 403a95275b469061b7d4371c328e0ada3bc7d63328abe2e88aad5cd243b2fe21

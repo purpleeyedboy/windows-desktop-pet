@@ -1,0 +1,88 @@
+# Review package: 3571c73d1664926455bb9472a2f2117fb0cbc5f2..3fe889a
+
+## Commits
+3fe889a fix: apply deterministic alpha to rig fill sources
+d06dafe assets: add masked rig fill sources
+
+## Files changed
+ assets/rig/v1/source/ai/body-fill-raw.png | Bin 0 -> 50435 bytes
+ assets/rig/v1/source/ai/eye-fill-raw.png  | Bin 0 -> 13889 bytes
+ assets/rig/v1/source/authoring.json       |  51 +++++++++++++++++++++++++++++-
+ 3 files changed, 50 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/assets/rig/v1/source/ai/body-fill-raw.png b/assets/rig/v1/source/ai/body-fill-raw.png
+new file mode 100644
+index 0000000..b8efb94
+Binary files /dev/null and b/assets/rig/v1/source/ai/body-fill-raw.png differ
+diff --git a/assets/rig/v1/source/ai/eye-fill-raw.png b/assets/rig/v1/source/ai/eye-fill-raw.png
+new file mode 100644
+index 0000000..686be01
+Binary files /dev/null and b/assets/rig/v1/source/ai/eye-fill-raw.png differ
+diff --git a/assets/rig/v1/source/authoring.json b/assets/rig/v1/source/authoring.json
+index 20a3a5e..42e445c 100644
+--- a/assets/rig/v1/source/authoring.json
++++ b/assets/rig/v1/source/authoring.json
+@@ -51,12 +51,61 @@
+     "chest_right": [
+       207,
+       555
+     ]
+   },
+   "masks": [
+     "body-fill-mask.png",
+     "dynamic-head-neck-mask.png",
+     "eye-left-mask.png",
+     "eye-right-mask.png"
+-  ]
++  ],
++  "ai_fill": {
++    "tool": "OpenAI image generation image edit",
++    "body_guide": "guides/body-fill-guide.png",
++    "body_prompt": "Edit the supplied 2:3 cat image guide. Replace only the solid neon-green internal region with the anatomically plausible shoulder, upper chest, and torso fur that would exist behind the removed head and neck of this exact orange-and-white Devon Rex cat. Continue the same short curly fur texture, orange tabby markings, white chest, lighting direction, focus, and photographic detail. Do not add a head, face, eye, ear, collar, bell, leg, text, outline, colored fringe, or background. Preserve the canvas composition and transparent surroundings. The result is a hidden fill source; all non-green content should remain visually aligned with the reference.",
++    "body_output": "ai/body-fill-raw.png",
++    "body_output_sha256": "34bca962ec505fae2a0d1a9d6ede5ad7ef70aa7b49ca7b89e1dcba268123db38",
++    "eye_guide": "guides/eye-fill-guide.png",
++    "eye_prompt": "Edit the supplied 2:3 cat image guide. Replace only the two solid neon-green iris regions with the natural eye-socket content behind movable irises for this exact cat: pale green-gray eye interior, subtle eyelid shadow, and the original short fur and lighting at each eye. Keep both eye shapes, eye corners, eyelids, face, nose, markings, proportions, camera, and transparent background aligned exactly. Do not add pupils, irises, extra highlights, extra eyes, text, outline, or colored fringe. This is a hidden underlay, not a new expression.",
++    "eye_output": "ai/eye-fill-raw.png",
++    "eye_output_sha256": "e581967924a6bc7549cab70be36f5d4bf0a2d80a3c83070e3e2b22ae12743482",
++    "outside_mask_policy": "discard all generated pixels outside fixed masks",
++    "deterministic_alpha_postprocess": {
++      "user_authorization": "User-authorized Pillow/OpenCV deterministic fallback",
++      "reason": "Repeated baked-checkerboard RGB output from built-in image generation",
++      "toolchain": [
++        "repository .venv Python",
++        "Pillow",
++        "NumPy"
++      ],
++      "body_input": {
++        "size": [
++          1023,
++          1537
++        ],
++        "mode": "RGB"
++      },
++      "eye_input": {
++        "size": [
++          1023,
++          1537
++        ],
++        "mode": "RGB"
++      },
++      "output": {
++        "size": [
++          512,
++          768
++        ],
++        "mode": "RGBA"
++      },
++      "rgb_resampler": "Pillow LANCZOS for RGB only",
++      "body_alpha_source": "masks/body-fill-mask.png",
++      "eye_alpha_source": "pixelwise maximum of masks/eye-left-mask.png and masks/eye-right-mask.png",
++      "outside_mask_policy": "discard all generated pixels outside fixed masks",
++      "transparent_rgb_policy": "set RGB to (0, 0, 0) wherever alpha is zero",
++      "body_output_sha256": "34bca962ec505fae2a0d1a9d6ede5ad7ef70aa7b49ca7b89e1dcba268123db38",
++      "eye_output_sha256": "e581967924a6bc7549cab70be36f5d4bf0a2d80a3c83070e3e2b22ae12743482"
++    }
++  }
+ }

@@ -1,0 +1,7 @@
+interface:
+  display_name: "PONYTAIL"
+  short_description: "Less code, clean solutions"
+  default_prompt: "Use $ponytail to solve this software task with the smallest clean, justified change."
+
+policy:
+  allow_implicit_invocation: true
