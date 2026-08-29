@@ -1,0 +1,288 @@
+{
+  "canonical": {
+    "mode": "RGBA",
+    "sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+    "size": [
+      512,
+      768
+    ],
+    "source": "assets/rig/v1/source/canonical-idle.png"
+  },
+  "eyes": {
+    "left": {
+      "fixed_exclusion_boxes": [
+        [
+          65,
+          328,
+          100,
+          335
+        ],
+        [
+          65,
+          369,
+          100,
+          376
+        ]
+      ],
+      "movement_anchor": [
+        82.0,
+        351.0
+      ],
+      "neutral_texture": "shared generated diffuse globe remapped across full reviewed interior",
+      "reviewed_bounds": [
+        62,
+        335,
+        96,
+        367
+      ],
+      "reviewed_method": "independently reviewed supersampled eye-interior polygon",
+      "reviewed_plateau_bounds": [
+        63,
+        337,
+        95,
+        365
+      ],
+      "reviewed_polygon": [
+        [
+          62,
+          351
+        ],
+        [
+          63,
+          346
+        ],
+        [
+          65,
+          341
+        ],
+        [
+          72,
+          336
+        ],
+        [
+          80,
+          336
+        ],
+        [
+          85,
+          336
+        ],
+        [
+          90,
+          338
+        ],
+        [
+          93,
+          342
+        ],
+        [
+          95,
+          348
+        ],
+        [
+          95,
+          354
+        ],
+        [
+          92,
+          360
+        ],
+        [
+          88,
+          364
+        ],
+        [
+          81,
+          366
+        ],
+        [
+          73,
+          364
+        ],
+        [
+          67,
+          361
+        ],
+        [
+          64,
+          357
+        ]
+      ]
+    },
+    "right": {
+      "fixed_exclusion_boxes": [
+        [
+          147,
+          323,
+          181,
+          333
+        ],
+        [
+          147,
+          363,
+          181,
+          371
+        ]
+      ],
+      "movement_anchor": [
+        163.0,
+        347.0
+      ],
+      "neutral_texture": "shared generated diffuse globe remapped across full reviewed interior",
+      "reviewed_bounds": [
+        148,
+        333,
+        181,
+        362
+      ],
+      "reviewed_method": "independently reviewed supersampled eye-interior polygon",
+      "reviewed_plateau_bounds": [
+        149,
+        334,
+        179,
+        361
+      ],
+      "reviewed_polygon": [
+        [
+          148,
+          348
+        ],
+        [
+          149,
+          343
+        ],
+        [
+          153,
+          338
+        ],
+        [
+          159,
+          335
+        ],
+        [
+          166,
+          333
+        ],
+        [
+          171,
+          333
+        ],
+        [
+          175,
+          335
+        ],
+        [
+          178,
+          340
+        ],
+        [
+          179,
+          344
+        ],
+        [
+          180,
+          350
+        ],
+        [
+          178,
+          355
+        ],
+        [
+          176,
+          359
+        ],
+        [
+          171,
+          361
+        ],
+        [
+          158,
+          361
+        ],
+        [
+          152,
+          358
+        ],
+        [
+          150,
+          354
+        ]
+      ]
+    }
+  },
+  "motion_limits": {
+    "x": 1.5,
+    "y": 1.0
+  },
+  "motion_resampling": "premultiplied-alpha bilinear aperture-relative inverse warp",
+  "neutral_candidate": {
+    "mode": "RGB",
+    "sha256": "2ada944898ec0aa90ce756ed677d7e57759a8c6b226c31595b7fbd7a01d00bdf",
+    "size": [
+      1024,
+      1536
+    ],
+    "source": "assets/rig/v1/source/ai/neutral-eyeball-generated-v1.png"
+  },
+  "normalized_target": {
+    "resampling": "Lanczos RGB resize at exact 1:2 geometry; 2 px Gaussian diffuse-only smoothing",
+    "shared_source_bounds": [
+      154,
+      334,
+      175,
+      363
+    ],
+    "shared_source_eye": "right",
+    "size": [
+      512,
+      768
+    ]
+  },
+  "outputs": {
+    "eye-left-mask.png": {
+      "mode": "L",
+      "sha256": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",
+      "size": [
+        512,
+        768
+      ]
+    },
+    "eye-left.png": {
+      "mode": "RGBA",
+      "sha256": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
+      "size": [
+        512,
+        768
+      ]
+    },
+    "eye-right-mask.png": {
+      "mode": "L",
+      "sha256": "fba54f4eb10884d5a284ea6c16cd762d0786f61e09ddc5297e99d793c3a092e4",
+      "size": [
+        512,
+        768
+      ]
+    },
+    "eye-right.png": {
+      "mode": "RGBA",
+      "sha256": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
+      "size": [
+        512,
+        768
+      ]
+    },
+    "underlay.png": {
+      "mode": "RGBA",
+      "sha256": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+      "size": [
+        512,
+        768
+      ]
+    }
+  },
+  "warp": {
+    "boundary_displacement": 0.0,
+    "falloff": "smoothstep normalized distance-to-boundary",
+    "shared_field_shape": true
+  }
+}

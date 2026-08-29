@@ -1,0 +1,79 @@
+{
+  "center": {
+    "changed_pixels": 0,
+    "maximum_channel_delta": 0
+  },
+  "contact_sheet": {
+    "sha256": "dc5ed44fccb7e06e8a107798f21762e513cbe48d3712ad0350eaa2abe8e35883",
+    "size": [
+      2800,
+      1500
+    ]
+  },
+  "motion_limits": {
+    "x": 1.5,
+    "y": 1.0
+  },
+  "poses": {
+    "center": {
+      "anchor_displacement": [
+        0.0,
+        0.0
+      ],
+      "offset": [
+        0.0,
+        0.0
+      ],
+      "sha256": "c73ce65333b14a4d42fde5bb6cb2fe33c4212ab763e619b0e806ec311c2e9178"
+    },
+    "down": {
+      "anchor_displacement": [
+        0.0,
+        1.0
+      ],
+      "offset": [
+        0.0,
+        1.0
+      ],
+      "sha256": "7106a11e334b6bbe34c80e9421ba1a17451c6f8a62fbe5889e99ddf7c7a2cc6b"
+    },
+    "left": {
+      "anchor_displacement": [
+        -1.5,
+        0.0
+      ],
+      "offset": [
+        -1.5,
+        0.0
+      ],
+      "sha256": "fe4b7274d48483addcc5a92b7810a0fc6abf29cc45ee6df6ee24661430780e58"
+    },
+    "right": {
+      "anchor_displacement": [
+        1.5,
+        0.0
+      ],
+      "offset": [
+        1.5,
+        0.0
+      ],
+      "sha256": "b4650f28696532d30533683c1ae3cbd3f3476a172d8f14e25ed542c5f7499fec"
+    },
+    "up": {
+      "anchor_displacement": [
+        0.0,
+        -1.0
+      ],
+      "offset": [
+        0.0,
+        -1.0
+      ],
+      "sha256": "a65bd0930cc9e80b79b62b8f59744fc001f08487d66f9d4e777ed3693bbb2824"
+    }
+  },
+  "r5_status": "BLOCKED pending explicit static visual approval",
+  "warp": {
+    "boundary_displacement": 0.0,
+    "falloff": "smoothstep normalized distance-to-boundary"
+  }
+}
