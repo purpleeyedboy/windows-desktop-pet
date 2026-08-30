@@ -35,6 +35,8 @@ TIME_CONSTANT_SECONDS: Final = 0.060
 ALPHA: Final = 1 - math.exp(-DT_SECONDS / TIME_CONSTANT_SECONDS)
 MATTE_RGB: Final = (31, 33, 36)
 SOURCE_DURATIONS_MS: Final = (30, 30, 40) * 30
+VIRTUAL_CURSOR_ACTIVATION_RADIUS: Final = 100.0
+CURSOR_MAPPING_FORMULA: Final = "radial-clamped-elliptical-v1"
 EYES: Final = ("left", "right")
 OUTPUTS: Final = {
     "underlay.png": "RGBA",
@@ -53,18 +55,44 @@ def _write_json(payload: dict, path: Path) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def cursor_target(
+    cursor_dx: float, cursor_dy: float, activation_radius: float
+) -> tuple[float, float]:
+    if (
+        not math.isfinite(cursor_dx)
+        or not math.isfinite(cursor_dy)
+        or not math.isfinite(activation_radius)
+        or activation_radius <= 0.0
+    ):
+        raise ValueError("cursor coordinates and activation radius must be finite, with positive radius")
+    if cursor_dx == 0.0 and cursor_dy == 0.0:
+        return (0.0, 0.0)
+    scale = max(abs(cursor_dx), abs(cursor_dy))
+    scaled_x = cursor_dx / scale
+    scaled_y = cursor_dy / scale
+    scaled_distance = math.hypot(scaled_x, scaled_y)
+    if scale >= activation_radius:
+        strength = 1.0
+    else:
+        strength = min((scale / activation_radius) * scaled_distance, 1.0)
+    return (
+        MOTION_LIMITS["x"] * scaled_x / scaled_distance * strength,
+        MOTION_LIMITS["y"] * scaled_y / scaled_distance * strength,
+    )
+
+
 def target_for_frame(frame_index: int) -> tuple[float, float]:
     if not 0 <= frame_index < FRAME_COUNT:
         raise ValueError(f"frame index must be in 0..{FRAME_COUNT - 1}")
-    if frame_index <= 5 or frame_index >= 66:
+    if frame_index <= 5 or frame_index >= 63:
         return (0.0, 0.0)
-    if frame_index <= 20:
-        return (-1.5, 0.0)
-    if frame_index <= 35:
-        return (1.5, 0.0)
-    if frame_index <= 50:
-        return (0.0, -1.0)
-    return (0.0, 1.0)
+    k = frame_index - 6
+    angle = math.pi + 2.0 * math.pi * k / 56
+    return cursor_target(
+        VIRTUAL_CURSOR_ACTIVATION_RADIUS * math.cos(angle),
+        VIRTUAL_CURSOR_ACTIVATION_RADIUS * math.sin(angle),
+        VIRTUAL_CURSOR_ACTIVATION_RADIUS,
+    )
 
 
 def preview_offsets() -> tuple[tuple[float, float], ...]:
@@ -337,6 +365,8 @@ def build_preview(asset_dir: Path, canonical_path: Path, output_dir: Path) -> di
                 "time_constant_seconds": TIME_CONSTANT_SECONDS,
                 "alpha": ALPHA,
                 "motion_limits": MOTION_LIMITS,
+                "cursor_mapping_formula": CURSOR_MAPPING_FORMULA,
+                "virtual_cursor_activation_radius": VIRTUAL_CURSOR_ACTIVATION_RADIUS,
                 "matte_rgb": list(MATTE_RGB),
                 "palette": "Pillow WEB dither=NONE",
             },

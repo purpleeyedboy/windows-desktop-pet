@@ -14,7 +14,7 @@ CANONICAL_SHA256: Final = (
     "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
 )
 CANVAS_SIZE: Final = (512, 768)
-MOTION_LIMITS: Final = {"x": 1.5, "y": 1.0}
+MOTION_LIMITS: Final = {"x": 3.0, "y": 2.0}
 EYE_ANCHORS: Final = {"left": (82.0, 351.0), "right": (163.0, 347.0)}
 WARP_FALLOFF: Final = "smoothstep normalized distance-to-boundary"
 SHARED_NEUTRAL_SOURCE_BOUNDS: Final = (154, 334, 175, 363)
@@ -412,16 +412,24 @@ def _checkerboard(size: tuple[int, int], cell: int = 16) -> Image.Image:
     return board
 
 
+def motion_limit_caption() -> str:
+    return (
+        "Fixed eyelids/rims. Shared target limits: "
+        f"horizontal ±{MOTION_LIMITS['x']:.1f} px, "
+        f"vertical ±{MOTION_LIMITS['y']:.1f} px."
+    )
+
+
 def build_contact_sheet(asset_dir: Path, qa_dir: Path) -> dict:
     asset_dir = Path(asset_dir)
     qa_dir = Path(qa_dir)
     qa_dir.mkdir(parents=True, exist_ok=True)
     poses = {
         "center": (0.0, 0.0),
-        "left": (-1.5, 0.0),
-        "right": (1.5, 0.0),
-        "up": (0.0, -1.0),
-        "down": (0.0, 1.0),
+        "left": (-MOTION_LIMITS["x"], 0.0),
+        "right": (MOTION_LIMITS["x"], 0.0),
+        "up": (0.0, -MOTION_LIMITS["y"]),
+        "down": (0.0, MOTION_LIMITS["y"]),
     }
     rendered = {
         name: compose_pose(asset_dir, *offset) for name, offset in poses.items()
@@ -471,7 +479,7 @@ def build_contact_sheet(asset_dir: Path, qa_dir: Path) -> dict:
         )
     draw.text(
         (32, 1418),
-        "Fixed eyelids/rims. Shared target limits: horizontal ±1.5 px, vertical ±1.0 px.",
+        motion_limit_caption(),
         fill=(205, 210, 218),
         font=font,
     )
@@ -502,7 +510,10 @@ def build_contact_sheet(asset_dir: Path, qa_dir: Path) -> dict:
             "boundary_displacement": 0.0,
             "falloff": WARP_FALLOFF,
         },
-        "r5_status": "BLOCKED pending explicit static visual approval",
+        "r5_status": (
+            "N1 static eye layers accepted; organic-head R5 center visual gate "
+            "remains unapproved and blocked."
+        ),
     }
     _write_json(stats, qa_dir / "stats.json")
     return stats

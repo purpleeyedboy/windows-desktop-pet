@@ -4,15 +4,15 @@
     "maximum_channel_delta": 0
   },
   "contact_sheet": {
-    "sha256": "dc5ed44fccb7e06e8a107798f21762e513cbe48d3712ad0350eaa2abe8e35883",
+    "sha256": "94737ee674e772ffe9635f47ed1e42abc5fedd2b5dde0e8fc9dcbc1b44823329",
     "size": [
       2800,
       1500
     ]
   },
   "motion_limits": {
-    "x": 1.5,
-    "y": 1.0
+    "x": 3.0,
+    "y": 2.0
   },
   "poses": {
     "center": {
@@ -29,49 +29,49 @@
     "down": {
       "anchor_displacement": [
         0.0,
-        1.0
+        2.0
       ],
       "offset": [
         0.0,
-        1.0
+        2.0
       ],
-      "sha256": "7106a11e334b6bbe34c80e9421ba1a17451c6f8a62fbe5889e99ddf7c7a2cc6b"
+      "sha256": "25a06fb19e3dbc53d3dbb924ab3d41ab24ea18a2deb503e68e6d9ebfac913aab"
     },
     "left": {
       "anchor_displacement": [
-        -1.5,
+        -3.0,
         0.0
       ],
       "offset": [
-        -1.5,
+        -3.0,
         0.0
       ],
-      "sha256": "fe4b7274d48483addcc5a92b7810a0fc6abf29cc45ee6df6ee24661430780e58"
+      "sha256": "d34d6468b3d44f2d8bb4860cdbd2c426adbbd12b3e6c26458e5b7270a241bbcc"
     },
     "right": {
       "anchor_displacement": [
-        1.5,
+        3.0,
         0.0
       ],
       "offset": [
-        1.5,
+        3.0,
         0.0
       ],
-      "sha256": "b4650f28696532d30533683c1ae3cbd3f3476a172d8f14e25ed542c5f7499fec"
+      "sha256": "1ce97de3a08af044ad92454711e553a691d3a2e42c2fcee40ba01162efa9c1fe"
     },
     "up": {
       "anchor_displacement": [
         0.0,
-        -1.0
+        -2.0
       ],
       "offset": [
         0.0,
-        -1.0
+        -2.0
       ],
-      "sha256": "a65bd0930cc9e80b79b62b8f59744fc001f08487d66f9d4e777ed3693bbb2824"
+      "sha256": "c1815545366519de8b94c387fb201b861e40677826dba9282aa4a65ff9177b28"
     }
   },
-  "r5_status": "BLOCKED pending explicit static visual approval",
+  "r5_status": "N1 static eye layers accepted; organic-head R5 center visual gate remains unapproved and blocked.",
   "warp": {
     "boundary_displacement": 0.0,
     "falloff": "smoothstep normalized distance-to-boundary"

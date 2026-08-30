@@ -122,3 +122,57 @@
 - [ ] Generate `qa/neutral-eye-v1/preview-v1/eye-follow.gif` and `stats.json`, then rebuild in a temporary directory and compare both files byte-for-byte.
 - [ ] Inspect the GIF at normal size and magnified eye scale. Keep N2 blocked if there is any seam, palette flicker, asynchronous eye motion, or visible final snap.
 - [ ] Commit code, tests, GIF, statistics, and the progress update. Generate the SDD review package and obtain independent spec-compliance and code-quality approval before marking N2 complete.
+
+### Task 3: Amplified Arbitrary-Angle Eye-Follow Proof
+
+**Dependency:** Task 2 preview direction is visually accepted, but its motion amplitude is explicitly rejected as too small.
+
+**Outcome:** Double the authored eye-motion envelope to horizontal `±3.0` and vertical `±2.0` source pixels, prove that gaze targets are computed continuously from cursor-relative vectors rather than selected from direction sprites, and publish a versioned circular-path preview. This task remains offline-only: it proves the mapping math and compositor response but does not read the Windows cursor or modify runtime code.
+
+**Files:**
+- Modify: `tools/build_neutral_eye_layers.py`
+- Modify: `assets/rig/v1/source/eye-neutral-v1/authoring.json`
+- Modify: `tests/test_neutral_eye_layers.py`
+- Modify: `tools/build_neutral_eye_preview.py`
+- Modify: `tests/test_neutral_eye_preview.py`
+- Create: `qa/neutral-eye-v1/preview-v2/eye-follow.gif`
+- Create: `qa/neutral-eye-v1/preview-v2/stats.json`
+- Create: `.superpowers/sdd/neutral-eye-task-3-report.md`
+- Modify: `.superpowers/sdd/progress.md`
+
+**Interfaces:**
+- `MOTION_LIMITS` becomes exactly `{"x": 3.0, "y": 2.0}` and remains the single shared bound consumed by authoring, composition, preview validation, tests, and statistics.
+- Add `cursor_target(cursor_dx: float, cursor_dy: float, activation_radius: float) -> tuple[float, float]`. It maps a cursor vector relative to the cat's on-screen eye midpoint into the elliptical eye-motion envelope without direction buckets.
+- Retain `target_for_frame(frame_index: int)`, `preview_offsets()`, and `build_preview(...)`; the scripted preview calls the continuous mapping contract with a deterministic virtual-cursor circle.
+
+**Continuous Mapping Contract:**
+- Reject non-finite cursor coordinates and non-finite or non-positive `activation_radius` with `ValueError`.
+- Cursor vector `(0, 0)` maps exactly to `(0.0, 0.0)`.
+- For nonzero vector `(dx, dy)`, set `distance = hypot(dx, dy)`, `strength = min(distance / activation_radius, 1.0)`, then return `(3.0 * dx / distance * strength, 2.0 * dy / distance * strength)`.
+- This maps every finite cursor angle continuously onto the current eye ellipse. Distances inside the activation radius scale proportionally; distances at or beyond it saturate without exceeding either axis limit. No direction names, angle rounding, sprite lookup, or nearest-sector selection is permitted.
+- Both eyes receive the same mapped and smoothed normalized target. The pupil, iris, and highlight remain one warped surface; there is still no independent pupil translation.
+- A future runtime may obtain `(dx, dy)` from the Windows cursor and the pet eye midpoint once per update and apply frame-rate-independent smoothing `alpha = 1 - exp(-dt / 0.060)`. That runtime acquisition is deliberately not implemented in this task.
+
+**Deterministic Preview-v2 Contract:**
+- Keep exactly `90` source frames, `30Hz`, `60ms` exponential smoothing, the `(30, 30, 40)` millisecond duration pattern, fixed matte/palette rules, transactional publication, and exact frames `84..89` center from Task 2.
+- Frames `0..5` target exact center.
+- Frames `6..62` contain `57` samples of a full virtual-cursor circle. For `k = frame_index - 6`, use angle `pi + 2*pi*k/56`, virtual cursor `(activation_radius*cos(angle), activation_radius*sin(angle))`, and pass it through `cursor_target`. This visits left, up, right, down, returns to left, and includes `52` intermediate samples between those five cardinal checkpoints without discrete direction presets.
+- Frames `63..89` target exact center. Frames `0..83` use the same recurrence as Task 2; frame `84` snaps to exact center only after frame `83` is already within `5e-5` on each axis, then frames `85..89` hold exact center.
+- Write the new committed evidence only to `qa/neutral-eye-v1/preview-v2/`; preserve `preview-v1/` as historical evidence.
+
+**Acceptance Criteria:**
+- Focused RED tests first prove the old `±1.5/±1.0` envelope and piecewise cardinal schedule do not satisfy the new contract.
+- Layer authoring metadata, compositor rejection boundaries, preview validation, statistics, and tests all agree on `±3.0/±2.0`; no duplicated motion-limit constant is introduced.
+- Tests cover zero, half-radius, exact-radius, beyond-radius, at least one non-cardinal vector whose expected result is calculated from the formula, continuity across a small angular perturbation, and invalid numeric inputs.
+- The 57 circular samples are formula-derived, remain within the ellipse, include exact cardinal checkpoints within floating-point tolerance, and contain more than 16 distinct non-center targets.
+- All Task 2 containment, Alpha, boundary-ring, deterministic build, GIF timeline, exact final-center, input integrity, path isolation, and rollback guarantees remain green at the larger envelope.
+- `preview-v2/stats.json` records the mapping formula identifier, activation radius used for the virtual cursor, `±3.0/±2.0` limits, all requested/smoothed offsets, containment results, and deterministic hashes.
+- Visual inspection at full-cat and magnified-eye scales shows clearly larger motion without black arcs, gaps, duplicated rims, underlay crescents, asynchronous eyes, palette flicker, or a visible final snap.
+- R5 remains blocked regardless of Task 3 result. Do not start head-direction assets, blink, tilt, runtime integration, packaging, or EXE work.
+
+**Steps:**
+- [ ] Update focused tests first for the new single-source motion limit, cursor-vector mapping, circular schedule, v2 statistics, enlarged extreme containment, and committed `preview-v2` reproducibility; run them and record the expected RED failures.
+- [ ] Make the minimal authoring/compositor/preview changes, regenerate only the metadata and versioned v2 evidence required by this task, and preserve preview-v1.
+- [ ] Run focused tests until GREEN, run the full suite once, rebuild preview-v2 in a separate temporary directory, and compare GIF/statistics byte-for-byte.
+- [ ] Inspect the GIF at normal size and magnified eye scale. Keep N3 blocked if the larger movement creates any visual defect.
+- [ ] Commit the task, generate the SDD review package, obtain independent spec-compliance and code-quality approval, and record the reviewed commit range in the durable ledger.

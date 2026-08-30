@@ -211,8 +211,8 @@
     }
   },
   "motion_limits": {
-    "x": 1.5,
-    "y": 1.0
+    "x": 3.0,
+    "y": 2.0
   },
   "motion_resampling": "premultiplied-alpha bilinear aperture-relative inverse warp",
   "neutral_candidate": {

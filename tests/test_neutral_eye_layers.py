@@ -15,8 +15,9 @@ NEUTRAL_CANDIDATE = (
     ROOT / "assets/rig/v1/source/ai/neutral-eyeball-generated-v1.png"
 )
 REJECTED_MASK_DIR = ROOT / "assets/rig/v1/source/masks"
+CANDIDATE_QA_DIR = ROOT / "qa/neutral-eye-v1/candidate"
 CANONICAL_SHA256 = "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
-MOTION_LIMITS = {"x": 1.5, "y": 1.0}
+MOTION_LIMITS = {"x": 3.0, "y": 2.0}
 EYES = ("left", "right")
 FIXED_FEATURE_REGIONS = {
     "left": {
@@ -190,7 +191,13 @@ def test_all_five_poses_keep_fixed_upper_and_lower_regions_canonical_exact(
 ) -> None:
     asset_dir, _ = built
     canonical = Image.open(CANONICAL).convert("RGBA")
-    offsets = ((0.0, 0.0), (-1.5, 0.0), (1.5, 0.0), (0.0, -1.0), (0.0, 1.0))
+    offsets = (
+        (0.0, 0.0),
+        (-MOTION_LIMITS["x"], 0.0),
+        (MOTION_LIMITS["x"], 0.0),
+        (0.0, -MOTION_LIMITS["y"]),
+        (0.0, MOTION_LIMITS["y"]),
+    )
     poses = {
         offset: _builder_module().compose_pose(asset_dir, *offset) for offset in offsets
     }
@@ -405,7 +412,7 @@ def test_zero_pose_uses_compositor_and_is_pixel_exact_canonical(built: tuple[Pat
 
 @pytest.mark.parametrize(
     ("eye_x", "eye_y"),
-    [(-1.5, 0.0), (1.5, 0.0), (0.0, -1.0), (0.0, 1.0)],
+    [(-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)],
 )
 def test_eye_motion_is_shared_bounded_and_clipped_to_stationary_apertures(
     built: tuple[Path, dict], eye_x: float, eye_y: float
@@ -425,12 +432,41 @@ def test_eye_motion_is_shared_bounded_and_clipped_to_stationary_apertures(
     outside_difference = ImageChops.composite(
         ImageChops.difference(canonical, pose), Image.new("RGBA", canonical.size), outside
     )
+    assert outside_difference.getbbox(alpha_only=False) is None
+
+
+def test_rgba_default_bbox_would_miss_an_rgb_only_outside_support_change(
+    built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = built
+    canonical = Image.open(CANONICAL).convert("RGBA")
+    union = ImageChops.lighter(
+        Image.open(asset_dir / "eye-left-mask.png").convert("L"),
+        Image.open(asset_dir / "eye-right-mask.png").convert("L"),
+    )
+    outside = ImageChops.invert(_binary_support(union))
+    altered = canonical.copy()
+    point = next(
+        (x, y)
+        for y in range(canonical.height)
+        for x in range(canonical.width)
+        if outside.getpixel((x, y))
+    )
+    red, green, blue, alpha = altered.getpixel(point)
+    altered.putpixel(point, ((red + 1) % 256, green, blue, alpha))
+    outside_difference = ImageChops.composite(
+        ImageChops.difference(canonical, altered),
+        Image.new("RGBA", canonical.size),
+        outside,
+    )
+
     assert outside_difference.getbbox() is None
+    assert outside_difference.getbbox(alpha_only=False) is not None
 
 
 @pytest.mark.parametrize(
     ("eye_x", "eye_y"),
-    [(-1.5, 0.0), (1.5, 0.0), (0.0, -1.0), (0.0, 1.0)],
+    [(-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)],
 )
 def test_warp_pins_aperture_boundary_and_moves_anchor_region(
     built: tuple[Path, dict], eye_x: float, eye_y: float
@@ -483,7 +519,7 @@ def test_warp_exposes_no_trailing_underlay_core(built: tuple[Path, dict]) -> Non
                 underlay_pixels[x, y] = (255, 0, 255, underlay_pixels[x, y][3])
     underlay.save(asset_dir / "underlay.png")
 
-    for offset in ((-1.5, 0.0), (1.5, 0.0), (0.0, -1.0), (0.0, 1.0)):
+    for offset in ((-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)):
         pose = _builder_module().compose_pose(asset_dir, *offset)
         pose_pixels = pose.load()
         for y in range(pose.height):
@@ -497,9 +533,9 @@ def test_out_of_range_motion_is_rejected(built: tuple[Path, dict]) -> None:
     asset_dir, _ = built
 
     with pytest.raises(ValueError, match="motion limits"):
-        _builder_module().compose_pose(asset_dir, eye_x=1.51, eye_y=0.0)
+        _builder_module().compose_pose(asset_dir, eye_x=3.01, eye_y=0.0)
     with pytest.raises(ValueError, match="motion limits"):
-        _builder_module().compose_pose(asset_dir, eye_x=0.0, eye_y=-1.01)
+        _builder_module().compose_pose(asset_dir, eye_x=0.0, eye_y=-2.01)
 
 
 def test_extreme_poses_add_no_near_black_pixels_in_outer_boundary_ring(
@@ -513,7 +549,7 @@ def test_extreme_poses_add_no_near_black_pixels_in_outer_boundary_ring(
         mask = _binary_support(Image.open(asset_dir / f"eye-{eye}-mask.png").convert("L"))
         outer_ring = ImageChops.subtract(mask.filter(ImageFilter.MaxFilter(7)), mask)
         ring_pixels = outer_ring.load()
-        for eye_x, eye_y in ((-1.5, 0.0), (1.5, 0.0), (0.0, -1.0), (0.0, 1.0)):
+        for eye_x, eye_y in ((-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)):
             pose_pixels = _builder_module().compose_pose(asset_dir, eye_x, eye_y).load()
             for y in range(canonical.height):
                 for x in range(canonical.width):
@@ -544,14 +580,43 @@ def test_contact_sheet_writes_required_static_evidence_and_stats(
     assert stats == json.loads((qa_dir / "stats.json").read_text(encoding="utf-8"))
     assert stats["center"]["changed_pixels"] == 0
     assert stats["center"]["maximum_channel_delta"] == 0
-    assert stats["poses"]["left"]["offset"] == [-1.5, 0.0]
-    assert stats["poses"]["right"]["offset"] == [1.5, 0.0]
-    assert stats["poses"]["up"]["offset"] == [0.0, -1.0]
-    assert stats["poses"]["down"]["offset"] == [0.0, 1.0]
+    assert stats["poses"]["left"]["offset"] == [-3.0, 0.0]
+    assert stats["poses"]["right"]["offset"] == [3.0, 0.0]
+    assert stats["poses"]["up"]["offset"] == [0.0, -2.0]
+    assert stats["poses"]["down"]["offset"] == [0.0, 2.0]
     assert stats["warp"]["falloff"] == "smoothstep normalized distance-to-boundary"
+    assert stats["r5_status"] == (
+        "N1 static eye layers accepted; organic-head R5 center visual gate remains unapproved and blocked."
+    )
     for pose_name in ("left", "right", "up", "down"):
         assert stats["poses"][pose_name]["anchor_displacement"] == stats["poses"][pose_name]["offset"]
     assert Image.open(qa_dir / "layer-contact-sheet.png").size[0] >= 1280
+
+
+def test_contact_sheet_motion_limit_caption_uses_single_source_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _builder_module()
+    monkeypatch.setattr(module, "MOTION_LIMITS", {"x": 9.5, "y": 8.2})
+
+    assert module.motion_limit_caption() == (
+        "Fixed eyelids/rims. Shared target limits: horizontal ±9.5 px, vertical ±8.2 px."
+    )
+
+
+def test_committed_candidate_evidence_uses_exact_motion_limit_extremes() -> None:
+    stats = json.loads((CANDIDATE_QA_DIR / "stats.json").read_text(encoding="utf-8"))
+
+    assert stats["motion_limits"] == MOTION_LIMITS
+    expected_offsets = {
+        "left": [-3.0, 0.0],
+        "right": [3.0, 0.0],
+        "up": [0.0, -2.0],
+        "down": [0.0, 2.0],
+    }
+    for name, expected_offset in expected_offsets.items():
+        assert stats["poses"][name]["offset"] == expected_offset
+        assert stats["poses"][name]["anchor_displacement"] == expected_offset
 
 
 def test_contact_sheet_stats_detect_a_corrupted_center(
