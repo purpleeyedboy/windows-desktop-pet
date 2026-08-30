@@ -78,4 +78,47 @@
 
 **Dependency:** Task 1 static evidence has explicit visual approval.
 
-**Outcome:** Produce an offline-only deterministic preview that maps a scripted target path to both eyes with a `60ms` exponential time constant at `30Hz`, respects the Task 1 movement bounds and stationary apertures, returns exactly to center, and emits timing/containment statistics plus a reviewable GIF. Before implementation, expand this task into TDD-sized steps and exact file paths. This task still does not authorize head movement, blink, tilt, runtime integration, packaging, or EXE work.
+**Outcome:** Produce an offline-only deterministic preview that maps a scripted target path to both eyes with a `60ms` exponential time constant at `30Hz`, respects the Task 1 movement bounds and stationary apertures, returns exactly to center, and emits timing/containment statistics plus a reviewable GIF. This task still does not authorize head movement, blink, tilt, runtime integration, packaging, or EXE work.
+
+**Files:**
+- Create: `tools/build_neutral_eye_preview.py`
+- Create: `tests/test_neutral_eye_preview.py`
+- Create: `qa/neutral-eye-v1/preview-v1/eye-follow.gif`
+- Create: `qa/neutral-eye-v1/preview-v1/stats.json`
+- Modify: `.superpowers/sdd/progress.md`
+
+**Interfaces:**
+- Consumes: `tools.build_neutral_eye_layers.compose_pose(asset_dir: Path, eye_x: float, eye_y: float) -> Image.Image`, Task 1 `authoring.json`, both stationary eye masks, and the immutable canonical source.
+- Produces: `target_for_frame(frame_index: int) -> tuple[float, float]`, `preview_offsets() -> tuple[tuple[float, float], ...]`, and `build_preview(asset_dir: Path, canonical_path: Path, output_dir: Path) -> dict`.
+- The CLI accepts `--asset-dir`, `--canonical`, and `--output-dir`; validation failure raises an error and exits non-zero rather than writing a misleading passing report.
+
+**Deterministic Trajectory Contract:**
+- Simulate exactly `90` source frames at `30Hz` with fixed `dt=1/30` seconds and exponential gain `alpha = 1 - exp(-dt / 0.060)`.
+- Requested targets are frame-indexed and piecewise constant: frames `0..5` center, `6..20` left `(-1.5, 0.0)`, `21..35` right `(1.5, 0.0)`, `36..50` up `(0.0, -1.0)`, `51..65` down `(0.0, 1.0)`, and `66..89` center.
+- Apply the same smoothed `(eye_x, eye_y)` to both eyes through the existing Task 1 compositor. Do not add per-eye offsets, independent pupil motion, easing libraries, or runtime cursor input.
+- Start from state `(0.0, 0.0)`. For frames `0..83`, update each axis once as `state = state + alpha * (target - state)` and render that updated state. Frame `83` must be within `5e-5` of center on each axis; frame `84` bypasses the recurrence and assigns exact `(0.0, 0.0)`, then frames `85..89` hold exact center. All six final source frames must be pixel-exact canonical.
+- GIF source timing uses the repeating centisecond-compatible duration pattern `(30, 30, 40)` milliseconds, whose total is exactly `3000ms` for the `90` simulated frames. The encoder may coalesce only adjacent palette-identical frames. Validation converts the 90 matte frames through the specified fixed web palette first, expands that encoded RGB schedule and the decoded GIF schedule onto `10ms` ticks, and requires pixel-identical RGB at every tick, decoded total duration `3000ms`, and infinite loop metadata `loop=0`. It does not require the lossy GIF to equal the unquantized matte RGB.
+- Composite source RGBA frames onto a fixed dark RGB matte `(31, 33, 36)` only for GIF encoding. Convert every matte frame with the same Pillow fixed web palette, `dither=Image.Dither.NONE`; save with `optimize=False` and `disposal=2`. All containment and canonical-exact checks operate on the unflattened full-resolution RGBA source frames.
+
+**Acceptance Criteria:**
+- The step response uses the exact `60ms` exponential formula; no frame-dependent hand tuning or overshoot is permitted.
+- Every requested and smoothed offset remains inside horizontal `±1.5` and vertical `±1.0` source pixels.
+- Before rendering, fail closed unless canonical SHA-256 equals `48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7`, `authoring.json` records that same canonical hash and motion limits, and its output hashes/modes/sizes match the actual underlay, two surfaces, and two masks. Required modes and sizes are full-canvas `512×768`: underlay/surfaces `RGBA`, masks `L`.
+- Define each stationary aperture support as mask value `>0`, union the two binary supports, and define each tested outer boundary ring exactly as `MaxFilter(7)(support) - support`. For all `90` RGBA source frames, every RGBA byte outside the support union is canonical-exact, the full alpha channel is canonical-exact, and no ring pixel becomes near-black when canonical was not, where near-black means `max(R,G,B) <= 24`.
+- The final six RGBA frames are pixel-exact canonical with `changed_pixels=0` and `maximum_channel_delta=0`.
+- `stats.json` records the constants, requested target and smoothed offset for every source frame, all `90` source durations, decoded GIF durations/count/loop, observed maxima, containment maxima, final-center metrics, the GIF SHA-256, `authoring.json` SHA-256, and every actual immutable input hash. It must not attempt to contain its own self-referential file hash.
+- Two builds in separate temporary directories produce byte-identical `eye-follow.gif` and `stats.json` under the same execution environment.
+- The committed GIF and statistics are byte-identical to a fresh build. Visual review fails on any black arc, black gap, duplicated rim, static underlay crescent, asynchronous eye motion, abrupt final snap, or visible palette flicker.
+- Build and validate both files inside a unique staging sibling under `output_dir.parent`, so publication renames stay on one filesystem. If no prior output directory exists, rename the complete staging directory directly into place. Otherwise rename the existing output directory to a unique sibling backup, rename staging into place, and restore the backup if that second rename fails. An injected between-rename failure must leave the original output directory byte-identical; a successful publish must leave no staging or backup directory.
+- R5 remains blocked regardless of this task result.
+
+**Steps:**
+
+- [ ] Write `tests/test_neutral_eye_preview.py` first for the exact `90`-frame target schedule and recurrence/snap order, shared offsets, motion bounds, input hash/mode/size rejection, exact final six frames, precisely defined all-frame containment/rings, source-versus-decoded `10ms` GIF timeline equivalence, fixed palette settings, required statistics, deterministic double build, committed-output reproducibility, and transactional rollback under an injected between-rename failure.
+- [ ] Run `python -m pytest tests/test_neutral_eye_preview.py -q` and capture the expected RED failure caused by the missing preview module.
+- [ ] Implement the smallest `tools/build_neutral_eye_preview.py` using only Python, Pillow, and the existing Task 1 compositor; add no dependency and modify no runtime module.
+- [ ] Make validation fail closed before publication. Stage and validate the complete directory, then use the specified backup-and-rename transaction with rollback rather than independent per-file replacement.
+- [ ] Run the focused preview tests until GREEN, then run `python -m pytest -q` once for regression coverage.
+- [ ] Generate `qa/neutral-eye-v1/preview-v1/eye-follow.gif` and `stats.json`, then rebuild in a temporary directory and compare both files byte-for-byte.
+- [ ] Inspect the GIF at normal size and magnified eye scale. Keep N2 blocked if there is any seam, palette flicker, asynchronous eye motion, or visible final snap.
+- [ ] Commit code, tests, GIF, statistics, and the progress update. Generate the SDD review package and obtain independent spec-compliance and code-quality approval before marking N2 complete.

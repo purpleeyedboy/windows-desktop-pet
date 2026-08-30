@@ -1,0 +1,1208 @@
+{
+  "constants": {
+    "alpha": 0.42624657926256726,
+    "dt_seconds": 0.03333333333333333,
+    "fps": 30,
+    "frame_count": 90,
+    "matte_rgb": [
+      31,
+      33,
+      36
+    ],
+    "motion_limits": {
+      "x": 1.5,
+      "y": 1.0
+    },
+    "palette": "Pillow WEB dither=NONE",
+    "time_constant_seconds": 0.06
+  },
+  "containment": {
+    "alpha_changed_pixels_max": 0,
+    "outside_support_changed_pixels_max": 0,
+    "ring_new_near_black_pixels_max": 0
+  },
+  "final_center": {
+    "changed_pixels": 0,
+    "frame_indices": [
+      84,
+      85,
+      86,
+      87,
+      88,
+      89
+    ],
+    "maximum_channel_delta": 0
+  },
+  "frames": [
+    {
+      "frame_index": 0,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 1,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 2,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 3,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 4,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 5,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 6,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -0.639369868893851,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 7,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.0062105182881418,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 8,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.2166865957436575,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 9,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.3374479651671562,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 10,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4067352139668257,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 11,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4464890099791214,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 12,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4692978864284743,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 13,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.482384557314468,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 14,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4898930795013718,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 15,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4942011197907907,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 16,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4966728726435197,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 17,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4980910492979904,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 18,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.498904733004703,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 19,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4993715868148274,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 20,
+      "requested_target": [
+        -1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -1.4996394457853708,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 21,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        -0.2210533929982934,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 22,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.512539728495464,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 23,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.9334412913819584,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 24,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.1749350028818162,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 25,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.3134928459414383,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 26,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.3929908823668968,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 27,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4386031527079126,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 28,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4647733488436712,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 29,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.479788588397932,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 30,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4884036334553812,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 31,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4933465450269,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 32,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4961825574494614,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 33,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4978097292781598,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 34,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4987433246810031,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 35,
+      "requested_target": [
+        1.5,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.4992789782369693,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 36,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.8602164424031841,
+        -0.42624657926256726
+      ]
+    },
+    {
+      "frame_index": 37,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.4935521264034117,
+        -0.6708070121920945
+      ]
+    },
+    {
+      "frame_index": 38,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.28317722083619123,
+        -0.8111243971624382
+      ]
+    },
+    {
+      "frame_index": 39,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.16247389912968413,
+        -0.8916319767781041
+      ]
+    },
+    {
+      "frame_index": 40,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.09321995540620487,
+        -0.9378234759778837
+      ]
+    },
+    {
+      "frame_index": 41,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.05348526829530098,
+        -0.9643260066527476
+      ]
+    },
+    {
+      "frame_index": 42,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.030687355643488297,
+        -0.9795319242856495
+      ]
+    },
+    {
+      "frame_index": 43,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.01760697527383757,
+        -0.9882563715429786
+      ]
+    },
+    {
+      "frame_index": 44,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.010102062292203704,
+        -0.9932620530009145
+      ]
+    },
+    {
+      "frame_index": 45,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.005796092796654506,
+        -0.9961340798605272
+      ]
+    },
+    {
+      "frame_index": 46,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.003325528068992116,
+        -0.9977819150956797
+      ]
+    },
+    {
+      "frame_index": 47,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.001908033105342576,
+        -0.9987273661986602
+      ]
+    },
+    {
+      "frame_index": 48,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.0010947405210705694,
+        -0.9992698220031352
+      ]
+    },
+    {
+      "frame_index": 49,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.0006281111187841188,
+        -0.9995810578765516
+      ]
+    },
+    {
+      "frame_index": 50,
+      "requested_target": [
+        0.0,
+        -1.0
+      ],
+      "smoothed_offset": [
+        0.0003603809030056041,
+        -0.9997596305235805
+      ]
+    },
+    {
+      "frame_index": 51,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        0.0002067697758679103,
+        -0.14736892866552898
+      ]
+    },
+    {
+      "frame_index": 52,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        0.0001186348662093258,
+        0.34169315233030934
+      ]
+    },
+    {
+      "frame_index": 53,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        6.806716030632835e-05,
+        0.6222941942546389
+      ]
+    },
+    {
+      "frame_index": 54,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        3.9053766065639086e-05,
+        0.7832900019212108
+      ]
+    },
+    {
+      "frame_index": 55,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        2.2407231872839896e-05,
+        0.8756618972942922
+      ]
+    },
+    {
+      "frame_index": 56,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        1.2856225936298721e-05,
+        0.928660588244598
+      ]
+    },
+    {
+      "frame_index": 57,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        7.3763036087246955e-06,
+        0.9590687684719419
+      ]
+    },
+    {
+      "frame_index": 58,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        4.232179427903664e-06,
+        0.9765155658957808
+      ]
+    },
+    {
+      "frame_index": 59,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        2.428227423934318e-06,
+        0.9865257255986214
+      ]
+    },
+    {
+      "frame_index": 60,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        1.3932037908107592e-06,
+        0.9922690889702542
+      ]
+    },
+    {
+      "frame_index": 61,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        7.993554407620318e-07,
+        0.9955643633512666
+      ]
+    },
+    {
+      "frame_index": 62,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        4.58632918522294e-07,
+        0.9974550382996409
+      ]
+    },
+    {
+      "frame_index": 63,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        2.6314220586495846e-07,
+        0.9985398195187732
+      ]
+    },
+    {
+      "frame_index": 64,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        1.5097874075541366e-07,
+        0.9991622164540022
+      ]
+    },
+    {
+      "frame_index": 65,
+      "requested_target": [
+        0.0,
+        1.0
+      ],
+      "smoothed_offset": [
+        8.662456896704864e-08,
+        0.9995193188246462
+      ]
+    },
+    {
+      "frame_index": 66,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        4.970114276474982e-08,
+        0.5734776282687895
+      ]
+    },
+    {
+      "frame_index": 67,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        2.8516200675834714e-08,
+        0.3290347509356078
+      ]
+    },
+    {
+      "frame_index": 68,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.6361267684195256e-08,
+        0.18878481389079418
+      ]
+    },
+    {
+      "frame_index": 69,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        9.387333301407844e-09,
+        0.10831593275312278
+      ]
+    },
+    {
+      "frame_index": 70,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        5.386014593285168e-09,
+        0.062146636937469926
+      ]
+    },
+    {
+      "frame_index": 71,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        3.0902442970390975e-09,
+        0.03565684553020066
+      ]
+    },
+    {
+      "frame_index": 72,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.7730382363405254e-09,
+        0.020458237095658867
+      ]
+    },
+    {
+      "frame_index": 73,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.0172867531986412e-09,
+        0.011737983515891715
+      ]
+    },
+    {
+      "frame_index": 74,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        5.836717545185969e-10,
+        0.006734708194802469
+      ]
+    },
+    {
+      "frame_index": 75,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        3.3488366574286405e-10,
+        0.0038640618644363374
+      ]
+    },
+    {
+      "frame_index": 76,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.9214064876905927e-10,
+        0.0022170187126614106
+      ]
+    },
+    {
+      "frame_index": 77,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.1024135449395734e-10,
+        0.0012720220702283837
+      ]
+    },
+    {
+      "frame_index": 78,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        6.325135424763599e-11,
+        0.000729827014047046
+      ]
+    },
+    {
+      "frame_index": 79,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        3.62906808658563e-11,
+        0.000418740745856079
+      ]
+    },
+    {
+      "frame_index": 80,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        2.0821902287675547e-11,
+        0.0002402539353370693
+      ]
+    },
+    {
+      "frame_index": 81,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        1.1946637663814421e-11,
+        0.00013784651724527348
+      ]
+    },
+    {
+      "frame_index": 82,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        6.854424225924176e-12,
+        7.908991080621716e-05
+      ]
+    },
+    {
+      "frame_index": 83,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        3.932749346809526e-12,
+        4.5378106870885546e-05
+      ]
+    },
+    {
+      "frame_index": 84,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 85,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 86,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 87,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 88,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frame_index": 89,
+      "requested_target": [
+        0.0,
+        0.0
+      ],
+      "smoothed_offset": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "gif": {
+    "decoded_durations_ms": [
+      200,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      60,
+      140,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      140,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      140,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      100,
+      100,
+      30,
+      30,
+      40,
+      30,
+      30,
+      40,
+      400,
+      200
+    ],
+    "decoded_frame_count": 55,
+    "loop": 0,
+    "sha256": "ef1724afcdc91a6a1495f256261d15ce9698512a6d5398a7dff56588aa801689"
+  },
+  "inputs": {
+    "authoring": {
+      "path": "authoring.json",
+      "sha256": "995436bd21953c0f08f0e1dbdc61bf37a4adc4aa0b0f03bfa16f6dba93f233a1"
+    },
+    "authoring_canonical_hash": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+    "canonical": {
+      "path": "canonical-idle.png",
+      "sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
+    },
+    "immutable_files": {
+      "authoring.json": "995436bd21953c0f08f0e1dbdc61bf37a4adc4aa0b0f03bfa16f6dba93f233a1",
+      "canonical-idle.png": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+      "eye-left-mask.png": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",
+      "eye-left.png": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
+      "eye-right-mask.png": "fba54f4eb10884d5a284ea6c16cd762d0786f61e09ddc5297e99d793c3a092e4",
+      "eye-right.png": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
+      "underlay.png": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9"
+    }
+  },
+  "observed_maxima": {
+    "requested_abs_x": 1.5,
+    "requested_abs_y": 1.0,
+    "smoothed_abs_x": 1.4996394457853708,
+    "smoothed_abs_y": 0.9997596305235805
+  },
+  "source_durations_ms": [
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40,
+    30,
+    30,
+    40
+  ]
+}

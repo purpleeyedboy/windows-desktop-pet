@@ -35,6 +35,6 @@ Task R5: pending
 
 Plan: docs/superpowers/plans/2026-08-29-neutral-eyeball-follow-feasibility.md
 Implementation base: 10f83f7
-Task N1: complete (remote candidate commit 28afa454e805c70b6b2133f6a63fc710a9b05217; user-directed screen-left neutral underlay alignment corrected by an area-preserving 2 px source shift; 29 focused/full tests passed; 13 named outputs deterministic; static user visual acceptance still pending)
-Task N2: pending (requires explicit user acceptance of `qa/neutral-eye-v1/candidate/layer-contact-sheet.png` before any deterministic GIF work)
+Task N1: complete (remote candidate commit 28afa454e805c70b6b2133f6a63fc710a9b05217; user-directed screen-left neutral underlay alignment corrected by an area-preserving 2 px source shift; 29 focused/full tests passed; 13 named outputs deterministic; static user visual acceptance received 2026-08-30)
+Task N2: complete (offline deterministic 90-frame eye-follow preview committed with fixed web-palette GIF, containment/timing validation, reproducibility and transactional-replacement coverage; post-review RGB-only containment/final-center, output-path isolation, and failed-restore backup preservation coverage added; future minors: GIF oracle shares implementation, validate/render TOCTOU, and peak-memory optimization; R5 remains blocked)
 R5: remains blocked; no head directions, blink, tilt, runtime, packaging, or EXE work started
