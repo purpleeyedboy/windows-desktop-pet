@@ -4,10 +4,19 @@ import argparse
 import hashlib
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Final
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+
+if __package__ in {None, ""}:  # Resolve this checkout before any installed package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from desktop_pet.neutral_eye_compositor import (
+    NeutralEyeCompositor,
+    ValidatedNeutralEyeSnapshot,
+)
 
 
 CANONICAL_SHA256: Final = (
@@ -110,22 +119,6 @@ def _canonical_surface(canonical: Image.Image, mask: Image.Image) -> Image.Image
     return surface
 
 
-def _support_boundary(mask: Image.Image) -> list[tuple[int, int]]:
-    support = mask.point(lambda value: 255 if value else 0)
-    boundary = ImageChops.subtract(
-        support, support.filter(ImageFilter.MinFilter(3))
-    )
-    bbox = boundary.getbbox()
-    if bbox is None:
-        return []
-    return [
-        (x, y)
-        for y in range(bbox[1], bbox[3])
-        for x in range(bbox[0], bbox[2])
-        if boundary.getpixel((x, y))
-    ]
-
-
 def _bilinear(values: list[int], size: tuple[int, int], x: float, y: float) -> float:
     width, height = size
     x = min(max(x, 0.0), width - 1.0)
@@ -136,95 +129,13 @@ def _bilinear(values: list[int], size: tuple[int, int], x: float, y: float) -> f
     y1 = min(y0 + 1, height - 1)
     tx = x - x0
     ty = y - y0
-    top = values[y0 * width + x0] * (1.0 - tx) + values[y0 * width + x1] * tx
-    bottom = values[y1 * width + x0] * (1.0 - tx) + values[y1 * width + x1] * tx
+    top = values[y0 * width + x0] * (1.0 - tx) + values[
+        y0 * width + x1
+    ] * tx
+    bottom = values[y1 * width + x0] * (1.0 - tx) + values[
+        y1 * width + x1
+    ] * tx
     return top * (1.0 - ty) + bottom * ty
-
-
-def _aperture_relative_warp(
-    surface: Image.Image,
-    aperture: Image.Image,
-    anchor: tuple[float, float],
-    dx: float,
-    dy: float,
-) -> Image.Image:
-    if dx == 0.0 and dy == 0.0:
-        return surface.copy()
-
-    bbox = aperture.getbbox()
-    if bbox is None:
-        return Image.new("RGBA", CANVAS_SIZE)
-    padding = 2
-    crop_box = (
-        max(0, bbox[0] - padding),
-        max(0, bbox[1] - padding),
-        min(CANVAS_SIZE[0], bbox[2] + padding),
-        min(CANVAS_SIZE[1], bbox[3] + padding),
-    )
-    cropped = surface.crop(crop_box)
-    cropped_alpha = cropped.getchannel("A")
-    premultiplied_values = [
-        list(ImageChops.multiply(channel, cropped_alpha).getdata())
-        for channel in cropped.convert("RGB").split()
-    ]
-    source_alpha_values = list(cropped_alpha.getdata())
-    aperture_crop = aperture.crop(crop_box)
-    output_alpha_values = list(aperture_crop.getdata())
-
-    boundary_points = _support_boundary(aperture)
-    boundary_set = set(boundary_points)
-    anchor_distance = min(
-        math.hypot(anchor[0] - x, anchor[1] - y) for x, y in boundary_points
-    )
-    output_values: list[tuple[int, int, int, int]] = []
-    for local_y in range(cropped.height):
-        for local_x in range(cropped.width):
-            index = local_y * cropped.width + local_x
-            output_alpha = output_alpha_values[index]
-            if output_alpha == 0:
-                output_values.append((0, 0, 0, 0))
-                continue
-
-            global_point = (local_x + crop_box[0], local_y + crop_box[1])
-            if global_point in boundary_set:
-                output_values.append(cropped.getpixel((local_x, local_y)))
-                continue
-
-            distance = min(
-                math.hypot(global_point[0] - x, global_point[1] - y)
-                for x, y in boundary_points
-            )
-            normalized = min(1.0, distance / anchor_distance)
-            weight = normalized * normalized * (3.0 - 2.0 * normalized)
-            source_x = local_x - dx * weight
-            source_y = local_y - dy * weight
-            sampled_alpha = _bilinear(
-                source_alpha_values, cropped.size, source_x, source_y
-            )
-            if sampled_alpha <= 0.0:
-                output_values.append((0, 0, 0, output_alpha))
-                continue
-            rgb = tuple(
-                min(
-                    255,
-                    max(
-                        0,
-                        round(
-                            _bilinear(values, cropped.size, source_x, source_y)
-                            * 255.0
-                            / sampled_alpha
-                        ),
-                    ),
-                )
-                for values in premultiplied_values
-            )
-            output_values.append((*rgb, output_alpha))
-
-    warped_crop = Image.new("RGBA", cropped.size)
-    warped_crop.putdata(output_values)
-    warped = Image.new("RGBA", CANVAS_SIZE)
-    warped.paste(warped_crop, crop_box[:2])
-    return warped
 
 
 def _remap_shared_neutral_target(
@@ -233,7 +144,9 @@ def _remap_shared_neutral_target(
     target_bounds: tuple[int, int, int, int],
 ) -> Image.Image:
     remapped = normalized_target.copy()
-    source_values = [list(channel.getdata()) for channel in normalized_target.split()]
+    source_values = [
+        list(channel.getdata()) for channel in normalized_target.split()
+    ]
     source_width = source_bounds[2] - source_bounds[0]
     source_height = source_bounds[3] - source_bounds[1]
     target_width = target_bounds[2] - target_bounds[0]
@@ -366,36 +279,14 @@ def build_assets(
 
 
 def compose_pose(asset_dir: Path, eye_x: float, eye_y: float) -> Image.Image:
-    asset_dir = Path(asset_dir)
-    if abs(eye_x) > MOTION_LIMITS["x"] or abs(eye_y) > MOTION_LIMITS["y"]:
-        raise ValueError(
-            f"eye offset exceeds motion limits ±{MOTION_LIMITS['x']} x and ±{MOTION_LIMITS['y']} y"
-        )
-
-    composed = Image.open(asset_dir / "underlay.png").convert("RGBA").copy()
-    for eye in EYES:
-        surface = Image.open(asset_dir / f"eye-{eye}.png").convert("RGBA")
-        aperture = Image.open(asset_dir / f"eye-{eye}-mask.png").convert("L")
-        warped = _aperture_relative_warp(
-            surface,
-            aperture,
-            EYE_ANCHORS[eye],
-            float(eye_x),
-            float(eye_y),
-        )
-        support = aperture.point(lambda value: 255 if value else 0)
-        composed_rgb = Image.composite(
-            warped.convert("RGB"), composed.convert("RGB"), support
-        )
-        alpha = composed.getchannel("A")
-        composed = composed_rgb.convert("RGBA")
-        composed.putalpha(alpha)
-    return composed
+    return NeutralEyeCompositor.load(Path(asset_dir)).compose(eye_x, eye_y)
 
 
 def _different_pixel_count(first: Image.Image, second: Image.Image) -> int:
     difference = ImageChops.difference(first, second)
-    return sum(pixel != (0, 0, 0, 0) for pixel in difference.getdata())
+    return sum(
+        pixel != (0, 0, 0, 0) for pixel in tuple(difference.getdata())
+    )
 
 
 def _maximum_channel_delta(first: Image.Image, second: Image.Image) -> int:
@@ -520,6 +411,10 @@ def build_contact_sheet(asset_dir: Path, qa_dir: Path) -> dict:
 
 
 def main() -> None:
+    if sys.argv[1:] == ["--show-compositor-path"]:
+        module = sys.modules[NeutralEyeCompositor.__module__]
+        print(Path(module.__file__).resolve())
+        return
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="Build neutral eye layers and static QA evidence")
     parser.add_argument(

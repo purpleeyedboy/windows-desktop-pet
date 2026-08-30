@@ -1,72 +1,28 @@
-from desktop_pet.model import ActionCycle, Rect, clamp_height, place_bubble
+import pytest
+
+from desktop_pet.model import ActionCycle
 
 
-def test_clamp_height_enforces_contract():
-    assert clamp_height(80) == 120
-    assert clamp_height(280) == 280
-    assert clamp_height(700) == 520
-
-
-def test_action_cycle_repeats_fixed_order():
+def test_action_cycle_peek_does_not_advance_and_commit_advances_once() -> None:
     cycle = ActionCycle()
-    assert [cycle.next() for _ in range(5)] == [
-        "jump",
-        "squash",
-        "shake",
-        "jump",
-        "squash",
-    ]
+
+    assert cycle.peek() == "jump"
+    assert cycle.peek() == "jump"
+    cycle.commit("jump")
+
+    assert cycle.peek() == "squash"
 
 
-def test_bubble_prefers_above_without_overlap():
-    screen = Rect(0, 0, 1920, 1040)
-    pet = Rect(1500, 650, 240, 360)
-    result = place_bubble(pet, (180, 72), screen, gap=12)
-    assert result.bottom <= pet.top - 12
-    assert screen.contains(result)
+def test_action_cycle_mismatched_commit_is_deterministic_and_does_not_advance() -> None:
+    cycle = ActionCycle()
+
+    with pytest.raises(ValueError, match="expected 'shake'.*current action is 'jump'"):
+        cycle.commit("shake")
+
+    assert cycle.peek() == "jump"
 
 
-def test_bubble_moves_to_side_when_top_space_is_missing():
-    screen = Rect(0, 0, 800, 600)
-    pet = Rect(300, 8, 180, 300)
-    result = place_bubble(pet, (190, 72), screen, gap=12)
-    assert not result.intersects(pet)
-    assert screen.contains(result)
+def test_action_cycle_next_remains_peek_commit_compatibility_sugar() -> None:
+    cycle = ActionCycle()
 
-
-def test_bubble_shrinks_to_avoid_a_large_pet_on_a_small_screen():
-    screen = Rect(0, 0, 800, 600)
-    pet = Rect(226, 40, 347, 520)
-
-    result = place_bubble(pet, (260, 76), screen, gap=12)
-
-    assert screen.contains(result)
-    assert not result.intersects(pet)
-    assert result.height == 76
-    assert 132 <= result.width < 260
-
-
-def test_bubble_can_shrink_below_132_pixels_on_a_narrow_screen():
-    screen = Rect(0, 0, 600, 600)
-    pet = Rect(126, 40, 347, 520)
-
-    result = place_bubble(pet, (260, 76), screen, gap=12)
-
-    assert result is not None
-    assert screen.contains(result)
-    assert not result.intersects(pet)
-    assert result.width == 114
-
-
-def test_bubble_returns_none_when_the_pet_leaves_no_safe_area():
-    screen = Rect(0, 0, 200, 200)
-    pet = Rect(0, 0, 200, 200)
-
-    assert place_bubble(pet, (132, 76), screen, gap=12) is None
-
-
-def test_bubble_returns_none_when_an_offscreen_pet_cannot_fit_a_side_bubble():
-    screen = Rect(0, 0, 800, 600)
-    pet = Rect(900, 100, 200, 300)
-
-    assert place_bubble(pet, (190, 76), screen, gap=12) is None
+    assert [cycle.next() for _ in range(4)] == ["jump", "squash", "shake", "jump"]

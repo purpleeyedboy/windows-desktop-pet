@@ -18,6 +18,9 @@ CANONICAL = ROOT / "assets/rig/v1/source/canonical-idle.png"
 COMMITTED_OUTPUT = ROOT / "qa/neutral-eye-v1/preview-v2"
 CANONICAL_SHA256 = "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
 MOTION_LIMITS = {"x": 3.0, "y": 2.0}
+OUTPUT_SHA256 = {
+    "underlay.png": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+}
 FRAME_COUNT = 90
 DURATIONS = (30, 30, 40) * 30
 
@@ -35,7 +38,10 @@ def _sha256(path: Path) -> str:
 def _diff_metrics(first: Image.Image, second: Image.Image) -> tuple[int, int]:
     difference = ImageChops.difference(first, second)
     return (
-        sum(pixel != (0, 0, 0, 0) for pixel in difference.getdata()),
+        sum(
+            pixel != (0, 0, 0, 0)
+            for pixel in tuple(difference.getdata())
+        ),
         max(high for _, high in difference.getextrema()),
     )
 
@@ -215,9 +221,51 @@ def test_preview_rejects_tampered_immutable_input_before_writing(tmp_path: Path)
     mask.putpixel((82, 351), 0)
     mask.save(tampered_assets / "eye-left-mask.png")
     output = tmp_path / "out"
-    with pytest.raises(ValueError, match="hash"):
+    with pytest.raises(ValueError, match="SHA"):
         module.build_preview(tampered_assets, CANONICAL, output)
     assert not output.exists()
+
+
+def test_preview_uses_one_single_read_snapshot_for_stats_and_frames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    copied_assets = tmp_path / "assets"
+    shutil.copytree(ASSET_DIR, copied_assets)
+    copied_canonical = tmp_path / "canonical-idle.png"
+    shutil.copy2(CANONICAL, copied_canonical)
+    output = tmp_path / "out"
+    input_paths = {
+        copied_canonical,
+        copied_assets / "authoring.json",
+        *(copied_assets / filename for filename in module.OUTPUTS),
+    }
+    counts = {path: 0 for path in input_paths}
+    target = copied_assets / "underlay.png"
+    real_read_bytes = Path.read_bytes
+    real_write_bytes = Path.write_bytes
+
+    def read_then_swap(path: Path) -> bytes:
+        data = real_read_bytes(path)
+        if path in counts:
+            counts[path] += 1
+        if path == target and counts[path] == 1:
+            real_write_bytes(path, b"swapped after validated read")
+        return data
+
+    monkeypatch.setattr(Path, "read_bytes", read_then_swap)
+    stats = module.build_preview(copied_assets, copied_canonical, output)
+
+    assert counts == {path: 1 for path in input_paths}
+    assert stats["inputs"]["immutable_files"]["underlay.png"] == (
+        OUTPUT_SHA256["underlay.png"]
+    )
+    assert (output / "eye-follow.gif").read_bytes() == (
+        COMMITTED_OUTPUT / "eye-follow.gif"
+    ).read_bytes()
+    assert (output / "stats.json").read_bytes() == (
+        COMMITTED_OUTPUT / "stats.json"
+    ).read_bytes()
 
 
 def test_preview_rejects_overlapping_or_non_directory_output_before_transaction(
@@ -265,14 +313,33 @@ def test_preview_has_shared_offsets_containment_and_final_canonical(
 ) -> None:
     module = _module()
     calls: list[tuple[float, float]] = []
+    loads: list[Path] = []
+    snapshots: list[object] = []
     canonical = Image.open(CANONICAL).convert("RGBA")
+    real_snapshot_load = module.ValidatedNeutralEyeSnapshot.load
 
-    def recording_compose(asset_dir: Path, eye_x: float, eye_y: float) -> Image.Image:
-        calls.append((eye_x, eye_y))
-        return canonical.copy()
+    class RecordingCompositor:
+        def compose(self, eye_x: float, eye_y: float) -> Image.Image:
+            calls.append((eye_x, eye_y))
+            return canonical.copy()
 
-    monkeypatch.setattr(module, "compose_pose", recording_compose)
+    def recording_snapshot_load(asset_dir: Path):
+        loads.append(asset_dir)
+        return real_snapshot_load(asset_dir)
+
+    def recording_from_snapshot(snapshot: object) -> RecordingCompositor:
+        snapshots.append(snapshot)
+        return RecordingCompositor()
+
+    monkeypatch.setattr(
+        module.ValidatedNeutralEyeSnapshot, "load", recording_snapshot_load
+    )
+    monkeypatch.setattr(
+        module.NeutralEyeCompositor, "from_snapshot", recording_from_snapshot
+    )
     stats = module.build_preview(ASSET_DIR, CANONICAL, tmp_path / "out")
+    assert loads == [ASSET_DIR]
+    assert len(snapshots) == 1
     assert calls == list(module.preview_offsets())
     assert stats["frames"] == [
         {
@@ -298,7 +365,9 @@ def test_preview_has_containment_and_final_canonical(preview: tuple[Path, dict])
 
 def test_containment_rejects_rgb_only_change_outside_support() -> None:
     module = _module()
-    canonical, _authoring, images, _hashes = module._validate_inputs(ASSET_DIR, CANONICAL)
+    canonical, _authoring, images, _hashes, _snapshot = module._validate_inputs(
+        ASSET_DIR, CANONICAL
+    )
     support, ring = module._binary_support(images)
     changed = canonical.copy()
     outside_point = next(
@@ -316,7 +385,9 @@ def test_containment_rejects_rgb_only_change_outside_support() -> None:
 
 def test_final_center_rejects_rgb_only_change_inside_support() -> None:
     module = _module()
-    canonical, _authoring, images, _hashes = module._validate_inputs(ASSET_DIR, CANONICAL)
+    canonical, _authoring, images, _hashes, _snapshot = module._validate_inputs(
+        ASSET_DIR, CANONICAL
+    )
     support, ring = module._binary_support(images)
     changed = canonical.copy()
     inside_point = next(
@@ -341,7 +412,11 @@ def test_gif_timeline_fixed_palette_and_statistics(preview: tuple[Path, dict]) -
     assert loop == 0
     assert sum(decoded_durations) == 3000
     assert sum(DURATIONS) == 3000
-    expected = [_fixed_palette_rgb(module.compose_pose(ASSET_DIR, *offset)) for offset in module.preview_offsets()]
+    compositor = module.NeutralEyeCompositor.load(ASSET_DIR)
+    expected = [
+        _fixed_palette_rgb(compositor.compose(*offset))
+        for offset in module.preview_offsets()
+    ]
     expected_ticks = _tick_schedule(expected, list(DURATIONS))
     decoded_ticks = _tick_schedule(decoded, decoded_durations)
     assert len(expected_ticks) == len(decoded_ticks) == 300

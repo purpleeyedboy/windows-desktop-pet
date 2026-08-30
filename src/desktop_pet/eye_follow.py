@@ -12,11 +12,13 @@ from typing import Callable, Final, Protocol
 HORIZONTAL_LIMIT: Final = 3.0
 VERTICAL_LIMIT: Final = 2.0
 SAMPLE_INTERVAL_MS: Final = 33
+SAMPLE_INTERVAL_SECONDS: Final = SAMPLE_INTERVAL_MS / 1000.0
 TIME_CONSTANT_SECONDS: Final = 0.060
 MAX_DT_SECONDS: Final = 0.100
 STABILITY_THRESHOLD: Final = 0.006
 REFERENCE_DISPLAY_HEIGHT: Final = 280.0
 REFERENCE_ACTIVATION_RADIUS: Final = 100.0
+_SCHEDULING: Final = object()
 
 
 @dataclass(frozen=True)
@@ -124,8 +126,11 @@ class EyeMotionController:
         self._pose = (0.0, 0.0)
         self._last_emitted = self._pose
         self._last_time: float | None = None
+        self._next_deadline: float | None = None
         self._scheduled: object | None = None
+        self._schedule_slot: object | None = None
         self._running = False
+        self._paused = False
         self._stopped = False
         self._generation = 0
 
@@ -138,7 +143,10 @@ class EyeMotionController:
             return
         self._generation += 1
         self._running = True
-        self._last_time = self._clock()
+        self._paused = False
+        now = self._clock()
+        self._last_time = now
+        self._next_deadline = now + SAMPLE_INTERVAL_SECONDS
         self._schedule()
 
     def pause(self) -> None:
@@ -146,9 +154,19 @@ class EyeMotionController:
             return
         self._generation += 1
         self._running = False
-        if self._scheduled is not None:
-            self._cancel(self._scheduled)
-            self._scheduled = None
+        self._paused = True
+        self._next_deadline = None
+        token = self._scheduled
+        self._scheduled = None
+        self._schedule_slot = None
+        if token is not None and token is not _SCHEDULING:
+            try:
+                self._cancel(token)
+            except Exception:
+                self._generation += 1
+                self._paused = False
+                self._stopped = True
+                raise
 
     def resume(self) -> None:
         self.start()
@@ -159,21 +177,89 @@ class EyeMotionController:
         self._stopped = True
         self._generation += 1
         self._running = False
-        if self._scheduled is not None:
-            self._cancel(self._scheduled)
-            self._scheduled = None
+        self._paused = False
+        self._next_deadline = None
+        token = self._scheduled
+        self._scheduled = None
+        self._schedule_slot = None
+        if token is not None and token is not _SCHEDULING:
+            try:
+                self._cancel(token)
+            except Exception:
+                pass
+
+    def synchronize_pose(self, eye_x: float, eye_y: float) -> None:
+        """Synchronize a paused controller without emitting or scheduling."""
+        if not self._paused or self._running or self._stopped:
+            raise RuntimeError("eye pose can only be synchronized while paused")
+        try:
+            pose = (float(eye_x), float(eye_y))
+        except (OverflowError, TypeError, ValueError) as error:
+            raise ValueError("eye pose must contain finite numeric values") from error
+        if (
+            not math.isfinite(pose[0])
+            or not math.isfinite(pose[1])
+            or abs(pose[0]) > HORIZONTAL_LIMIT
+            or abs(pose[1]) > VERTICAL_LIMIT
+        ):
+            raise ValueError("eye pose is outside the supported finite range")
+        self._pose = pose
+        self._last_emitted = pose
 
     def _schedule(self) -> None:
         if self._running and not self._stopped and self._scheduled is None:
+            now = self._clock()
+            if self._next_deadline is None:
+                self._next_deadline = now + SAMPLE_INTERVAL_SECONDS
+            elif self._next_deadline <= now:
+                missed = math.floor(
+                    (now - self._next_deadline) / SAMPLE_INTERVAL_SECONDS
+                )
+                self._next_deadline += (missed + 1) * SAMPLE_INTERVAL_SECONDS
+                if self._next_deadline <= now:
+                    self._next_deadline += SAMPLE_INTERVAL_SECONDS
+            remaining_ms = (self._next_deadline - now) * 1000.0
+            delay_ms = max(1, math.ceil(remaining_ms - 1e-9))
             generation = self._generation
-            self._scheduled = self._scheduler(
-                SAMPLE_INTERVAL_MS, lambda: self._tick(generation)
-            )
+            slot = object()
+            fired = False
+            scheduler_returned = False
 
-    def _tick(self, generation: int) -> None:
-        if generation != self._generation:
+            def scheduled_callback() -> None:
+                nonlocal fired
+                fired = True
+                if scheduler_returned:
+                    self._tick(generation, slot)
+
+            self._schedule_slot = slot
+            self._scheduled = _SCHEDULING
+            try:
+                token = self._scheduler(delay_ms, scheduled_callback)
+            except Exception:
+                self._fail_schedule(generation, slot)
+                raise
+            scheduler_returned = True
+            if fired:
+                self._fail_schedule(generation, slot)
+                raise RuntimeError("scheduler callback ran synchronously")
+            if (
+                self._generation == generation
+                and self._running
+                and not self._stopped
+                and self._schedule_slot is slot
+            ):
+                self._scheduled = token
+            else:
+                try:
+                    self._cancel(token)
+                except Exception:
+                    pass
+
+    def _tick(self, generation: int, slot: object) -> None:
+        if generation != self._generation or self._schedule_slot is not slot:
             return
         self._scheduled = None
+        self._schedule_slot = None
         if not self._running or self._stopped:
             return
 
@@ -197,13 +283,32 @@ class EyeMotionController:
             current + alpha * (requested - current)
             for current, requested in zip(self._pose, target, strict=True)
         )
-        if (
+        if target == (0.0, 0.0) and all(
+            abs(value) <= STABILITY_THRESHOLD for value in self._pose
+        ):
+            self._pose = (0.0, 0.0)
+
+        if self._pose == (0.0, 0.0) and self._last_emitted != (0.0, 0.0):
+            self._last_emitted = self._pose
+            self._pose_changed(*self._pose)
+        elif (
             abs(self._pose[0] - self._last_emitted[0]) >= STABILITY_THRESHOLD
             or abs(self._pose[1] - self._last_emitted[1]) >= STABILITY_THRESHOLD
         ):
             self._last_emitted = self._pose
             self._pose_changed(*self._pose)
         self._schedule()
+
+    def _fail_schedule(self, generation: int, slot: object) -> None:
+        if self._generation != generation or self._schedule_slot is not slot:
+            return
+        self._generation += 1
+        self._scheduled = None
+        self._schedule_slot = None
+        self._running = False
+        self._paused = False
+        self._stopped = True
+        self._next_deadline = None
 
     def _current_geometry(self) -> EyeGeometry:
         geometry = self._geometry_provider()

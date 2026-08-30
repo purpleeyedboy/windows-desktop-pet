@@ -16,6 +16,7 @@ from desktop_pet.layered_window import (
     LayeredWindowRenderer,
     WS_EX_LAYERED,
     WS_EX_TRANSPARENT,
+    _win32_error,
     rgba_to_premultiplied_bgra,
 )
 
@@ -37,6 +38,31 @@ def test_premultiply_keeps_max_pet_size_realtime():
         rgba_to_premultiplied_bgra(image)
 
     assert perf_counter() - started < 0.25
+
+
+def test_win32_error_without_native_winerror_carries_numeric_code(monkeypatch):
+    monkeypatch.delattr(ctypes, "WinError", raising=False)
+
+    error_code = 12345
+    error = _win32_error(error_code)
+
+    assert isinstance(error, OSError)
+    assert error.errno == error_code
+
+
+def test_win32_error_delegates_to_native_winerror(monkeypatch):
+    error_code = 67890
+    expected = OSError("native error")
+    delegated_codes: list[int] = []
+
+    def fake_win_error(code):
+        delegated_codes.append(code)
+        return expected
+
+    monkeypatch.setattr(ctypes, "WinError", fake_win_error, raising=False)
+
+    assert _win32_error(error_code) is expected
+    assert delegated_codes == [error_code]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows layered window contract")

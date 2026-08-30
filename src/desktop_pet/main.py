@@ -5,7 +5,8 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames
+from .assets import load_frames, load_neutral_eye_source_probe
+from .eye_follow import Win32CursorProvider
 from .window import PetWindow
 
 
@@ -79,20 +80,33 @@ def main() -> int:
     enable_per_monitor_dpi_awareness()
     mutex = SingleInstanceMutex(build_mutex_name())
     root: tk.Tk | None = None
+    pet_window: PetWindow | None = None
     try:
         if not mutex.acquire():
             return 0
         root = tk.Tk()
         root.withdraw()
         frames = load_frames()
-        PetWindow(root, frames)
+        compositor = load_neutral_eye_source_probe()
+        cursor_provider = Win32CursorProvider()
+        pet_window = PetWindow(
+            root,
+            frames,
+            compositor=compositor,
+            cursor_provider=cursor_provider,
+        )
         root.mainloop()
         return 0
-    except (OSError, RuntimeError, tk.TclError) as error:
+    except (OSError, RuntimeError, ValueError, tk.TclError) as error:
         show_fatal_error(str(error), root)
         return 1
     finally:
-        if root is not None:
+        if pet_window is not None:
+            try:
+                pet_window.close()
+            except tk.TclError:
+                pass
+        elif root is not None:
             try:
                 if root.winfo_exists():
                     root.destroy()

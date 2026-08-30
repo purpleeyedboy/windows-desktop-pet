@@ -55,3 +55,52 @@ def test_runtime_frame_root_uses_archived_clean_keyframes(
 
     assert assets_module.runtime_frame_root() == tmp_path
     assert calls == [("assets", "keyframes")]
+
+
+def test_neutral_eye_source_probe_root_is_explicitly_source_checkout_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        assets_module,
+        "asset_path",
+        lambda *_parts: (_ for _ in ()).throw(
+            AssertionError("source probe must not use bundled asset resolution")
+        ),
+    )
+
+    root = assets_module.neutral_eye_source_probe_root()
+
+    assert root == (
+        Path(assets_module.__file__).resolve().parents[2]
+        / "assets"
+        / "rig"
+        / "v1"
+        / "source"
+        / "eye-neutral-v1"
+    )
+    assert "source-checkout-only" in (
+        assets_module.neutral_eye_source_probe_root.__doc__ or ""
+    ).lower()
+
+
+def test_load_neutral_eye_source_probe_uses_validated_compositor_loader(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sentinel = object()
+    calls: list[Path] = []
+
+    def load(path: Path):
+        calls.append(path)
+        return sentinel
+
+    monkeypatch.setattr(
+        assets_module.NeutralEyeCompositor,
+        "load",
+        load,
+    )
+
+    assert assets_module.load_neutral_eye_source_probe(tmp_path) is sentinel
+    assert calls == [tmp_path]
+    assert "source-checkout-only" in (
+        assets_module.load_neutral_eye_source_probe.__doc__ or ""
+    ).lower()

@@ -15,9 +15,20 @@ class ActionCycle:
     def __init__(self) -> None:
         self._index = 0
 
-    def next(self) -> str:
-        action = ACTIONS[self._index]
+    def peek(self) -> str:
+        return ACTIONS[self._index]
+
+    def commit(self, expected: str) -> None:
+        action = self.peek()
+        if expected != action:
+            raise ValueError(
+                f"cannot commit expected {expected!r}; current action is {action!r}"
+            )
         self._index = (self._index + 1) % len(ACTIONS)
+
+    def next(self) -> str:
+        action = self.peek()
+        self.commit(action)
         return action
 
 

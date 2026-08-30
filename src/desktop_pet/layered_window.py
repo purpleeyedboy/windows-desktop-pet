@@ -27,6 +27,20 @@ SWP_NOACTIVATE = 0x0010
 HGDI_ERROR = ctypes.c_void_p(-1).value
 
 
+def _last_error() -> int:
+    get_last_error = getattr(ctypes, "get_last_error", None)
+    return get_last_error() if get_last_error is not None else 0
+
+
+def _win32_error(error_code: int | None = None) -> OSError:
+    if error_code is None:
+        error_code = _last_error()
+    win_error = getattr(ctypes, "WinError", None)
+    if win_error is not None:
+        return win_error(error_code)
+    return OSError(error_code, os.strerror(error_code))
+
+
 class POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
@@ -163,9 +177,9 @@ class LayeredWindowRenderer:
     def _get_extended_style(self) -> int:
         ctypes.set_last_error(0)
         style = self._user32.GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE)
-        error = ctypes.get_last_error()
+        error = _last_error()
         if style == 0 and error:
-            raise ctypes.WinError(error)
+            raise _win32_error(error)
         return int(style)
 
     def _apply_layered_style(self) -> None:
@@ -177,9 +191,9 @@ class LayeredWindowRenderer:
         previous = self._user32.SetWindowLongPtrW(
             self.hwnd, GWL_EXSTYLE, updated
         )
-        error = ctypes.get_last_error()
+        error = _last_error()
         if previous == 0 and error:
-            raise ctypes.WinError(error)
+            raise _win32_error(error)
 
     def is_layered(self) -> bool:
         return bool(self._get_extended_style() & WS_EX_LAYERED)
@@ -195,7 +209,7 @@ class LayeredWindowRenderer:
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         ):
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win32_error()
 
     def _create_top_down_dib(
         self, screen_dc: wintypes.HDC, size: tuple[int, int]
@@ -221,27 +235,27 @@ class LayeredWindowRenderer:
         if not bitmap or not bits:
             if bitmap:
                 self._gdi32.DeleteObject(bitmap)
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win32_error()
         return bitmap, bits
 
     def render(self, image: Image.Image, x: int, y: int) -> None:
         pixels = rgba_to_premultiplied_bgra(image)
         screen_dc = self._user32.GetDC(None)
         if not screen_dc:
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise _win32_error()
         memory_dc = None
         bitmap = None
         old_bitmap = None
         try:
             memory_dc = self._gdi32.CreateCompatibleDC(screen_dc)
             if not memory_dc:
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise _win32_error()
             bitmap, bits = self._create_top_down_dib(screen_dc, image.size)
             ctypes.memmove(bits, pixels, len(pixels))
             old_bitmap = self._gdi32.SelectObject(memory_dc, bitmap)
             if not old_bitmap or old_bitmap == HGDI_ERROR:
                 old_bitmap = None
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise _win32_error()
 
             destination = POINT(x, y)
             size = SIZE(*image.size)
@@ -263,7 +277,7 @@ class LayeredWindowRenderer:
                 ctypes.byref(blend),
                 ULW_ALPHA,
             ):
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise _win32_error()
         finally:
             if old_bitmap and memory_dc:
                 self._gdi32.SelectObject(memory_dc, old_bitmap)

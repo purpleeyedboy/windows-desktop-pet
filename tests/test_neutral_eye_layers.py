@@ -63,7 +63,10 @@ def _sha256(path: Path) -> str:
 
 
 def _different_pixel_count(first: Image.Image, second: Image.Image) -> int:
-    return sum(pixel != (0, 0, 0, 0) for pixel in ImageChops.difference(first, second).getdata())
+    return sum(
+        pixel != (0, 0, 0, 0)
+        for pixel in tuple(ImageChops.difference(first, second).getdata())
+    )
 
 
 def _maximum_channel_delta(first: Image.Image, second: Image.Image) -> int:
@@ -138,7 +141,7 @@ def test_reviewed_masks_are_tight_antialiased_and_inside_rejected_masks(
         assert bbox == tuple(metadata["eyes"][eye]["reviewed_bounds"])
         assert bbox[2] - bbox[0] < rejected_limits[eye][0]
         assert bbox[3] - bbox[1] < rejected_limits[eye][1]
-        assert any(0 < value < 255 for value in mask.getdata())
+        assert any(0 < value < 255 for value in tuple(mask.getdata()))
 
         leaked_support = ImageChops.subtract(_binary_support(mask), _binary_support(rejected))
         assert leaked_support.getbbox() is None
@@ -170,9 +173,10 @@ def test_screen_left_neutral_globe_is_shifted_two_pixels_left_without_resizing(
 
     assert tuple(map(tuple, metadata["eyes"]["left"]["reviewed_polygon"])) == expected_polygon
     assert mask.getbbox() == (62, 335, 96, 367)
-    assert sum(value > 0 for value in mask.getdata()) == 852
-    assert sum(value == 255 for value in mask.getdata()) == 735
-    assert sum(mask.getdata()) == 201_484
+    mask_values = tuple(mask.getdata())
+    assert sum(value > 0 for value in mask_values) == 852
+    assert sum(value == 255 for value in mask_values) == 735
+    assert sum(mask_values) == 201_484
 
 
 def test_reviewed_masks_exclude_fixed_upper_and_lower_feature_regions(
@@ -504,7 +508,14 @@ def test_warp_pins_aperture_boundary_and_moves_anchor_region(
 
 def test_warp_exposes_no_trailing_underlay_core(built: tuple[Path, dict]) -> None:
     asset_dir, _ = built
-    underlay = Image.open(asset_dir / "underlay.png").convert("RGBA")
+    from desktop_pet.neutral_eye_compositor import (
+        NeutralEyeCompositor,
+        ValidatedNeutralEyeSnapshot,
+    )
+
+    snapshot = ValidatedNeutralEyeSnapshot.load(asset_dir)
+    images = snapshot.images()
+    underlay = images["underlay.png"]
     underlay_pixels = underlay.load()
     core_union = Image.new("L", underlay.size)
     for eye in EYES:
@@ -517,10 +528,10 @@ def test_warp_exposes_no_trailing_underlay_core(built: tuple[Path, dict]) -> Non
         for x in range(underlay.width):
             if core_pixels[x, y]:
                 underlay_pixels[x, y] = (255, 0, 255, underlay_pixels[x, y][3])
-    underlay.save(asset_dir / "underlay.png")
+    compositor = NeutralEyeCompositor._from_images(snapshot.authoring(), images)
 
     for offset in ((-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)):
-        pose = _builder_module().compose_pose(asset_dir, *offset)
+        pose = compositor.compose(*offset)
         pose_pixels = pose.load()
         for y in range(pose.height):
             for x in range(pose.width):

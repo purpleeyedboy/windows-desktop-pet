@@ -6,7 +6,9 @@ import json
 import math
 import os
 import shutil
+import sys
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from typing import Final
 
@@ -17,6 +19,8 @@ try:
         CANONICAL_SHA256,
         CANVAS_SIZE,
         MOTION_LIMITS,
+        NeutralEyeCompositor,
+        ValidatedNeutralEyeSnapshot,
         compose_pose,
     )
 except ModuleNotFoundError:  # Direct `python tools/build_neutral_eye_preview.py` CLI use.
@@ -24,6 +28,8 @@ except ModuleNotFoundError:  # Direct `python tools/build_neutral_eye_preview.py
         CANONICAL_SHA256,
         CANVAS_SIZE,
         MOTION_LIMITS,
+        NeutralEyeCompositor,
+        ValidatedNeutralEyeSnapshot,
         compose_pose,
     )
 
@@ -111,47 +117,40 @@ def preview_offsets() -> tuple[tuple[float, float], ...]:
     return tuple(offsets)
 
 
-def _open_checked(path: Path, mode: str) -> Image.Image:
-    with Image.open(path) as opened:
+def _decode_checked(data: bytes, filename: str, mode: str) -> Image.Image:
+    with Image.open(BytesIO(data)) as opened:
         image = opened.copy()
     if image.mode != mode or image.size != CANVAS_SIZE:
-        raise ValueError(f"invalid {path.name}: expected {mode} {CANVAS_SIZE}")
+        raise ValueError(f"invalid {filename}: expected {mode} {CANVAS_SIZE}")
     return image
 
 
-def _validate_inputs(asset_dir: Path, canonical_path: Path) -> tuple[Image.Image, dict, dict[str, Image.Image], dict]:
-    canonical_hash = _sha256(canonical_path)
+def _validate_inputs(
+    asset_dir: Path, canonical_path: Path
+) -> tuple[
+    Image.Image,
+    dict,
+    dict[str, Image.Image],
+    dict,
+    ValidatedNeutralEyeSnapshot,
+]:
+    try:
+        canonical_bytes = canonical_path.read_bytes()
+    except OSError as error:
+        raise ValueError("invalid canonical image") from error
+    canonical_hash = hashlib.sha256(canonical_bytes).hexdigest()
     if canonical_hash != CANONICAL_SHA256:
         raise ValueError("canonical hash does not match the binding canonical SHA-256")
-    canonical = _open_checked(canonical_path, "RGBA")
-    authoring_path = asset_dir / "authoring.json"
-    try:
-        authoring = json.loads(authoring_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ValueError("invalid authoring.json") from error
-    if authoring.get("canonical", {}).get("sha256") != CANONICAL_SHA256:
-        raise ValueError("authoring canonical hash does not match the binding hash")
-    if authoring.get("motion_limits") != MOTION_LIMITS:
-        raise ValueError("authoring motion limits do not match the binding limits")
-
-    images: dict[str, Image.Image] = {}
-    actual_hashes = {"canonical-idle.png": canonical_hash, "authoring.json": _sha256(authoring_path)}
-    recorded_outputs = authoring.get("outputs")
-    if not isinstance(recorded_outputs, dict):
-        raise ValueError("authoring outputs are missing")
-    for filename, mode in OUTPUTS.items():
-        path = asset_dir / filename
-        actual_hash = _sha256(path)
-        recorded = recorded_outputs.get(filename, {})
-        if (
-            recorded.get("sha256") != actual_hash
-            or recorded.get("mode") != mode
-            or recorded.get("size") != list(CANVAS_SIZE)
-        ):
-            raise ValueError(f"authoring output hash/mode/size mismatch for {filename}")
-        images[filename] = _open_checked(path, mode)
-        actual_hashes[filename] = actual_hash
-    return canonical, authoring, images, actual_hashes
+    canonical = _decode_checked(canonical_bytes, canonical_path.name, "RGBA")
+    snapshot = ValidatedNeutralEyeSnapshot.load(asset_dir)
+    authoring = snapshot.authoring()
+    images = snapshot.images()
+    actual_hashes = {
+        "canonical-idle.png": canonical_hash,
+        "authoring.json": snapshot.authoring_sha256,
+        **snapshot.output_hashes(),
+    }
+    return canonical, authoring, images, actual_hashes, snapshot
 
 
 def _paths_overlap(first: Path, second: Path) -> bool:
@@ -180,7 +179,10 @@ def _binary_support(images: dict[str, Image.Image]) -> tuple[Image.Image, Image.
 
 
 def _changed_pixel_count(first: Image.Image, second: Image.Image) -> int:
-    return sum(pixel != (0, 0, 0, 0) for pixel in ImageChops.difference(first, second).getdata())
+    return sum(
+        pixel != (0, 0, 0, 0)
+        for pixel in tuple(ImageChops.difference(first, second).getdata())
+    )
 
 
 def _maximum_channel_delta(first: Image.Image, second: Image.Image) -> int:
@@ -337,7 +339,9 @@ def build_preview(asset_dir: Path, canonical_path: Path, output_dir: Path) -> di
     canonical_path = Path(canonical_path)
     output_dir = Path(output_dir)
     _validate_output_path(asset_dir, canonical_path, output_dir)
-    canonical, authoring, images, input_hashes = _validate_inputs(asset_dir, canonical_path)
+    canonical, authoring, images, input_hashes, snapshot = _validate_inputs(
+        asset_dir, canonical_path
+    )
     offsets = preview_offsets()
     requested_targets = tuple(target_for_frame(index) for index in range(FRAME_COUNT))
     if any(
@@ -349,7 +353,8 @@ def build_preview(asset_dir: Path, canonical_path: Path, output_dir: Path) -> di
         raise ValueError("frame 83 must settle within 5e-5 of center")
     if offsets[84:] != ((0.0, 0.0),) * 6:
         raise ValueError("frames 84..89 must be exact center")
-    frames = [compose_pose(asset_dir, eye_x, eye_y) for eye_x, eye_y in offsets]
+    compositor = NeutralEyeCompositor.from_snapshot(snapshot)
+    frames = [compositor.compose(eye_x, eye_y) for eye_x, eye_y in offsets]
     support, ring = _binary_support(images)
     containment, final_center = _validate_rendered_frames(frames, canonical, support, ring)
 
@@ -405,6 +410,10 @@ def build_preview(asset_dir: Path, canonical_path: Path, output_dir: Path) -> di
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--show-compositor-path"]:
+        module = sys.modules[NeutralEyeCompositor.__module__]
+        print(Path(module.__file__).resolve())
+        return 0
     parser = argparse.ArgumentParser(description="Build deterministic neutral-eye follow preview")
     parser.add_argument("--asset-dir", type=Path, required=True)
     parser.add_argument("--canonical", type=Path, required=True)

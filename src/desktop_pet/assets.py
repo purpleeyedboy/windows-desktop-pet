@@ -4,6 +4,7 @@ from typing import Sequence
 from PIL import Image
 
 from .model import ACTIONS
+from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
 
 
@@ -14,6 +15,29 @@ EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
 
 def runtime_frame_root() -> Path:
     return asset_path("assets", "keyframes")
+
+
+def neutral_eye_source_probe_root() -> Path:
+    """Return the source-checkout-only neutral-eye authoring directory."""
+    return (
+        Path(__file__).resolve().parents[2]
+        / "assets"
+        / "rig"
+        / "v1"
+        / "source"
+        / "eye-neutral-v1"
+    )
+
+
+def load_neutral_eye_source_probe(
+    root: Path | None = None,
+) -> NeutralEyeCompositor:
+    """Load the validated source-checkout-only eye-follow probe.
+
+    This deliberately does not use the bundled asset resolver and therefore
+    makes no packaging or frozen-application resource guarantee.
+    """
+    return NeutralEyeCompositor.load(root or neutral_eye_source_probe_root())
 
 
 def find_frame_paths(root: Path, action: str) -> list[Path]:
