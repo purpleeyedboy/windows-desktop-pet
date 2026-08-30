@@ -38,4 +38,8 @@ Implementation base: 10f83f7
 Task N1: complete (remote candidate commit 28afa454e805c70b6b2133f6a63fc710a9b05217; user-directed screen-left neutral underlay alignment corrected by an area-preserving 2 px source shift; 29 focused/full tests passed; 13 named outputs deterministic; static user visual acceptance received 2026-08-30)
 Task N2: complete (offline deterministic 90-frame eye-follow preview committed with fixed web-palette GIF, containment/timing validation, reproducibility and transactional-replacement coverage; post-review RGB-only containment/final-center, output-path isolation, and failed-restore backup preservation coverage added; future minors: GIF oracle shares implementation, validate/render TOCTOU, and peak-memory optimization; R5 remains blocked)
 Task N3: complete (commits 2069d06..caa657a, task review and final whole-branch review approved; offline arbitrary-angle mapping proof uses `±3.0/±2.0` limits, a continuous radial-clamped elliptical cursor mapping, and deterministic versioned preview-v2 evidence; retained Minor: validate/render TOCTOU; no runtime cursor acquisition)
-R5: remains blocked; no head directions, blink, tilt, runtime, packaging, or EXE work started
+R5: remains blocked; no visible runtime integration; head directions, blink, tilt, packaging, and EXE work remain blocked
+
+## Runtime eye-follow foundation
+
+Task 1: complete (commits 0f9e895..ab2bea4, task review and final whole-increment review approved after lifecycle, live-geometry, numeric, and Win32 ABI fixes; continuous Win32 cursor acquisition and smoothed eye-motion controller only; no visible runtime composition or R5 work)
