@@ -55,3 +55,12 @@ Task 4: complete (commits c12215d..75a1068, independent review approved with 0 C
 Task 5: complete (commits 286ecbb..bc51e93, independent review approved with 0 Critical/Important/Minor after neutral-first startup, transactional partial-init cleanup, renderer-plus-geometry snapshot rollback, cancel-failure terminal routing, unified adapter cancellation, and public negative-coordinate path fixes; final whole-increment review then found scheduler/cancel ownership hazards, fixed by 03d9041 + 9685acb and independently re-reviewed approved with 0 Critical/Important/Minor; 148 eye controller/session focused passed, 27 headless PetWindow passed, 297 non-Tk passed with 3 platform skips; real Tk remained unavailable with 20 no-DISPLAY fixture errors; source probe/import smoke passed; Windows performance and human visual gates remain pending)
 Whole-increment final review: complete (six-agent read-only review covered continuous eye math, compositor determinism, runtime lifecycle, action ownership, window presentation transactions, startup/shutdown, tests, and publication scope; two Important scheduler/cancel findings were repaired and closed by the original reviewers; final combined verdict approved with 0 Critical/Important/Minor; optional RGBA hot-path conversion cleanup remains measurement-gated and non-blocking)
 R5: remains blocked; the visible integration is a source-checkout-only probe, not a packaged or visually approved runtime, and no head, blink, tilt, packaging, release, or EXE work may begin
+
+## Windows source validation Task 2
+
+Hosted gate green: GitHub Actions run `33347015369` / job `99352958003` passed
+on Windows Server 2025 with Pillow 11.3.0; the full `python -m pytest -q`
+completed `487 passed in 256.96s`. The Windows raw-pixel gate passed in the
+hosted run. Independent re-review finished with 0 Critical, 0 Important, and
+0 Minor findings. PR #1 remains open pending merge authorization. R5 remains
+blocked.

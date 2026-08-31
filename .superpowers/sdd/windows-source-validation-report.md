@@ -155,3 +155,16 @@ contains approved bytes.
    `python -m pytest -q tests/test_neutral_eye_compositor.py` (`36 passed`).
 3. `git diff --check` and `git diff --cached --check` both exited 0 with no
    output. No production code or visual asset changed.
+
+### Hosted Windows GREEN
+
+GitHub Actions run `33347015369`, job `99352958003`, completed successfully on
+Windows Server 2025 with Pillow 11.3.0. Every workflow step succeeded and the
+unmodified full command `python -m pytest -q` reported `487 passed in
+256.96s`.
+
+This is the hosted confirmation that the Windows raw-pixel gate passed: freshly
+built neutral-eye PNGs decoded to the approved mode, size, and raw pixel bytes
+before the test-only strict-loader/evidence normalization path was used. The
+PR contains the expected nine scoped files. It remains open and unmerged;
+merge authorization has not been granted. R5 remains blocked.
