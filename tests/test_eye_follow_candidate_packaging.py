@@ -173,6 +173,13 @@ def test_archive_verifier_enforces_the_candidate_archive_contract():
     assert "byte" in verifier.lower()
 
 
+def test_archive_verifier_allows_tk_runtime_gif_but_rejects_project_gifs():
+    verifier.validate_forbidden_paths({"_tk_data/images/logoLarge.gif"})
+
+    with pytest.raises(verifier.VerificationError, match="forbidden GIF archive path"):
+        verifier.validate_forbidden_paths({"assets/bubble/preview.gif"})
+
+
 def test_archive_verifier_compares_all_resource_bytes_and_rejects_forbidden_paths(
     tmp_path, monkeypatch, capsys
 ):

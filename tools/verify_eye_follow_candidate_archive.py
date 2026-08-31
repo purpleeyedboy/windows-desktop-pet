@@ -73,7 +73,7 @@ def validate_forbidden_paths(names: set[str]) -> None:
             raise VerificationError(f"forbidden rig source archive path: {normalized}")
         if normalized.startswith("qa/"):
             raise VerificationError(f"forbidden QA archive path: {normalized}")
-        if normalized.lower().endswith(".gif"):
+        if normalized.lower().endswith(".gif") and not normalized.startswith("_tk_data/"):
             raise VerificationError(f"forbidden GIF archive path: {normalized}")
 
 
