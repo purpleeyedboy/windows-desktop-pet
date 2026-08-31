@@ -31,7 +31,10 @@ def test_windows_source_validation_workflow_is_security_constrained():
     assert "persist-credentials: false" in workflow
     assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in workflow
     assert workflow.count("uses: ") == 2
-    assert "python -m pip install \".[dev]\"" in workflow
+    assert (
+        "python -m pip install \".[dev]\" -r requirements-assets.txt"
+        in workflow
+    )
     assert "PIL.__version__.split(\".\", 1)[0] == \"11\"" in workflow
     assert "python -m pytest -q" in workflow
     assert "secrets." not in workflow.lower()

@@ -48,3 +48,31 @@ release, or visual asset was created or modified.
 The future hosted Windows job will provide automated source evidence only. It
 does not approve motion naturalness, neutral/action joins, four-size
 performance, multi-monitor behavior, or R5. R5 remains blocked.
+
+## Hosted RED follow-up and local fix
+
+GitHub Actions run `33344898515`, job `99347046952`, completed on Windows
+Server 2025 with Python 3.11.9 and Pillow 11.3.0. Checkout, Python setup,
+project dev-dependency installation, and the Pillow verification passed. The
+full `python -m pytest -q` command then failed during collection because the
+remote-base `tests/test_interpolate_action.py` imports NumPy while the workflow
+installed only `.[dev]`.
+
+The remote merge tree already contains `requirements-assets.txt` with the
+asset-test dependencies. The local continuation checkout intentionally does
+not hydrate that unchanged remote file, so it was neither created nor edited.
+
+TDD for the workflow-only correction:
+
+1. The contract test was first strengthened to require
+   `python -m pip install ".[dev]" -r requirements-assets.txt`.
+2. `python -m pytest -q tests/test_windows_source_validation_workflow.py`
+   before the workflow edit exited 1: `1 failed in 0.02s`. The only failed
+   assertion was the missing `requirements-assets.txt` install argument.
+3. The workflow dependency command was changed to
+   `python -m pip install ".[dev]" -r requirements-assets.txt`.
+4. The same focused command then exited 0: `1 passed in 0.01s`.
+5. `git diff --check` after the three scoped updates exited 0 with no output.
+
+This preserves the complete suite command and does not skip or ignore
+`tests/test_interpolate_action.py`. R5 remains blocked.

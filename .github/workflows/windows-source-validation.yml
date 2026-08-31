@@ -19,6 +19,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install ".[dev]"
+      - run: python -m pip install ".[dev]" -r requirements-assets.txt
       - run: python -c 'import PIL; assert PIL.__version__.split(".", 1)[0] == "11", PIL.__version__'
       - run: python -m pytest -q
