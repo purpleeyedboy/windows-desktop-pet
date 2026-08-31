@@ -53,6 +53,10 @@
 
 - Modify if evidence requires it: `.github/workflows/windows-source-validation.yml`
 - Modify if evidence requires it: `tests/test_windows_source_validation_workflow.py`
+- Create if checkout evidence requires it: `.gitattributes`
+- Create if checkout evidence requires it: `tests/test_repository_byte_hash_attributes.py`
+- Modify if Windows-only test infrastructure fails: `tests/test_interpolate_action.py`
+- Modify if cross-platform authoring bytes differ: `tests/test_neutral_eye_layers.py`
 - Modify: `.superpowers/sdd/windows-source-validation-report.md`
 - Modify: `.superpowers/sdd/progress.md`
 
@@ -62,8 +66,11 @@
 - [ ] Open a pull request targeting `codex/desktop-pet-6-frame-alpha`.
 - [ ] Inspect the actual pull-request workflow run, jobs, steps, and failure logs when applicable.
 - [ ] If the job fails, reproduce the smallest responsible layer, add a RED regression or contract check when practical, fix, re-review, and rerun.
+- [ ] Preserve LF checkout bytes for only the text assets whose approved SHA values are part of the test contract.
+- [ ] Keep cross-drive path aliases portable on Windows without changing product interpolation code.
+- [ ] Separate cross-platform raw-pixel identity, same-host PNG byte determinism, and published-asset fixed-SHA integrity without weakening the production loader.
 - [ ] Require the hosted Windows job to pass before integration.
-- [ ] Verify the PR diff contains only the plan, workflow, workflow test, report, and progress ledger.
+- [ ] Verify the PR diff contains only the plan, workflow, workflow test, evidence-led test infrastructure fixes, report, and progress ledger.
 - [ ] Merge only after independent final review and re-reading the remote head.
 - [ ] Confirm the default branch moved to the reviewed commit and R5 remains blocked.
 
