@@ -48,7 +48,24 @@ def make_keyframes(root: Path) -> Path:
 
 
 def relative_alias(path: Path) -> Path:
-    return Path(os.path.relpath(path.resolve(), Path.cwd()))
+    target = path.resolve()
+    try:
+        return Path(os.path.relpath(target, Path.cwd()))
+    except ValueError:
+        return target
+
+
+def test_relative_alias_uses_absolute_target_when_paths_have_different_drives(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    target = tmp_path / "target"
+
+    def different_drive(*_args: object) -> str:
+        raise ValueError("path is on mount 'C:', start on mount 'D:'")
+
+    monkeypatch.setattr(os.path, "relpath", different_drive)
+
+    assert relative_alias(target) == target.resolve()
 
 
 def tree_snapshot(path: Path) -> dict[str, bytes] | None:

@@ -76,3 +76,82 @@ TDD for the workflow-only correction:
 
 This preserves the complete suite command and does not skip or ignore
 `tests/test_interpolate_action.py`. R5 remains blocked.
+
+## Task 2 hosted-failure remediation
+
+### Hosted platform RED
+
+GitHub Actions run `33345159857`, job `99347761338`, ran on Windows Server
+2025 with Python 3.11.9 and Pillow 11.3.0. Dependency installation and the
+Pillow-major gate passed; the complete `python -m pytest -q` run then reported
+`24 failed, 459 passed`. The known platform failures were CRLF conversion of
+the four fixed-hash text sources, cross-drive `relpath` in the interpolation
+test helper, and fresh neutral-eye PNG encoding bytes differing despite equal
+decoded pixels.
+
+### TDD evidence
+
+1. Before `.gitattributes` existed,
+   `python -m pytest -q tests/test_repository_attributes.py` exited 1 with
+   `1 failed`; the expected assertion was `repository .gitattributes is
+   missing`.
+2. Added only the four exact-path `text eol=lf` rules. The same command then
+   exited 0 with `1 passed`.
+3. A mocked cross-drive `os.path.relpath` ValueError first made
+   `python -m pytest -q tests/test_interpolate_action.py::test_relative_alias_uses_absolute_target_when_paths_have_different_drives`
+   exit 1 with that ValueError. After the test-helper-only fallback to the
+   resolved absolute target, the restored remote test module passed:
+   `9 passed`.
+4. `test_fresh_outputs_match_approved_mode_size_and_raw_pixels` is the hard
+   gate for each fresh output PNG's mode, size, and decoded `tobytes()` against
+   its committed approved counterpart. The focused regression re-encodes a
+   temporary same-pixel PNG with distinct bytes, proves the unchanged
+   `ValidatedNeutralEyeSnapshot.load` fixed-SHA loader rejects it, then copies
+   only committed approved PNG bytes plus committed `authoring.json` into the
+   temporary integration fixture after that pixel gate. Generator-content
+   tests continue to use the fresh build. The two-build byte test remains and
+   is explicitly scoped to same-host/same-codec determinism.
+
+### Verification
+
+- `python -m pytest -q tests/test_neutral_eye_layers.py`: `34 passed`.
+- `python -m pytest -q tests/test_neutral_eye_compositor.py`: `36 passed`.
+- `python -m pytest -q tests/test_repository_attributes.py tests/test_windows_source_validation_workflow.py`:
+  `2 passed`.
+- `python -m pytest -q tests/test_neutral_eye_preview.py`: `27 passed`.
+- `python -m pytest -q tests/test_animation.py tests/test_assets.py tests/test_eye_follow.py tests/test_eye_runtime.py tests/test_layered_window.py tests/test_main.py tests/test_model.py`:
+  `202 passed, 3 skipped`.
+- The applicable local non-Tk total is `310 passed, 3 skipped`; Tk window tests
+  remain excluded because this headless checkout has no display server.
+- `git diff --check`: exit 0 with no output.
+
+### Scope and remaining hosted unknowns
+
+No PNG, GIF, font binary, approved metadata, production fixed-SHA loader, or
+product interpolation code was changed. Local validation temporarily hydrated
+the byte-for-byte remote `tools/interpolate_action.py`, `tools/animation_qa.py`,
+and `requirements-assets.txt` only because this continuation checkout omitted
+them; they are not staged or committed. The next hosted Windows run is still
+needed to confirm Windows checkout applies the new exact LF attributes and to
+observe the complete suite there. R5 remains blocked.
+
+### Task 2 fixture-metadata follow-up
+
+An independent review found that the normalized test fixture copied committed
+`authoring.json` but returned the pre-normalization fresh metadata object. On
+Windows that object can contain fresh PNG hashes while the temporary directory
+contains approved bytes.
+
+1. The same-pixel/different-byte regression was extended first to require the
+   normalization helper to return metadata equal to parsing the written
+   temporary `authoring.json`. Before the helper change,
+   `python -m pytest -q tests/test_neutral_eye_layers.py::test_same_pixel_different_png_bytes_require_test_only_normalization`
+   exited 1: the helper returned `None` instead of the parsed normalized
+   metadata.
+2. The test-only helper now parses and returns the `authoring.json` it wrote,
+   and `normalized_built` returns that normalized object rather than the fresh
+   builder metadata. The focused regression then passed (`1 passed`), as did
+   `python -m pytest -q tests/test_neutral_eye_layers.py` (`34 passed`) and
+   `python -m pytest -q tests/test_neutral_eye_compositor.py` (`36 passed`).
+3. `git diff --check` and `git diff --cached --check` both exited 0 with no
+   output. No production code or visual asset changed.
