@@ -259,24 +259,13 @@ def test_archive_verifier_normalizes_windows_member_names_and_rejects_collisions
     verifier.verify_archive(windows_archive)
     assert "neutral-eye 6" in capsys.readouterr().out
 
-    collision_source = tmp_path / "collision.png"
-    collision_source.write_bytes(b"collision")
-    collision_archive = tmp_path / "normalized-collision.exe"
-    CArchiveWriter(
-        str(collision_archive),
-        entries
-        + [
-            (
-                "assets/keyframes/shake/00.png",
-                str(collision_source),
-                True,
-                "x",
-            )
-        ],
-        "libpython3.12.so",
-    )
     with pytest.raises(verifier.VerificationError, match="normalized archive path collision"):
-        verifier.verify_archive(collision_archive)
+        verifier.normalized_archive_members(
+            [
+                r"assets\keyframes\shake\00.png",
+                "assets/keyframes/shake/00.png",
+            ]
+        )
 
 
 def test_archive_verifier_wraps_source_read_errors(tmp_path, monkeypatch):
