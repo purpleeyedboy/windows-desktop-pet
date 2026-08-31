@@ -29,7 +29,7 @@ Task R1: complete (commit ab0aa68..15f09a2, spec and quality review approved; ca
 Task R2: complete (commits 15f09a2..3571c73, spec and quality review approved; corrected body-fill polygon passed real Alpha containment)
 Task R3: complete (commits 3571c73..3fe889a, Important RGB/checkerboard finding repaired with user-authorized deterministic fixed-mask Alpha; re-review approved)
 Task R4: complete (commits 3fe889a..735f8d2, Critical zero-body-fill contribution and three Important findings fixed; re-review approved; Minors for final review: stronger mask-outside test point, explicit input mode/size checks, replace-phase group transaction)
-Task R5: pending
+Task R5: remains blocked; Windows source-validation Task 1 is local source-only evidence and does not authorize runtime or visual work
 
 ## Neutral eye aperture-warp feasibility
 
