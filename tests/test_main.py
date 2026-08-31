@@ -52,8 +52,8 @@ def test_main_enables_dpi_awareness_before_creating_tk(monkeypatch):
     )
     monkeypatch.setattr(
         main_module,
-        "load_neutral_eye_source_probe",
-        lambda: calls.append("probe") or compositor,
+        "load_neutral_eye_compositor",
+        lambda: calls.append("compositor") or compositor,
         raising=False,
     )
     monkeypatch.setattr(
@@ -77,12 +77,12 @@ def test_main_enables_dpi_awareness_before_creating_tk(monkeypatch):
     )
 
     assert main_module.main() == 0
-    assert calls[:5] == ["dpi", "tk", "frames", "probe", "cursor"]
+    assert calls[:5] == ["dpi", "tk", "frames", "compositor", "cursor"]
     assert calls[5][0] == "pet"
     assert calls[5][2:] == (frames, compositor, cursor)
 
 
-def test_main_routes_source_probe_failure_through_fatal_startup(
+def test_main_routes_compositor_failure_through_fatal_startup(
     monkeypatch,
 ) -> None:
     main_module = importlib.import_module("desktop_pet.main")
@@ -112,8 +112,8 @@ def test_main_routes_source_probe_failure_through_fatal_startup(
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
     monkeypatch.setattr(
         main_module,
-        "load_neutral_eye_source_probe",
-        lambda: (_ for _ in ()).throw(ValueError("bad source probe")),
+        "load_neutral_eye_compositor",
+        lambda: (_ for _ in ()).throw(ValueError("bad compositor")),
         raising=False,
     )
     monkeypatch.setattr(main_module, "PetWindow", lambda *_a, **_k: pet_calls.append(1))
@@ -126,7 +126,7 @@ def test_main_routes_source_probe_failure_through_fatal_startup(
     assert main_module.main() == 1
     assert pet_calls == []
     assert len(fatal) == 1
-    assert fatal[0][0] == "bad source probe"
+    assert fatal[0][0] == "bad compositor"
     assert isinstance(fatal[0][1], FakeRoot)
 
 
@@ -173,7 +173,7 @@ def test_main_finally_uses_pet_close_before_direct_root_cleanup(monkeypatch) -> 
     monkeypatch.setattr(main_module, "SingleInstanceMutex", FakeMutex)
     monkeypatch.setattr(main_module.tk, "Tk", FakeRoot)
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
-    monkeypatch.setattr(main_module, "load_neutral_eye_source_probe", object)
+    monkeypatch.setattr(main_module, "load_neutral_eye_compositor", object)
     monkeypatch.setattr(main_module, "Win32CursorProvider", object)
     monkeypatch.setattr(main_module, "PetWindow", FakePet)
 
@@ -213,7 +213,7 @@ def test_main_constructor_failure_reports_fatal_then_destroys_root(monkeypatch) 
     monkeypatch.setattr(main_module, "SingleInstanceMutex", FakeMutex)
     monkeypatch.setattr(main_module.tk, "Tk", FakeRoot)
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
-    monkeypatch.setattr(main_module, "load_neutral_eye_source_probe", object)
+    monkeypatch.setattr(main_module, "load_neutral_eye_compositor", object)
     monkeypatch.setattr(main_module, "Win32CursorProvider", object)
     monkeypatch.setattr(
         main_module,

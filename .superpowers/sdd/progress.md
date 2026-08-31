@@ -40,6 +40,13 @@ Task N2: complete (offline deterministic 90-frame eye-follow preview committed w
 Task N3: complete (commits 2069d06..caa657a, task review and final whole-branch review approved; offline arbitrary-angle mapping proof uses `±3.0/±2.0` limits, a continuous radial-clamped elliptical cursor mapping, and deterministic versioned preview-v2 evidence; retained Minor: validate/render TOCTOU; no runtime cursor acquisition)
 R5: remains blocked; no visible runtime integration; head directions, blink, tilt, packaging, and EXE work remain blocked
 
+## Eye-follow candidate EXE
+
+Plan: docs/superpowers/plans/2026-08-31-eye-follow-candidate-exe.md
+Task 1: complete (commits a030df5..0f8ea0f, independent review approved with 0 Critical, 0 Important, and 0 Minor; frozen bundles use only the packaged runtime eye directory, source checkouts retain the reviewed probe fallback; R5 remains blocked)
+Task 2: complete locally (commits 8a4823a..9de7dc4, independent review approved after Windows archive-path, validator, Tcl/Tk, BOM, and cleanup-safety fixes; 8 candidate contracts passed, 52 focused passed with 1 skipped, 188 non-Tk regressions passed; hosted Windows build and artifact remain pending; R5 remains blocked)
+Final candidate review: ready for hosted build (commits 327d0c2..425d88d, final whole-branch review approved with 0 Critical, 0 Important, and 0 Minor after nested-junction cleanup hardening; hosted full suite, real archive, size, hash, and artifact remain pending; R5 remains blocked)
+
 ## Runtime eye-follow foundation
 
 Task 1: complete (commits 0f9e895..ab2bea4, task review and final whole-increment review approved after lifecycle, live-geometry, numeric, and Win32 ABI fixes; continuous Win32 cursor acquisition and smoothed eye-motion controller only; no visible runtime composition or R5 work)
