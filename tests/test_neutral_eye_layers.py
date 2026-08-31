@@ -16,6 +16,14 @@ NEUTRAL_CANDIDATE = (
 )
 REJECTED_MASK_DIR = ROOT / "assets/rig/v1/source/masks"
 CANDIDATE_QA_DIR = ROOT / "qa/neutral-eye-v1/candidate"
+APPROVED_ASSET_DIR = ROOT / "assets/rig/v1/source/eye-neutral-v1"
+AUTHORED_PNGS = (
+    "underlay.png",
+    "eye-left.png",
+    "eye-right.png",
+    "eye-left-mask.png",
+    "eye-right-mask.png",
+)
 CANONICAL_SHA256 = "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
 MOTION_LIMITS = {"x": 3.0, "y": 2.0}
 EYES = ("left", "right")
@@ -78,11 +86,53 @@ def _binary_support(mask: Image.Image) -> Image.Image:
     return mask.point(lambda value: 255 if value else 0)
 
 
+def _decoded_png_signature(path: Path) -> tuple[str, tuple[int, int], bytes]:
+    with Image.open(path) as image:
+        return image.mode, image.size, image.tobytes()
+
+
+def _assert_fresh_outputs_match_approved_pixels(asset_dir: Path) -> None:
+    for filename in AUTHORED_PNGS:
+        assert _decoded_png_signature(asset_dir / filename) == _decoded_png_signature(
+            APPROVED_ASSET_DIR / filename
+        )
+
+
+def _normalize_test_only_snapshot_to_approved_bytes(asset_dir: Path) -> dict:
+    """Prepare strict-loader/evidence integration inputs after the raw-pixel gate."""
+    _assert_fresh_outputs_match_approved_pixels(asset_dir)
+    fresh_authoring_path = asset_dir / "authoring.json"
+    approved_authoring_path = APPROVED_ASSET_DIR / "authoring.json"
+    fresh_metadata = json.loads(fresh_authoring_path.read_text(encoding="utf-8"))
+    approved_metadata = json.loads(approved_authoring_path.read_text(encoding="utf-8"))
+    try:
+        for filename in AUTHORED_PNGS:
+            fresh_metadata["outputs"][filename]["sha256"] = approved_metadata[
+                "outputs"
+            ][filename]["sha256"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("fresh metadata does not match approved metadata") from error
+    if fresh_metadata != approved_metadata:
+        raise ValueError("fresh metadata does not match approved metadata")
+    for filename in AUTHORED_PNGS:
+        (asset_dir / filename).write_bytes(
+            (APPROVED_ASSET_DIR / filename).read_bytes()
+        )
+    fresh_authoring_path.write_bytes(approved_authoring_path.read_bytes())
+    return json.loads(fresh_authoring_path.read_text(encoding="utf-8"))
+
+
 @pytest.fixture()
 def built(tmp_path: Path) -> tuple[Path, dict]:
     output_dir = tmp_path / "eye-neutral-v1"
     metadata = _builder_module().build_assets(CANONICAL, NEUTRAL_CANDIDATE, output_dir)
     return output_dir, metadata
+
+
+@pytest.fixture()
+def normalized_built(built: tuple[Path, dict]) -> tuple[Path, dict]:
+    asset_dir, _ = built
+    return asset_dir, _normalize_test_only_snapshot_to_approved_bytes(asset_dir)
 
 
 def test_build_rejects_noncanonical_source(tmp_path: Path) -> None:
@@ -93,6 +143,55 @@ def test_build_rejects_noncanonical_source(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="canonical SHA-256"):
         _builder_module().build_assets(modified_path, NEUTRAL_CANDIDATE, tmp_path / "out")
+
+
+def test_fresh_outputs_match_approved_mode_size_and_raw_pixels(
+    built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = built
+
+    _assert_fresh_outputs_match_approved_pixels(asset_dir)
+
+
+def test_same_pixel_different_png_bytes_require_test_only_normalization(
+    built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = built
+    target = asset_dir / "underlay.png"
+    approved = APPROVED_ASSET_DIR / target.name
+    original_signature = _decoded_png_signature(target)
+    with Image.open(target) as image:
+        image.copy().save(target, format="PNG", optimize=False, compress_level=1)
+
+    assert _decoded_png_signature(target) == original_signature
+    assert target.read_bytes() != approved.read_bytes()
+
+    from desktop_pet.neutral_eye_compositor import ValidatedNeutralEyeSnapshot
+
+    with pytest.raises(ValueError, match="approved.*SHA|SHA.*approved"):
+        ValidatedNeutralEyeSnapshot.load(asset_dir)
+
+    normalized_metadata = _normalize_test_only_snapshot_to_approved_bytes(asset_dir)
+    assert target.read_bytes() == approved.read_bytes()
+    assert normalized_metadata == json.loads(
+        (asset_dir / "authoring.json").read_text(encoding="utf-8")
+    )
+    assert ValidatedNeutralEyeSnapshot.load(asset_dir).images()[target.name].tobytes() == (
+        original_signature[2]
+    )
+
+
+def test_normalization_rejects_fresh_non_sha_metadata_drift(
+    built: tuple[Path, dict],
+) -> None:
+    asset_dir, metadata = built
+    metadata["eyes"]["left"]["movement_anchor"][0] += 0.25
+    (asset_dir / "authoring.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="metadata"):
+        _normalize_test_only_snapshot_to_approved_bytes(asset_dir)
 
 
 def test_authored_layers_have_expected_modes_sizes_and_metadata(built: tuple[Path, dict]) -> None:
@@ -191,9 +290,9 @@ def test_reviewed_masks_exclude_fixed_upper_and_lower_feature_regions(
 
 
 def test_all_five_poses_keep_fixed_upper_and_lower_regions_canonical_exact(
-    built: tuple[Path, dict],
+    normalized_built: tuple[Path, dict],
 ) -> None:
-    asset_dir, _ = built
+    asset_dir, _ = normalized_built
     canonical = Image.open(CANONICAL).convert("RGBA")
     offsets = (
         (0.0, 0.0),
@@ -402,8 +501,10 @@ def test_eye_surfaces_are_masked_canonical_pixels_with_zero_transparent_rgb(
                     assert rgba[:3] == canonical_pixels[x, y][:3]
 
 
-def test_zero_pose_uses_compositor_and_is_pixel_exact_canonical(built: tuple[Path, dict]) -> None:
-    asset_dir, _ = built
+def test_zero_pose_uses_compositor_and_is_pixel_exact_canonical(
+    normalized_built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = normalized_built
     canonical = Image.open(CANONICAL).convert("RGBA")
 
     center = _builder_module().compose_pose(asset_dir, eye_x=0.0, eye_y=0.0)
@@ -419,9 +520,9 @@ def test_zero_pose_uses_compositor_and_is_pixel_exact_canonical(built: tuple[Pat
     [(-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)],
 )
 def test_eye_motion_is_shared_bounded_and_clipped_to_stationary_apertures(
-    built: tuple[Path, dict], eye_x: float, eye_y: float
+    normalized_built: tuple[Path, dict], eye_x: float, eye_y: float
 ) -> None:
-    asset_dir, metadata = built
+    asset_dir, metadata = normalized_built
     canonical = Image.open(CANONICAL).convert("RGBA")
     pose = _builder_module().compose_pose(asset_dir, eye_x=eye_x, eye_y=eye_y)
     union = ImageChops.lighter(
@@ -473,9 +574,9 @@ def test_rgba_default_bbox_would_miss_an_rgb_only_outside_support_change(
     [(-3.0, 0.0), (3.0, 0.0), (0.0, -2.0), (0.0, 2.0)],
 )
 def test_warp_pins_aperture_boundary_and_moves_anchor_region(
-    built: tuple[Path, dict], eye_x: float, eye_y: float
+    normalized_built: tuple[Path, dict], eye_x: float, eye_y: float
 ) -> None:
-    asset_dir, metadata = built
+    asset_dir, metadata = normalized_built
     canonical = Image.open(CANONICAL).convert("RGBA")
     pose = _builder_module().compose_pose(asset_dir, eye_x=eye_x, eye_y=eye_y)
 
@@ -506,8 +607,10 @@ def test_warp_pins_aperture_boundary_and_moves_anchor_region(
         ).getbbox() is not None
 
 
-def test_warp_exposes_no_trailing_underlay_core(built: tuple[Path, dict]) -> None:
-    asset_dir, _ = built
+def test_warp_exposes_no_trailing_underlay_core(
+    normalized_built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = normalized_built
     from desktop_pet.neutral_eye_compositor import (
         NeutralEyeCompositor,
         ValidatedNeutralEyeSnapshot,
@@ -540,8 +643,10 @@ def test_warp_exposes_no_trailing_underlay_core(built: tuple[Path, dict]) -> Non
                     assert not (red >= 220 and green <= 35 and blue >= 220)
 
 
-def test_out_of_range_motion_is_rejected(built: tuple[Path, dict]) -> None:
-    asset_dir, _ = built
+def test_out_of_range_motion_is_rejected(
+    normalized_built: tuple[Path, dict],
+) -> None:
+    asset_dir, _ = normalized_built
 
     with pytest.raises(ValueError, match="motion limits"):
         _builder_module().compose_pose(asset_dir, eye_x=3.01, eye_y=0.0)
@@ -550,9 +655,9 @@ def test_out_of_range_motion_is_rejected(built: tuple[Path, dict]) -> None:
 
 
 def test_extreme_poses_add_no_near_black_pixels_in_outer_boundary_ring(
-    built: tuple[Path, dict],
+    normalized_built: tuple[Path, dict],
 ) -> None:
-    asset_dir, _ = built
+    asset_dir, _ = normalized_built
     canonical = Image.open(CANONICAL).convert("RGBA")
     canonical_pixels = canonical.load()
 
@@ -571,9 +676,9 @@ def test_extreme_poses_add_no_near_black_pixels_in_outer_boundary_ring(
 
 
 def test_contact_sheet_writes_required_static_evidence_and_stats(
-    built: tuple[Path, dict], tmp_path: Path
+    normalized_built: tuple[Path, dict], tmp_path: Path
 ) -> None:
-    asset_dir, _ = built
+    asset_dir, _ = normalized_built
     qa_dir = tmp_path / "qa"
 
     stats = _builder_module().build_contact_sheet(asset_dir, qa_dir)
@@ -631,9 +736,9 @@ def test_committed_candidate_evidence_uses_exact_motion_limit_extremes() -> None
 
 
 def test_contact_sheet_stats_detect_a_corrupted_center(
-    built: tuple[Path, dict], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    normalized_built: tuple[Path, dict], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    asset_dir, _ = built
+    asset_dir, _ = normalized_built
     module = _builder_module()
     real_compose_pose = module.compose_pose
 
@@ -650,13 +755,31 @@ def test_contact_sheet_stats_detect_a_corrupted_center(
     assert stats["center"]["maximum_channel_delta"] > 0
 
 
-def test_two_builds_and_evidence_runs_are_byte_deterministic(tmp_path: Path) -> None:
+def test_two_builds_are_same_host_same_codec_byte_deterministic(
+    tmp_path: Path,
+) -> None:
     module = _builder_module()
     asset_dirs = [tmp_path / "first-assets", tmp_path / "second-assets"]
     qa_dirs = [tmp_path / "first-qa", tmp_path / "second-qa"]
 
+    fresh_asset_hashes = []
     for asset_dir, qa_dir in zip(asset_dirs, qa_dirs, strict=True):
         module.build_assets(CANONICAL, NEUTRAL_CANDIDATE, asset_dir)
+        _assert_fresh_outputs_match_approved_pixels(asset_dir)
+        fresh_asset_hashes.append(
+            {
+                name: _sha256(asset_dir / name)
+                for name in (
+                    "underlay.png",
+                    "eye-left.png",
+                    "eye-right.png",
+                    "eye-left-mask.png",
+                    "eye-right-mask.png",
+                    "authoring.json",
+                )
+            }
+        )
+        _normalize_test_only_snapshot_to_approved_bytes(asset_dir)
         module.build_contact_sheet(asset_dir, qa_dir)
 
     asset_names = (
@@ -676,9 +799,7 @@ def test_two_builds_and_evidence_runs_are_byte_deterministic(tmp_path: Path) -> 
         "layer-contact-sheet.png",
         "stats.json",
     )
-    assert {name: _sha256(asset_dirs[0] / name) for name in asset_names} == {
-        name: _sha256(asset_dirs[1] / name) for name in asset_names
-    }
+    assert fresh_asset_hashes[0] == fresh_asset_hashes[1]
     assert {name: _sha256(qa_dirs[0] / name) for name in evidence_names} == {
         name: _sha256(qa_dirs[1] / name) for name in evidence_names
     }
