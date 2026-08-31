@@ -5,7 +5,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_neutral_eye_source_probe
+from .assets import load_frames, load_neutral_eye_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
 
@@ -87,7 +87,7 @@ def main() -> int:
         root = tk.Tk()
         root.withdraw()
         frames = load_frames()
-        compositor = load_neutral_eye_source_probe()
+        compositor = load_neutral_eye_compositor()
         cursor_provider = Win32CursorProvider()
         pet_window = PetWindow(
             root,

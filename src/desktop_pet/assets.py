@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from typing import Sequence
 
 from PIL import Image
@@ -27,6 +28,24 @@ def neutral_eye_source_probe_root() -> Path:
         / "source"
         / "eye-neutral-v1"
     )
+
+
+def neutral_eye_runtime_root() -> Path:
+    """Return the bundled neutral-eye runtime directory."""
+    return asset_path("assets", "rig", "v1", "runtime", "eye-neutral-v1")
+
+
+def load_neutral_eye_compositor(
+    root: Path | None = None,
+) -> NeutralEyeCompositor:
+    """Load the neutral-eye compositor from an explicit, runtime, or source root."""
+    if root is not None:
+        return NeutralEyeCompositor.load(root)
+
+    runtime_root = neutral_eye_runtime_root()
+    if getattr(sys, "_MEIPASS", None) or runtime_root.exists():
+        return NeutralEyeCompositor.load(runtime_root)
+    return NeutralEyeCompositor.load(neutral_eye_source_probe_root())
 
 
 def load_neutral_eye_source_probe(

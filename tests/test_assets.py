@@ -83,6 +83,100 @@ def test_neutral_eye_source_probe_root_is_explicitly_source_checkout_only(
     ).lower()
 
 
+def test_neutral_eye_runtime_root_uses_bundled_asset_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    def fake_asset_path(*parts: str) -> Path:
+        calls.append(parts)
+        return tmp_path
+
+    monkeypatch.setattr(assets_module, "asset_path", fake_asset_path)
+
+    assert assets_module.neutral_eye_runtime_root() == tmp_path
+    assert calls == [("assets", "rig", "v1", "runtime", "eye-neutral-v1")]
+
+
+def test_load_neutral_eye_compositor_passes_explicit_root_directly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sentinel = object()
+    calls: list[Path] = []
+
+    monkeypatch.setattr(
+        assets_module.NeutralEyeCompositor,
+        "load",
+        lambda path: calls.append(path) or sentinel,
+    )
+
+    assert assets_module.load_neutral_eye_compositor(tmp_path) is sentinel
+    assert calls == [tmp_path]
+
+
+def test_load_neutral_eye_compositor_uses_runtime_when_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    source_root = tmp_path / "source"
+    calls: list[Path] = []
+
+    monkeypatch.setattr(assets_module, "neutral_eye_runtime_root", lambda: runtime_root)
+    monkeypatch.setattr(
+        assets_module, "neutral_eye_source_probe_root", lambda: source_root
+    )
+    monkeypatch.setattr(
+        assets_module.NeutralEyeCompositor, "load", lambda path: calls.append(path)
+    )
+
+    assets_module.load_neutral_eye_compositor()
+
+    assert calls == [runtime_root]
+
+
+def test_load_neutral_eye_compositor_falls_back_to_source_in_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime_root = tmp_path / "missing-runtime"
+    source_root = tmp_path / "source"
+    calls: list[Path] = []
+
+    monkeypatch.delattr(assets_module.sys, "_MEIPASS", raising=False)
+    monkeypatch.setattr(assets_module, "neutral_eye_runtime_root", lambda: runtime_root)
+    monkeypatch.setattr(
+        assets_module, "neutral_eye_source_probe_root", lambda: source_root
+    )
+    monkeypatch.setattr(
+        assets_module.NeutralEyeCompositor, "load", lambda path: calls.append(path)
+    )
+
+    assets_module.load_neutral_eye_compositor()
+
+    assert calls == [source_root]
+
+
+def test_load_neutral_eye_compositor_uses_runtime_in_frozen_bundle_when_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runtime_root = tmp_path / "missing-runtime"
+    source_root = tmp_path / "source"
+    calls: list[Path] = []
+
+    monkeypatch.setattr(assets_module.sys, "_MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr(assets_module, "neutral_eye_runtime_root", lambda: runtime_root)
+    monkeypatch.setattr(
+        assets_module, "neutral_eye_source_probe_root", lambda: source_root
+    )
+    monkeypatch.setattr(
+        assets_module.NeutralEyeCompositor, "load", lambda path: calls.append(path)
+    )
+
+    assets_module.load_neutral_eye_compositor()
+
+    assert calls == [runtime_root]
+
+
 def test_load_neutral_eye_source_probe_uses_validated_compositor_loader(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
