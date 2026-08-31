@@ -22,6 +22,7 @@ from .eye_runtime import (
     RuntimeEyeSession,
     SessionResult,
 )
+from .head_neck_deformation import HeadPose
 from .layered_window import LayeredWindowRenderer
 from .model import ActionCycle, Rect, clamp_height, format_position
 
@@ -101,6 +102,27 @@ class _CachedCenterCompositor:
             return self.center_frame
         return self._compositor.compose(eye_x, eye_y)
 
+    def compose_head(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_pose: HeadPose,
+    ) -> object:
+        if (
+            eye_x == 0.0
+            and eye_y == 0.0
+            and head_pose.x == 0.0
+            and head_pose.y == 0.0
+        ):
+            if self.center_frame is None:
+                self.center_frame = self._compositor.compose(
+                    0.0,
+                    0.0,
+                    head_pose,
+                )
+            return self.center_frame
+        return self._compositor.compose(eye_x, eye_y, head_pose)
+
 
 @dataclass(frozen=True)
 class _PresentationSnapshot:
@@ -148,9 +170,14 @@ class PetWindow:
         legacy_mode: bool = False,
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
+        head_follow: bool = False,
     ) -> None:
         if legacy_mode:
-            if compositor is not None or cursor_provider is not None:
+            if (
+                compositor is not None
+                or cursor_provider is not None
+                or head_follow
+            ):
                 raise ValueError("legacy mode cannot accept eye-follow dependencies")
         elif compositor is None or cursor_provider is None:
             raise ValueError(
@@ -236,6 +263,7 @@ class PetWindow:
                     choose_phrase=self.dialogue.choose,
                     present_phrase=self._present_phrase,
                     on_action_failed=self._on_action_failed,
+                    head_follow=head_follow,
                 )
                 result = self.eye_session.start()
                 self._neutral_center_frame = cached_compositor.center_frame

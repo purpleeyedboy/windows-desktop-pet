@@ -14,6 +14,7 @@ from .eye_follow import (
     EyeMotionController,
     SAMPLE_INTERVAL_MS,
 )
+from .head_neck_deformation import HeadPose
 from .model import ACTIONS, ActionCycle
 
 
@@ -75,8 +76,14 @@ class RuntimeEyeSession:
         choose_phrase: Callable[[str], str],
         present_phrase: Callable[[str], None],
         on_action_failed: Callable[[str, ActionFailure], None],
+        head_follow: bool = False,
     ) -> None:
         self._compositor = compositor
+        self._head_follow = bool(head_follow)
+        if self._head_follow and not callable(
+            getattr(compositor, "compose_head", None)
+        ):
+            raise ValueError("head-follow compositor must expose compose_head")
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -106,6 +113,7 @@ class RuntimeEyeSession:
         self._start_attempted = False
         self._disabled_notified = False
         self._last_displayed_pose: tuple[float, float] | None = None
+        self._last_displayed_head_pose: tuple[float, float] | None = None
         self._center_frame: object | None = None
         self._pending_action: str | None = None
         self._active_action: str | None = None
@@ -117,6 +125,7 @@ class RuntimeEyeSession:
         self._recenter_generation = 0
         self._recenter_started_at = 0.0
         self._recenter_start_pose = (0.0, 0.0)
+        self._recenter_start_head_pose = (0.0, 0.0)
         self._recenter_complete: Callable[[], None] | None = None
 
         self._controller = EyeMotionController(
@@ -126,6 +135,11 @@ class RuntimeEyeSession:
             self._eye_geometry,
             self._following_pose_changed,
             clock=clock,
+            coordinated_pose_changed=(
+                self._following_coordinated_pose_changed
+                if self._head_follow
+                else None
+            ),
         )
 
     @property
@@ -135,6 +149,10 @@ class RuntimeEyeSession:
     @property
     def last_displayed_pose(self) -> tuple[float, float] | None:
         return self._last_displayed_pose
+
+    @property
+    def last_displayed_head_pose(self) -> tuple[float, float] | None:
+        return self._last_displayed_head_pose
 
     @property
     def action_failure(self) -> tuple[str, ActionFailure] | None:
@@ -212,9 +230,15 @@ class RuntimeEyeSession:
                 self._disable()
             return SessionResult.FALLBACK
         self._recenter_start_pose = self._last_displayed_pose or (0.0, 0.0)
+        self._recenter_start_head_pose = (
+            self._last_displayed_head_pose or (0.0, 0.0)
+        )
         self._recenter_complete = on_complete
 
-        if self._recenter_start_pose == (0.0, 0.0):
+        if (
+            self._recenter_start_pose == (0.0, 0.0)
+            and self._recenter_start_head_pose == (0.0, 0.0)
+        ):
             self._finish_recenter(epoch)
             if self._state == "disabled":
                 return SessionResult.FALLBACK
@@ -350,16 +374,38 @@ class RuntimeEyeSession:
         epoch = self._lifecycle_epoch
         self._try_display_pose((eye_x, eye_y), epoch, "following")
 
+    def _following_coordinated_pose_changed(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_x: float,
+        head_y: float,
+    ) -> None:
+        if self._state != "following":
+            return
+        epoch = self._lifecycle_epoch
+        self._try_display_pose(
+            (eye_x, eye_y),
+            epoch,
+            "following",
+            (head_x, head_y),
+        )
+
     def _try_display_pose(
         self,
         pose: tuple[float, float],
         epoch: int,
         expected_state: SessionState,
+        head_pose: tuple[float, float] = (0.0, 0.0),
     ) -> bool:
         if not self._work_is_current(epoch, expected_state):
             return False
         try:
-            frame = self._compositor.compose(*pose)
+            if self._head_follow:
+                compose_head = getattr(self._compositor, "compose_head")
+                frame = compose_head(*pose, HeadPose(*head_pose))
+            else:
+                frame = self._compositor.compose(*pose)
         except Exception:
             if self._work_is_current(epoch, expected_state):
                 self._disable()
@@ -375,6 +421,8 @@ class RuntimeEyeSession:
         if not self._work_is_current(epoch, expected_state):
             return False
         self._last_displayed_pose = pose
+        if self._head_follow:
+            self._last_displayed_head_pose = head_pose
         if expected_state == "stopped" and pose == (0.0, 0.0):
             self._center_frame = frame
         return True
@@ -456,7 +504,7 @@ class RuntimeEyeSession:
     ) -> SessionResult:
         if self._active_action != action:
             return SessionResult.REJECTED
-        self._controller.synchronize_pose(0.0, 0.0)
+        self._synchronize_controller_center()
         if not self._work_is_current(epoch, "playing"):
             return SessionResult.REJECTED
         self._pending_action = None
@@ -565,17 +613,27 @@ class RuntimeEyeSession:
         elapsed = max(0.0, self._clock() - self._recenter_started_at)
         if elapsed >= RECENTER_DURATION_SECONDS:
             pose = (0.0, 0.0)
+            head_pose = (0.0, 0.0)
         else:
             remaining = 1.0 - elapsed / RECENTER_DURATION_SECONDS
             pose = (
                 self._recenter_start_pose[0] * remaining,
                 self._recenter_start_pose[1] * remaining,
             )
-        if not self._try_display_pose(pose, epoch, "recentering"):
+            head_pose = (
+                self._recenter_start_head_pose[0] * remaining,
+                self._recenter_start_head_pose[1] * remaining,
+            )
+        if not self._try_display_pose(
+            pose,
+            epoch,
+            "recentering",
+            head_pose,
+        ):
             return
         if not self._work_is_current(epoch, "recentering"):
             return
-        if pose == (0.0, 0.0):
+        if pose == (0.0, 0.0) and head_pose == (0.0, 0.0):
             self._finish_recenter(epoch)
         else:
             self._schedule_recenter()
@@ -584,7 +642,7 @@ class RuntimeEyeSession:
         if not self._work_is_current(epoch, "recentering"):
             return
         self._recenter_generation += 1
-        self._controller.synchronize_pose(0.0, 0.0)
+        self._synchronize_controller_center()
         if not self._work_is_current(epoch, "recentering"):
             return
         self._transition("playing")
@@ -678,6 +736,12 @@ class RuntimeEyeSession:
             y + self._midpoint_y * height / self._source_height,
             height,
         )
+
+    def _synchronize_controller_center(self) -> None:
+        if self._head_follow:
+            self._controller.synchronize_center()
+        else:
+            self._controller.synchronize_pose(0.0, 0.0)
 
     @staticmethod
     def _valid_pair(values: object, name: str) -> tuple[float, float]:

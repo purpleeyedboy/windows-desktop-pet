@@ -128,6 +128,22 @@ class Compositor:
         return ("frame", eye_x, eye_y)
 
 
+class HeadCompositor(Compositor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.head_calls: list[tuple[float, float, float, float]] = []
+
+    def compose_head(self, eye_x: float, eye_y: float, head_pose):
+        call = (eye_x, eye_y, head_pose.x, head_pose.y)
+        self.head_calls.append(call)
+        if self.on_compose is not None:
+            self.on_compose()
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("compose failed")
+        return ("head-frame", *call)
+
+
 class Display:
     def __init__(self) -> None:
         self.calls: list[object] = []
@@ -258,6 +274,36 @@ def make_action_session(
     )
 
 
+def make_head_session(*, cursor: object = CursorPoint(397, 349)):
+    module = _module()
+    clock = Clock()
+    scheduler = ManualScheduler(clock)
+    compositor = HeadCompositor()
+    display = Display()
+    disabled: list[str] = []
+    session = module.RuntimeEyeSession(
+        compositor=compositor,
+        cursor_provider=Cursor(cursor),
+        rect_provider=lambda: Rect(0, 0, 512, 768),
+        display=display,
+        scheduler=scheduler,
+        cancel=scheduler.cancel,
+        clock=clock,
+        on_disabled=lambda: disabled.append("disabled"),
+        action_cycle=ActionCycle(),
+        physical_frames={
+            action: tuple(object() for _ in range(6)) for action in ACTIONS
+        },
+        play_action=lambda _action: True,
+        cancel_action=lambda _action: True,
+        choose_phrase=lambda action: f"phrase:{action}",
+        present_phrase=lambda _phrase: None,
+        on_action_failed=lambda _action, _failure: None,
+        head_follow=True,
+    )
+    return session, clock, scheduler, compositor, display, disabled
+
+
 def move_once(session, scheduler: ManualScheduler) -> tuple[float, float]:
     assert session.start() is _module().SessionResult.ACCEPTED
     scheduler.run_next()
@@ -277,6 +323,64 @@ def test_start_displays_exact_center_then_starts_exactly_one_eye_tick() -> None:
     assert session.last_displayed_pose == (0.0, 0.0)
     assert [entry.delay_ms for entry in scheduler.live()] == [33]
     assert disabled == []
+
+
+def test_head_follow_session_composes_continuous_eye_and_head_pose_once_per_tick() -> None:
+    session, _, scheduler, compositor, display, disabled = make_head_session()
+
+    assert session.start() is _module().SessionResult.ACCEPTED
+    scheduler.run_next()
+
+    focus = 1.0 - math.exp(-0.033 / 0.060)
+    head = 1.0 - math.exp(-0.033 / 0.220)
+    expected = (
+        3.0 * (focus - 0.35 * head),
+        0.0,
+        head * 1.225,
+        0.0,
+    )
+    assert compositor.head_calls[0] == (0.0, 0.0, 0.0, 0.0)
+    assert compositor.head_calls[-1] == pytest.approx(expected)
+    assert session.last_displayed_pose == pytest.approx(expected[:2])
+    assert session.last_displayed_head_pose == pytest.approx(expected[2:])
+    assert display.calls[-1][0] == "head-frame"
+    assert display.calls[-1][1:] == pytest.approx(expected)
+    assert disabled == []
+
+
+def test_head_follow_recenter_interpolates_both_channels_to_exact_center() -> None:
+    session, _, scheduler, compositor, _, _ = make_head_session()
+    session.start()
+    scheduler.run_next()
+    start = compositor.head_calls[-1]
+    completed: list[str] = []
+
+    assert session.pause_and_recenter(lambda: completed.append("done")) is (
+        _module().SessionResult.ACCEPTED
+    )
+    for _ in range(4):
+        scheduler.run_next()
+
+    recentered = compositor.head_calls[-4:]
+    for index, remaining in enumerate((0.75, 0.5, 0.25, 0.0)):
+        assert recentered[index] == pytest.approx(
+            tuple(value * remaining for value in start)
+        )
+    assert session.last_displayed_pose == (0.0, 0.0)
+    assert session.last_displayed_head_pose == (0.0, 0.0)
+    assert completed == ["done"]
+
+
+def test_head_follow_composition_failure_uses_existing_disabled_fallback() -> None:
+    session, _, scheduler, compositor, _, disabled = make_head_session()
+    session.start()
+    compositor.fail_next = True
+
+    scheduler.run_next()
+
+    assert session.state == "disabled"
+    assert disabled == ["disabled"]
+    assert scheduler.live() == []
 
 
 @pytest.mark.parametrize(

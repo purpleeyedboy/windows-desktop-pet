@@ -198,3 +198,24 @@ def test_load_neutral_eye_source_probe_uses_validated_compositor_loader(
     assert "source-checkout-only" in (
         assets_module.load_neutral_eye_source_probe.__doc__ or ""
     ).lower()
+
+
+def test_load_head_neck_compositor_wraps_the_selected_neutral_eye_compositor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    neutral = object()
+    wrapped = object()
+    calls: list[object] = []
+    monkeypatch.setattr(
+        assets_module,
+        "load_neutral_eye_compositor",
+        lambda: neutral,
+    )
+    monkeypatch.setattr(
+        assets_module,
+        "ContinuousHeadNeckCompositor",
+        lambda base: calls.append(base) or wrapped,
+    )
+
+    assert assets_module.load_head_neck_compositor() is wrapped
+    assert calls == [neutral]

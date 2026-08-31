@@ -52,7 +52,7 @@ def test_main_enables_dpi_awareness_before_creating_tk(monkeypatch):
     )
     monkeypatch.setattr(
         main_module,
-        "load_neutral_eye_compositor",
+        "load_head_neck_compositor",
         lambda: calls.append("compositor") or compositor,
         raising=False,
     )
@@ -72,6 +72,7 @@ def test_main_enables_dpi_awareness_before_creating_tk(monkeypatch):
                 actual_frames,
                 kwargs.get("compositor"),
                 kwargs.get("cursor_provider"),
+                kwargs.get("head_follow"),
             )
         ),
     )
@@ -79,7 +80,7 @@ def test_main_enables_dpi_awareness_before_creating_tk(monkeypatch):
     assert main_module.main() == 0
     assert calls[:5] == ["dpi", "tk", "frames", "compositor", "cursor"]
     assert calls[5][0] == "pet"
-    assert calls[5][2:] == (frames, compositor, cursor)
+    assert calls[5][2:] == (frames, compositor, cursor, True)
 
 
 def test_main_routes_compositor_failure_through_fatal_startup(
@@ -112,7 +113,7 @@ def test_main_routes_compositor_failure_through_fatal_startup(
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
     monkeypatch.setattr(
         main_module,
-        "load_neutral_eye_compositor",
+        "load_head_neck_compositor",
         lambda: (_ for _ in ()).throw(ValueError("bad compositor")),
         raising=False,
     )
@@ -173,7 +174,7 @@ def test_main_finally_uses_pet_close_before_direct_root_cleanup(monkeypatch) -> 
     monkeypatch.setattr(main_module, "SingleInstanceMutex", FakeMutex)
     monkeypatch.setattr(main_module.tk, "Tk", FakeRoot)
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
-    monkeypatch.setattr(main_module, "load_neutral_eye_compositor", object)
+    monkeypatch.setattr(main_module, "load_head_neck_compositor", object)
     monkeypatch.setattr(main_module, "Win32CursorProvider", object)
     monkeypatch.setattr(main_module, "PetWindow", FakePet)
 
@@ -213,7 +214,7 @@ def test_main_constructor_failure_reports_fatal_then_destroys_root(monkeypatch) 
     monkeypatch.setattr(main_module, "SingleInstanceMutex", FakeMutex)
     monkeypatch.setattr(main_module.tk, "Tk", FakeRoot)
     monkeypatch.setattr(main_module, "load_frames", lambda: {"jump": ()})
-    monkeypatch.setattr(main_module, "load_neutral_eye_compositor", object)
+    monkeypatch.setattr(main_module, "load_head_neck_compositor", object)
     monkeypatch.setattr(main_module, "Win32CursorProvider", object)
     monkeypatch.setattr(
         main_module,

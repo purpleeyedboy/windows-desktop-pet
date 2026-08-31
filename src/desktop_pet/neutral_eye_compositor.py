@@ -87,27 +87,6 @@ def _support_boundary(support: Image.Image) -> list[tuple[int, int]]:
     ]
 
 
-def _bilinear(
-    values: tuple[int, ...], size: tuple[int, int], x: float, y: float
-) -> float:
-    width, height = size
-    x = min(max(x, 0.0), width - 1.0)
-    y = min(max(y, 0.0), height - 1.0)
-    x0 = int(math.floor(x))
-    y0 = int(math.floor(y))
-    x1 = min(x0 + 1, width - 1)
-    y1 = min(y0 + 1, height - 1)
-    tx = x - x0
-    ty = y - y0
-    top = values[y0 * width + x0] * (1.0 - tx) + values[
-        y0 * width + x1
-    ] * tx
-    bottom = values[y1 * width + x0] * (1.0 - tx) + values[
-        y1 * width + x1
-    ] * tx
-    return top * (1.0 - ty) + bottom * ty
-
-
 def _validate_authoring(authoring: object) -> dict:
     if not isinstance(authoring, dict):
         raise ValueError("authoring metadata must be an object")
@@ -391,7 +370,9 @@ class NeutralEyeCompositor:
     def _warped_rgb(
         cache: _EyeCache, dx: float, dy: float
     ) -> list[tuple[int, int, int]]:
-        width, _height = cache.size
+        width, height = cache.size
+        maximum_x = width - 1.0
+        maximum_y = height - 1.0
         output: list[tuple[int, int, int]] = []
         for index, output_alpha in enumerate(cache.output_alpha):
             if output_alpha == 0:
@@ -403,11 +384,33 @@ class NeutralEyeCompositor:
             local_x = index % width
             local_y = index // width
             weight = cache.displacement_weights[index]
-            source_x = local_x - dx * weight
-            source_y = local_y - dy * weight
-            sampled_alpha = _bilinear(
-                cache.source_alpha, cache.size, source_x, source_y
-            )
+            source_x = min(max(local_x - dx * weight, 0.0), maximum_x)
+            source_y = min(max(local_y - dy * weight, 0.0), maximum_y)
+            x0 = int(math.floor(source_x))
+            y0 = int(math.floor(source_y))
+            x1 = min(x0 + 1, width - 1)
+            y1 = min(y0 + 1, height - 1)
+            tx = source_x - x0
+            ty = source_y - y0
+            one_minus_tx = 1.0 - tx
+            one_minus_ty = 1.0 - ty
+            top_left = y0 * width + x0
+            top_right = y0 * width + x1
+            bottom_left = y1 * width + x0
+            bottom_right = y1 * width + x1
+
+            def sample(values: tuple[int, ...]) -> float:
+                top = (
+                    values[top_left] * one_minus_tx
+                    + values[top_right] * tx
+                )
+                bottom = (
+                    values[bottom_left] * one_minus_tx
+                    + values[bottom_right] * tx
+                )
+                return top * one_minus_ty + bottom * ty
+
+            sampled_alpha = sample(cache.source_alpha)
             if sampled_alpha <= 0.0:
                 output.append((0, 0, 0))
                 continue
@@ -418,9 +421,7 @@ class NeutralEyeCompositor:
                         max(
                             0,
                             round(
-                                _bilinear(values, cache.size, source_x, source_y)
-                                * 255.0
-                                / sampled_alpha
+                                sample(values) * 255.0 / sampled_alpha
                             ),
                         ),
                     )

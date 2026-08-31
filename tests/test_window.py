@@ -275,6 +275,28 @@ class HeadlessCompositor:
         return Image.new("RGBA", self.source_size, color)
 
 
+class HeadlessHeadCompositor:
+    source_size = (512, 768)
+    eye_midpoint = (122.5, 349.0)
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, float, float, float]] = []
+        self.events: list[str] | None = None
+
+    def compose(self, eye_x, eye_y, head_pose):
+        if self.events is not None:
+            self.events.append("compose")
+        call = (eye_x, eye_y, head_pose.x, head_pose.y)
+        self.calls.append(call)
+        color = (
+            round((eye_x + 3) * 30),
+            round((eye_y + 2) * 40),
+            round((head_pose.x + 1) * 80),
+            255,
+        )
+        return Image.new("RGBA", self.source_size, color)
+
+
 class HeadlessCursor:
     def __init__(self, point=CursorPoint(1900, 100)) -> None:
         self.point = point
@@ -697,6 +719,68 @@ def test_headless_probe_initialization_displays_cached_center_then_starts_one_lo
         window._window_rect.x,
         window._window_rect.y,
     )
+    assert reports == []
+
+
+def test_headless_continuous_head_mode_wires_one_coordinated_runtime_loop(
+    monkeypatch,
+) -> None:
+    compositor = HeadlessHeadCompositor()
+    root, renderer, bubbles, reports, frames, compositor, cursor, clock = (
+        prepare_headless(monkeypatch, compositor=compositor)
+    )
+    window = PetWindow(
+        root,
+        frames,
+        renderer_factory=lambda _hwnd: renderer,
+        compositor=compositor,
+        cursor_provider=cursor,
+        runtime_failure_reporter=reports.append,
+        clock=clock,
+        head_follow=True,
+    )
+
+    assert compositor.calls == [(0.0, 0.0, 0.0, 0.0)]
+    root.run_next(advance_ms=33)
+
+    assert len(compositor.calls) == 2
+    assert compositor.calls[-1] != (0.0, 0.0, 0.0, 0.0)
+    assert window.eye_session.last_displayed_head_pose != (0.0, 0.0)
+    assert len(root.live()) == 1
+    assert len(renderer.successes) == 2
+    assert bubbles[0].destroyed is False
+    assert reports == []
+
+
+def test_headless_continuous_head_action_recenters_to_literal_cached_center(
+    monkeypatch,
+) -> None:
+    compositor = HeadlessHeadCompositor()
+    root, renderer, _bubbles, reports, frames, compositor, cursor, clock = (
+        prepare_headless(monkeypatch, compositor=compositor)
+    )
+    window = PetWindow(
+        root,
+        frames,
+        renderer_factory=lambda _hwnd: renderer,
+        compositor=compositor,
+        cursor_provider=cursor,
+        runtime_failure_reporter=reports.append,
+        clock=clock,
+        head_follow=True,
+    )
+    center = window._neutral_center_frame
+    root.run_next(advance_ms=33)
+    calls_before_recenter = len(compositor.calls)
+
+    window.trigger_next_action()
+    root.run_next(advance_ms=132)
+
+    assert window._current_image is center
+    assert len(compositor.calls) == calls_before_recenter
+    assert window.eye_session.last_displayed_pose == (0.0, 0.0)
+    assert window.eye_session.last_displayed_head_pose == (0.0, 0.0)
+    assert window.animation.busy is True
     assert reports == []
 
 

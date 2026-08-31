@@ -1,5 +1,36 @@
 # Cat-ear bubble implementation progress
 
+## Continuous head-neck deformation preview
+
+Plan: docs/superpowers/plans/2026-08-31-continuous-head-neck-preview.md
+Implementation base: 3402eb5
+Goal: offline visual proof complete; one continuous Pillow-only head/upper-neck inverse mesh over the approved eye-composed canonical frame, with no directional sprites, no rigid head translation, and no Live2D/editor dependency
+Task H1: complete in commits 38b22af + b208dfe; exact 20px boundary ramp locked; 41 focused passed, 77 H1-plus-neutral passed, and post-correction old-path regressions reached 316 passed with 4 platform skips
+Task H2: complete in commits fc511d1 + e463644; deterministic ten-file QA package built; final post-review suite 14 passed; runtime-output and broken-symlink safety findings closed by RED/GREEN tests
+Post-review H2 safety fix: complete in commit 09e6c73; repository-internal output is confined to the exact QA publisher directory
+Final H1 review: approved with 0 Critical, 0 Important, 0 Minor
+Final H2 review: approved with 0 Critical, 0 Important, 2 non-blocking Minors retained: input baselines in the deterministic fixture are captured after its first build, and the committed-evidence test validates the allowlist but does not byte-compare the published package with the fixture build
+Automated/structural gate: pass; continuous non-rigid motion, eye lead, planted body, protected-region identity, no significant holes, deterministic GIF timing, and exact center return verified
+Human visual gate: pending; independent review says head motion may be too subtle at normal speed and a thin mostly-baseline cool dark halo is visible at 400 percent around parts of the silhouette
+Runtime integration and EXE: blocked pending explicit user visual approval of amplitude and fringe quality
+
+Amplitude adjustment: user approved a moderate increase; offline render gain is now 1.225 while eye motion and filter timing remain unchanged; final H2 suite 15 passed and H1-plus-neutral regression 77 passed
+Amplitude visual gate: pending user review of the rebuilt normal/slow GIFs; runtime integration and EXE remain blocked
+
+Double-amplitude adjustment: user requested another exact 2.0 gain on the deformation core; current horizontal nose extremum is about 6.69px and neck roots about 4.20/3.58px; 42 core, 15 preview, and 78 combined regression tests passed
+Double-amplitude visual gate: approved by the user; source runtime integration was explicitly authorized
+
+## Runtime continuous head-neck integration
+
+Plan: docs/superpowers/plans/2026-08-31-runtime-head-neck-integration.md
+Implementation base: f05aeff
+Status: source integration complete locally; one live arbitrary-angle cursor vector now drives 60ms eye focus and 220ms head lag through the approved 0.35 compensation, 1.225 render gain, and doubled continuous deformation core
+Lifecycle: exact cached center, coordinated recenter-before-action, action playback, disabled fallback, drag/resize geometry, and shutdown ownership preserved
+Performance: pixel-identical hot-path optimization improved the recorded cloud compositor benchmark from about 34.50ms to 25.56ms per frame, or about 39.12 composed frames per second; center raw-RGBA SHA-256 remains 775551951b58abb62221bb5e48d1d6077966c9d1690dcfeb54460a5f63842e30
+Verification: final applicable non-Tk suite 381 passed with 4 platform skips; 29 headless PetWindow tests passed; compilation and diff checks passed; no runtime asset, QA image, workflow, packaging spec, or directional sprite changed
+Known baseline limitation: tracked tests/test_interpolate_action.py cannot collect because the current branch already lacks tools/interpolate_action.py; unrelated file left untouched
+Packaging and EXE: not started in this increment
+
 Base commit: 2aa8cf5
 Task 1: complete (commits 8e3ae23..7455108, review approved; Minor: normalize non-iterable JSON pool errors; Task 4 must share the 28px production font-size constant)
 Task 2a: complete (commits 2aa8cf5..86faf26, review approved; Minor: correct report commit wording)

@@ -4,6 +4,7 @@ from typing import Sequence
 
 from PIL import Image
 
+from .head_neck_deformation import ContinuousHeadNeckCompositor
 from .model import ACTIONS
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
@@ -46,6 +47,11 @@ def load_neutral_eye_compositor(
     if getattr(sys, "_MEIPASS", None) or runtime_root.exists():
         return NeutralEyeCompositor.load(runtime_root)
     return NeutralEyeCompositor.load(neutral_eye_source_probe_root())
+
+
+def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
+    """Wrap the selected neutral-eye compositor with head deformation."""
+    return ContinuousHeadNeckCompositor(load_neutral_eye_compositor())
 
 
 def load_neutral_eye_source_probe(
