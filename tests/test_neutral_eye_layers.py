@@ -101,14 +101,25 @@ def _assert_fresh_outputs_match_approved_pixels(asset_dir: Path) -> None:
 def _normalize_test_only_snapshot_to_approved_bytes(asset_dir: Path) -> dict:
     """Prepare strict-loader/evidence integration inputs after the raw-pixel gate."""
     _assert_fresh_outputs_match_approved_pixels(asset_dir)
+    fresh_authoring_path = asset_dir / "authoring.json"
+    approved_authoring_path = APPROVED_ASSET_DIR / "authoring.json"
+    fresh_metadata = json.loads(fresh_authoring_path.read_text(encoding="utf-8"))
+    approved_metadata = json.loads(approved_authoring_path.read_text(encoding="utf-8"))
+    try:
+        for filename in AUTHORED_PNGS:
+            fresh_metadata["outputs"][filename]["sha256"] = approved_metadata[
+                "outputs"
+            ][filename]["sha256"]
+    except (KeyError, TypeError) as error:
+        raise ValueError("fresh metadata does not match approved metadata") from error
+    if fresh_metadata != approved_metadata:
+        raise ValueError("fresh metadata does not match approved metadata")
     for filename in AUTHORED_PNGS:
         (asset_dir / filename).write_bytes(
             (APPROVED_ASSET_DIR / filename).read_bytes()
         )
-    (asset_dir / "authoring.json").write_bytes(
-        (APPROVED_ASSET_DIR / "authoring.json").read_bytes()
-    )
-    return json.loads((asset_dir / "authoring.json").read_text(encoding="utf-8"))
+    fresh_authoring_path.write_bytes(approved_authoring_path.read_bytes())
+    return json.loads(fresh_authoring_path.read_text(encoding="utf-8"))
 
 
 @pytest.fixture()
@@ -168,6 +179,19 @@ def test_same_pixel_different_png_bytes_require_test_only_normalization(
     assert ValidatedNeutralEyeSnapshot.load(asset_dir).images()[target.name].tobytes() == (
         original_signature[2]
     )
+
+
+def test_normalization_rejects_fresh_non_sha_metadata_drift(
+    built: tuple[Path, dict],
+) -> None:
+    asset_dir, metadata = built
+    metadata["eyes"]["left"]["movement_anchor"][0] += 0.25
+    (asset_dir / "authoring.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="metadata"):
+        _normalize_test_only_snapshot_to_approved_bytes(asset_dir)
 
 
 def test_authored_layers_have_expected_modes_sizes_and_metadata(built: tuple[Path, dict]) -> None:

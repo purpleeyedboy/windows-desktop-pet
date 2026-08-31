@@ -168,3 +168,24 @@ built neutral-eye PNGs decoded to the approved mode, size, and raw pixel bytes
 before the test-only strict-loader/evidence normalization path was used. The
 PR contains the expected nine scoped files. It remains open and unmerged;
 merge authorization has not been granted. R5 remains blocked.
+
+### Task 2 metadata-semantic normalization follow-up
+
+Independent whole-PR review found that copying the full approved
+`authoring.json` after only comparing PNG raw pixels could hide a fresh
+non-SHA metadata change such as a movement anchor.
+
+1. A focused regression first changed only the fresh temporary left-eye
+   `movement_anchor`, leaving all PNG pixels unchanged. Before the fix,
+   `PYTHONPATH=/root/.local/lib/python3.12/site-packages python -m pytest -q tests/test_neutral_eye_layers.py::test_normalization_rejects_fresh_non_sha_metadata_drift`
+   exited 1 with `Failed: DID NOT RAISE <class 'ValueError'>`.
+2. Normalization now reads both fresh and approved metadata, changes only the
+   five named `outputs.*.sha256` values in a comparison copy, and rejects any
+   remaining mismatch before copying approved PNG or metadata bytes. It returns
+   the parsed metadata from the written temporary file, so fixture metadata
+   remains directory-consistent.
+3. The focused regression and same-pixel regression passed (`2 passed`). The
+   complete neutral-eye layers coverage passed in two non-overlapping groups
+   (`17 passed` and `18 passed`); compositor coverage passed (`36 passed`).
+   `git diff --check` exited 0 with no output. Production loader, workflow,
+   and visual assets were unchanged.
