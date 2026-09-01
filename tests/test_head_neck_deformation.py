@@ -435,6 +435,68 @@ def test_invalid_injected_frame_fails_closed() -> None:
         ContinuousHeadNeckCompositor(wrong_size).compose(0.0, 0.0, HeadPose(0.1, 0.0))
 
 
+@pytest.mark.parametrize(
+    "pose",
+    (
+        lambda: HeadPose(0.0, 0.0, 1.01, 0.0),
+        lambda: HeadPose(0.0, 0.0, 0.0, -0.01),
+        lambda: HeadPose(0.0, 0.0, 0.0, 1.01),
+    ),
+)
+def test_head_pose_rejects_invalid_idle_tilt_components(pose) -> None:
+    with pytest.raises(ValueError):
+        pose()
+
+
+def test_idle_tilt_uses_opposed_height_and_asymmetric_outward_stretch() -> None:
+    left = deformation._sampling_offset(36.0, 250.0, HeadPose(0.0, 0.0, 1.0))
+    right = deformation._sampling_offset(223.0, 250.0, HeadPose(0.0, 0.0, 1.0))
+    assert left[0] < 0.0
+    assert right[0] < 0.0
+    assert left[1] > 0.0
+    assert right[1] < 0.0
+
+    reversed_left = deformation._sampling_offset(
+        36.0, 250.0, HeadPose(0.0, 0.0, -1.0)
+    )
+    reversed_right = deformation._sampling_offset(
+        223.0, 250.0, HeadPose(0.0, 0.0, -1.0)
+    )
+    assert reversed_left == pytest.approx((-left[0], -left[1]))
+    assert reversed_right == pytest.approx((-right[0], -right[1]))
+
+
+def test_arc_lifts_dynamic_head_but_keeps_protected_body_pinned() -> None:
+    lifted = deformation._sampling_offset(
+        135.0, 350.0, HeadPose(0.0, 0.0, 0.0, 1.0)
+    )
+    chest = deformation._sampling_offset(
+        139.0, 555.0, HeadPose(0.0, 0.0, 0.0, 1.0)
+    )
+    assert lifted[0] == 0.0
+    assert lifted[1] > 0.0
+    assert chest == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    "pose",
+    (
+        HeadPose(0.0, 0.0, -1.0, 0.0),
+        HeadPose(0.0, 0.0, 1.0, 0.0),
+        HeadPose(0.0, 0.0, 0.0, 1.0),
+        HeadPose(0.6, 0.4, -1.0, 1.0),
+        HeadPose(-0.6, 0.4, 1.0, 1.0),
+    ),
+)
+def test_idle_tilt_and_mouse_follow_extremes_keep_a_valid_mesh(pose) -> None:
+    compositor = ContinuousHeadNeckCompositor(RecordingCompositor())
+    mesh = compositor.mesh_for(pose)
+    assert len(mesh) == (len(X_VERTICES) - 1) * (len(Y_VERTICES) - 1)
+    result = compositor.compose(0.0, 0.0, pose)
+    assert result.mode == "RGBA"
+    assert result.size == CANVAS_SIZE
+
+
 def test_production_module_has_only_pillow_and_standard_library_dependencies() -> None:
     module_path = Path(__file__).parents[1] / "src" / "desktop_pet" / "head_neck_deformation.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))

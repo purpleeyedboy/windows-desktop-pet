@@ -116,6 +116,8 @@ class _CachedCenterCompositor:
             and eye_y == 0.0
             and head_pose.x == 0.0
             and head_pose.y == 0.0
+            and head_pose.tilt == 0.0
+            and head_pose.arc == 0.0
         ):
             if self.center_frame is None:
                 self.center_frame = self._compositor.compose(
@@ -160,6 +162,8 @@ class _CachedCenterCompositor:
             and eye_y == 0.0
             and head_pose.x == 0.0
             and head_pose.y == 0.0
+            and head_pose.tilt == 0.0
+            and head_pose.arc == 0.0
             and closure == 0.0
         ):
             return self.compose_head(0.0, 0.0, head_pose)
@@ -830,6 +834,9 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
+        interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
+        if callable(interrupt_idle):
+            interrupt_idle()
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
 

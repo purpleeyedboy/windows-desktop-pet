@@ -88,6 +88,10 @@ _EYE_LIMITS = (3.0, 2.0)
 _BOUNDARY_RAMP = 20.0
 _DEFORMATION_GAIN = 2.0
 _AREA_RATIO_LIMITS = (0.60, 1.40)
+_TILT_CENTER_X = 135.0
+_TILT_ROLL_GAIN = 0.05
+_TILT_OUTWARD_GAIN = 4.5
+_TILT_ARC_LIFT = 2.5
 
 
 class _BaseCompositor(Protocol):
@@ -112,14 +116,24 @@ class HeadPose:
 
     x: float
     y: float
+    tilt: float = 0.0
+    arc: float = 0.0
 
     def __post_init__(self) -> None:
         x = _finite_real(self.x, "head x")
         y = _finite_real(self.y, "head y")
+        tilt = _finite_real(self.tilt, "head tilt")
+        arc = _finite_real(self.arc, "head tilt arc")
         if math.hypot(x, y) > 1.0:
             raise ValueError("head pose must be inside the unit disk")
+        if abs(tilt) > 1.0:
+            raise ValueError("head tilt must be within -1..1")
+        if not 0.0 <= arc <= 1.0:
+            raise ValueError("head tilt arc must be within 0..1")
         object.__setattr__(self, "x", x)
         object.__setattr__(self, "y", y)
+        object.__setattr__(self, "tilt", tilt)
+        object.__setattr__(self, "arc", arc)
 
 
 def _smoothstep(value: float) -> float:
@@ -273,9 +287,25 @@ def _sampling_offset(x: float, y: float, pose: HeadPose) -> tuple[float, float]:
     support = _support_weight(x, y)
     if support == 0.0:
         return 0.0, 0.0
+    normalized_side = abs((x - _TILT_CENTER_X) / 125.0)
+    tilt_x = (
+        -pose.tilt
+        * support
+        * _TILT_OUTWARD_GAIN
+        * min(1.0, normalized_side) ** 1.35
+    )
+    tilt_y = (
+        -pose.tilt
+        * support
+        * (x - _TILT_CENTER_X)
+        * _TILT_ROLL_GAIN
+        + pose.arc * support * _TILT_ARC_LIFT
+    )
     return (
-        -pose.x * support * _horizontal_amplitude(x, y) * _DEFORMATION_GAIN,
-        -pose.y * support * _vertical_amplitude(x, y) * _DEFORMATION_GAIN,
+        -pose.x * support * _horizontal_amplitude(x, y) * _DEFORMATION_GAIN
+        + tilt_x,
+        -pose.y * support * _vertical_amplitude(x, y) * _DEFORMATION_GAIN
+        + tilt_y,
     )
 
 
@@ -296,9 +326,24 @@ _VERTEX_FIELD = _vertex_field()
 
 def _source_vertex(x: int, y: int, pose: HeadPose) -> tuple[float, float]:
     horizontal, vertical = _VERTEX_FIELD[(x, y)]
+    support = _support_weight(float(x), float(y))
+    normalized_side = abs((float(x) - _TILT_CENTER_X) / 125.0)
+    tilt_x = (
+        -pose.tilt
+        * support
+        * _TILT_OUTWARD_GAIN
+        * min(1.0, normalized_side) ** 1.35
+    )
+    tilt_y = (
+        -pose.tilt
+        * support
+        * (float(x) - _TILT_CENTER_X)
+        * _TILT_ROLL_GAIN
+        + pose.arc * support * _TILT_ARC_LIFT
+    )
     return (
-        float(x) - pose.x * horizontal,
-        float(y - _HEAD_ROI[1]) - pose.y * vertical,
+        float(x) - pose.x * horizontal + tilt_x,
+        float(y - _HEAD_ROI[1]) - pose.y * vertical + tilt_y,
     )
 
 
@@ -564,7 +609,12 @@ class ContinuousHeadNeckCompositor:
             raise ValueError("base compositor frame must use RGBA mode")
         if source.size != _CANVAS_SIZE:
             raise ValueError("base compositor frame must be 512x768")
-        if pose.x == 0.0 and pose.y == 0.0:
+        if (
+            pose.x == 0.0
+            and pose.y == 0.0
+            and pose.tilt == 0.0
+            and pose.arc == 0.0
+        ):
             return source
 
         left, top, right, bottom = _RUNTIME_WARP_BOX
@@ -580,4 +630,3 @@ class ContinuousHeadNeckCompositor:
         result = source.copy()
         result.paste(restored, (left, top))
         return result
-

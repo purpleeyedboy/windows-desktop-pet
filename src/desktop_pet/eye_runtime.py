@@ -16,6 +16,7 @@ from .eye_follow import (
 )
 from .blink import NaturalBlinkMotion
 from .head_neck_deformation import HeadPose
+from .idle_head_tilt import IdleHeadTiltMotion, IdleTiltPose
 from .model import ACTIONS, ActionCycle
 
 
@@ -79,6 +80,7 @@ class RuntimeEyeSession:
         on_action_failed: Callable[[str, ActionFailure], None],
         head_follow: bool = False,
         blink_motion: NaturalBlinkMotion | None = None,
+        idle_tilt_motion: IdleHeadTiltMotion | None = None,
     ) -> None:
         self._compositor = compositor
         self._head_follow = bool(head_follow)
@@ -100,6 +102,14 @@ class RuntimeEyeSession:
             else NaturalBlinkMotion() if self._blink_supported else None
         )
         self._blink_closure = 0.0
+        if idle_tilt_motion is not None and not self._head_follow:
+            raise ValueError("idle head tilt requires head following")
+        self._idle_tilt_motion = (
+            idle_tilt_motion
+            if idle_tilt_motion is not None
+            else IdleHeadTiltMotion() if self._head_follow else None
+        )
+        self._idle_tilt_pose = IdleTiltPose()
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -157,8 +167,11 @@ class RuntimeEyeSession:
                 else None
             ),
             pulse=(
-                self._following_blink_pulse
-                if self._blink_motion is not None
+                self._following_ambient_pulse
+                if (
+                    self._blink_motion is not None
+                    or self._idle_tilt_motion is not None
+                )
                 else None
             ),
         )
@@ -337,6 +350,35 @@ class RuntimeEyeSession:
             )
         return SessionResult.ACCEPTED
 
+    def interrupt_idle(self) -> SessionResult:
+        """Cancel a tilt and restart its cooldown for click or drag priority."""
+
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._idle_tilt_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._idle_tilt_motion.reset(self._clock())
+        except Exception:
+            self._idle_tilt_motion = None
+            self._idle_tilt_pose = IdleTiltPose()
+            return SessionResult.REJECTED
+        if self._idle_tilt_pose == IdleTiltPose():
+            return SessionResult.ACCEPTED
+        self._idle_tilt_pose = IdleTiltPose()
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        if not self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        ):
+            return SessionResult.REJECTED
+        return SessionResult.ACCEPTED
+
     def request_action(self) -> SessionResult:
         if self._terminal:
             return SessionResult.REJECTED
@@ -416,18 +458,34 @@ class RuntimeEyeSession:
             pass
         self._controller.stop()
 
-    def _following_blink_pulse(self) -> None:
-        if self._state != "following" or self._blink_motion is None:
+    def _following_ambient_pulse(self) -> None:
+        if self._state != "following":
             return
         try:
-            closure = self._blink_motion.sample(self._clock())
+            now = self._clock()
         except Exception:
-            self._blink_motion = None
-            self._blink_closure = 0.0
             return
-        if closure == self._blink_closure:
+        changed = False
+        if self._blink_motion is not None:
+            try:
+                closure = self._blink_motion.sample(now)
+            except Exception:
+                self._blink_motion = None
+                closure = 0.0
+            if closure != self._blink_closure:
+                self._blink_closure = closure
+                changed = True
+        if self._idle_tilt_motion is not None:
+            try:
+                idle_pose = self._idle_tilt_motion.sample(now)
+            except Exception:
+                self._idle_tilt_motion = None
+                idle_pose = IdleTiltPose()
+            if idle_pose != self._idle_tilt_pose:
+                self._idle_tilt_pose = idle_pose
+                changed = True
+        if not changed:
             return
-        self._blink_closure = closure
         pose = self._last_displayed_pose or (0.0, 0.0)
         head_pose = self._last_displayed_head_pose or (0.0, 0.0)
         self._try_display_pose(
@@ -471,18 +529,28 @@ class RuntimeEyeSession:
             return False
         try:
             if self._head_follow:
+                idle_pose = (
+                    self._idle_tilt_pose
+                    if expected_state == "following"
+                    else IdleTiltPose()
+                )
+                combined_head_pose = HeadPose(
+                    *head_pose,
+                    idle_pose.tilt,
+                    idle_pose.arc,
+                )
                 if self._blink_motion is not None:
                     compose_head_blink = getattr(
                         self._compositor, "compose_head_blink"
                     )
                     frame = compose_head_blink(
                         *pose,
-                        HeadPose(*head_pose),
+                        combined_head_pose,
                         self._blink_closure,
                     )
                 else:
                     compose_head = getattr(self._compositor, "compose_head")
-                    frame = compose_head(*pose, HeadPose(*head_pose))
+                    frame = compose_head(*pose, combined_head_pose)
             elif self._blink_motion is not None:
                 compose_blink = getattr(self._compositor, "compose_blink")
                 frame = compose_blink(*pose, self._blink_closure)
@@ -777,11 +845,25 @@ class RuntimeEyeSession:
         self._lifecycle_epoch += 1
         self._state = state
         self._blink_closure = 0.0
-        if state == "following" and self._blink_motion is not None:
+        self._idle_tilt_pose = IdleTiltPose()
+        if state != "following":
+            return
+        try:
+            now = self._clock()
+        except Exception:
+            self._blink_motion = None
+            self._idle_tilt_motion = None
+            return
+        if self._blink_motion is not None:
             try:
-                self._blink_motion.reset(self._clock())
+                self._blink_motion.reset(now)
             except Exception:
                 self._blink_motion = None
+        if self._idle_tilt_motion is not None:
+            try:
+                self._idle_tilt_motion.reset(now)
+            except Exception:
+                self._idle_tilt_motion = None
 
     def _work_is_current(self, epoch: int, state: SessionState) -> bool:
         return (
