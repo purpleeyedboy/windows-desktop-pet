@@ -64,6 +64,11 @@ class NaturalBlinkMotion:
             raise ValueError("blink interval is outside the supported range")
         self._next_blink_at = current + interval
 
+    def trigger(self, now: float) -> None:
+        """Start one ordinary blink and replace any pending cooldown."""
+
+        self._next_blink_at = _finite_time(now, "blink clock")
+
     def sample(self, now: float) -> float:
         """Return eyelid closure in the inclusive range 0..1."""
 
