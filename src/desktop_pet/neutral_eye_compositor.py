@@ -282,6 +282,16 @@ class NeutralEyeCompositor:
     ) -> None:
         self.source_size = CANVAS_SIZE
         self.eye_midpoint = eye_midpoint
+        interaction_padding = 12
+        self.eye_interaction_boxes = tuple(
+            (
+                max(0, cache.crop_box[0] - interaction_padding),
+                max(0, cache.crop_box[1] - interaction_padding),
+                min(CANVAS_SIZE[0], cache.crop_box[2] + interaction_padding),
+                min(CANVAS_SIZE[1], cache.crop_box[3] + interaction_padding),
+            )
+            for cache in eye_caches
+        )
         self._base_rgb = base_rgb
         self._source_alpha = source_alpha
         self._center = center
