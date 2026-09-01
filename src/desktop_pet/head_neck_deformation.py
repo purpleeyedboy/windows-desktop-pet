@@ -90,9 +90,9 @@ _DEFORMATION_GAIN = 2.0
 _AREA_RATIO_LIMITS = (0.60, 1.40)
 _LAYER_PADDING_X = 64
 _LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
-_TILT_PIVOT = (202.0, 416.0)
+_TILT_PIVOT = (204.0, 414.0)
 _TILT_LIMIT_DEGREES = 50.0
-_ARC_LIFT_PIXELS = 8.0
+_ARC_LIFT_PIXELS = 0.0
 
 
 def _build_head_layer_mask() -> Image.Image:
@@ -101,24 +101,24 @@ def _build_head_layer_mask() -> Image.Image:
         (
             (0, 160),
             (270, 160),
-            (270, 350),
-            (252, 371),
-            (232, 384),
-            (220, 405),
-            (204, 424),
-            (184, 441),
-            (158, 451),
-            (128, 453),
-            (99, 446),
-            (74, 434),
-            (53, 418),
-            (36, 397),
-            (22, 372),
-            (0, 350),
+            (270, 345),
+            (254, 366),
+            (237, 381),
+            (222, 399),
+            (207, 417),
+            (188, 431),
+            (165, 441),
+            (139, 446),
+            (112, 443),
+            (85, 434),
+            (61, 420),
+            (43, 400),
+            (29, 376),
+            (0, 352),
         ),
         fill=255,
     )
-    return mask.filter(ImageFilter.GaussianBlur(3.0))
+    return mask.filter(ImageFilter.GaussianBlur(2.0))
 
 
 _HEAD_LAYER_MASK = _build_head_layer_mask()

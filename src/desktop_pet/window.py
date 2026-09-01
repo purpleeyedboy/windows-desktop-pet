@@ -23,11 +23,22 @@ from .eye_runtime import (
     SessionResult,
 )
 from .head_neck_deformation import HeadPose
+from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
-from .model import ActionCycle, Rect, clamp_height, format_position
+from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
+ACTION_MENU_ITEMS = (
+    ("动作：跳跃", "jump"),
+    ("动作：压扁", "squash"),
+    ("动作：抖动", "shake"),
+)
+TILT_MENU_ITEMS = (
+    ("歪头：向左", "left"),
+    ("歪头：向右", "right"),
+    ("歪头：左到右", "left_arc_right"),
+)
 CLICK_THRESHOLD = 8
 MONITOR_DEFAULTTONEAREST = 2
 
@@ -348,6 +359,18 @@ class PetWindow:
 
     def _create_menu(self) -> tk.Menu:
         menu = tk.Menu(self.root, tearoff=False)
+        for label, action in ACTION_MENU_ITEMS:
+            menu.add_command(
+                label=label,
+                command=lambda value=action: self.trigger_named_action(value),
+            )
+        menu.add_command(label="眨眼", command=self.trigger_blink)
+        for label, mode in TILT_MENU_ITEMS:
+            menu.add_command(
+                label=label,
+                command=lambda value=mode: self.trigger_idle_tilt(value),
+            )
+        menu.add_separator()
         for label, height in SIZE_PRESETS.items():
             menu.add_command(
                 label=label,
@@ -646,6 +669,36 @@ class PetWindow:
         )
 
     def trigger_next_action(self) -> None:
+        self._trigger_action(None)
+
+    def trigger_named_action(self, action: str) -> None:
+        if action not in ACTIONS:
+            raise ValueError("named action is invalid")
+        self._trigger_action(action)
+
+    def trigger_blink(self) -> None:
+        if (
+            self._closed
+            or not self._rendering_available
+            or self.eye_session is None
+            or self._legacy_fallback
+        ):
+            return
+        self.eye_session.request_blink()
+
+    def trigger_idle_tilt(self, mode: TiltMode) -> None:
+        if mode not in TILT_MODES:
+            raise ValueError("idle tilt mode is invalid")
+        if (
+            self._closed
+            or not self._rendering_available
+            or self.eye_session is None
+            or self._legacy_fallback
+        ):
+            return
+        self.eye_session.request_idle_tilt(mode)
+
+    def _trigger_action(self, action: str | None) -> None:
         if (
             self._closed
             or not self._rendering_available
@@ -654,16 +707,24 @@ class PetWindow:
         ):
             return
         if self.eye_session is not None and not self._legacy_fallback:
-            result = self.eye_session.request_action()
+            result = (
+                self.eye_session.request_action()
+                if action is None
+                else self.eye_session.request_named_action(action)
+            )
             if result is not SessionResult.FALLBACK:
                 return
             self._activate_legacy_fallback()
-        self._trigger_legacy_action()
+        self._trigger_legacy_action(action)
 
-    def _trigger_legacy_action(self) -> None:
+    def _trigger_legacy_action(self, requested_action: str | None = None) -> None:
         if self.animation.busy:
             return
-        action = self.action_cycle.peek()
+        action = (
+            self.action_cycle.peek()
+            if requested_action is None
+            else requested_action
+        )
         try:
             accepted = self._play_action(action)
         except Exception:
@@ -671,12 +732,13 @@ class PetWindow:
             return
         if accepted is not True:
             return
-        try:
-            self.action_cycle.commit(action)
-        except Exception:
-            if self._cancel_action(action) is not True:
-                self._on_action_failed(action, ActionFailure.CANCEL_REJECTED)
-            return
+        if requested_action is None:
+            try:
+                self.action_cycle.commit(action)
+            except Exception:
+                if self._cancel_action(action) is not True:
+                    self._on_action_failed(action, ActionFailure.CANCEL_REJECTED)
+                return
         try:
             phrase = self.dialogue.choose(action)
             self._present_phrase(phrase)

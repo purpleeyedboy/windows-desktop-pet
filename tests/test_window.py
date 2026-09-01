@@ -501,7 +501,20 @@ def test_window_contract_and_menu(tk_root, loaded_frames):
         for index in range(window.menu.index("end") + 1)
         if window.menu.type(index) != "separator"
     ]
-    assert {"小", "中", "大", "始终置顶", "退出"}.issubset(labels)
+    assert {
+        "动作：跳跃",
+        "动作：压扁",
+        "动作：抖动",
+        "眨眼",
+        "歪头：向左",
+        "歪头：向右",
+        "歪头：左到右",
+        "小",
+        "中",
+        "大",
+        "始终置顶",
+        "退出",
+    }.issubset(labels)
 
 
 def test_size_clamp_presets_wheel_and_topmost(tk_root, loaded_frames):
@@ -1085,6 +1098,69 @@ def test_headless_menu_and_window_protocol_share_close_path(monkeypatch):
     assert window.menu.commands["退出"].__func__ is window.close.__func__
     assert root.protocols["WM_DELETE_WINDOW"].__self__ is window
     assert root.protocols["WM_DELETE_WINDOW"].__func__ is window.close.__func__
+
+
+def test_headless_menu_routes_all_seven_commands_to_exact_runtime_requests(
+    monkeypatch,
+):
+    window, _root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    requests: list[tuple[str, str | None]] = []
+
+    class RecordingSession:
+        def request_named_action(self, action):
+            requests.append(("action", action))
+            return window_module.SessionResult.ACCEPTED
+
+        def request_blink(self):
+            requests.append(("blink", None))
+            return window_module.SessionResult.ACCEPTED
+
+        def request_idle_tilt(self, mode):
+            requests.append(("tilt", mode))
+            return window_module.SessionResult.ACCEPTED
+
+    window.eye_session = RecordingSession()
+    for label in (
+        "动作：跳跃",
+        "动作：压扁",
+        "动作：抖动",
+        "眨眼",
+        "歪头：向左",
+        "歪头：向右",
+        "歪头：左到右",
+    ):
+        window.menu.commands[label]()
+
+    assert requests == [
+        ("action", "jump"),
+        ("action", "squash"),
+        ("action", "shake"),
+        ("blink", None),
+        ("tilt", "left"),
+        ("tilt", "right"),
+        ("tilt", "left_arc_right"),
+    ]
+
+
+def test_headless_named_legacy_action_does_not_advance_click_cycle(monkeypatch):
+    window, _root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    window.eye_session.stop()
+    window._legacy_fallback = True
+    played: list[str] = []
+    monkeypatch.setattr(
+        window.animation,
+        "play",
+        lambda action: played.append(action) or True,
+    )
+
+    window.trigger_named_action("shake")
+
+    assert played == ["shake"]
+    assert window.action_cycle.peek() == "jump"
 
 
 def test_headless_probe_presents_center_while_hidden_before_show_and_eye_timer(

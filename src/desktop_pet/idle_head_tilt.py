@@ -86,6 +86,15 @@ class IdleHeadTiltMotion:
     def active_mode(self) -> TiltMode | None:
         return self._mode
 
+    def trigger(self, mode: TiltMode, now: float) -> None:
+        """Start the requested tilt mode now, bypassing the idle wait."""
+
+        current = _finite_time(now, "idle tilt clock")
+        if mode not in TILT_MODES:
+            raise ValueError("idle tilt mode is invalid")
+        self._next_action_at = current
+        self._start_action(current, mode)
+
     def reset(self, now: float) -> None:
         current = _finite_time(now, "idle tilt clock")
         interval = self._random_duration(
@@ -148,11 +157,16 @@ class IdleHeadTiltMotion:
         self.reset(current)
         return IdleTiltPose()
 
-    def _start_action(self, started_at: float) -> None:
-        try:
-            mode = self._choice(TILT_MODES)
-        except Exception as error:
-            raise ValueError("idle tilt mode source failed") from error
+    def _start_action(
+        self,
+        started_at: float,
+        mode: TiltMode | None = None,
+    ) -> None:
+        if mode is None:
+            try:
+                mode = self._choice(TILT_MODES)
+            except Exception as error:
+                raise ValueError("idle tilt mode source failed") from error
         if mode not in TILT_MODES:
             raise ValueError("idle tilt mode source returned an invalid mode")
         self._mode = mode

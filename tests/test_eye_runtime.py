@@ -6,6 +6,12 @@ from dataclasses import dataclass
 import pytest
 
 from desktop_pet.assets import load_frames, runtime_frame_root
+from desktop_pet.blink import (
+    CLOSE_SECONDS,
+    MIN_BLINK_INTERVAL_SECONDS,
+    TOTAL_BLINK_SECONDS,
+    NaturalBlinkMotion,
+)
 from desktop_pet.eye_follow import CursorPoint
 from desktop_pet.model import ACTIONS, ActionCycle, Rect
 
@@ -126,6 +132,16 @@ class Compositor:
             self.fail_next = False
             raise RuntimeError("compose failed")
         return ("frame", eye_x, eye_y)
+
+
+class BlinkCompositor(Compositor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.blink_calls: list[tuple[float, float, float]] = []
+
+    def compose_blink(self, eye_x: float, eye_y: float, closure: float):
+        self.blink_calls.append((eye_x, eye_y, closure))
+        return ("blink-frame", eye_x, eye_y, closure)
 
 
 class HeadCompositor(Compositor):
@@ -1147,6 +1163,94 @@ def test_action_request_accepts_then_commits_and_presents_matching_phrase() -> N
     assert selected == ["jump"]
     assert presented == ["phrase:jump"]
     assert scheduler.live() == []
+
+
+def test_named_action_plays_exact_selection_without_advancing_click_cycle() -> None:
+    (
+        session,
+        _,
+        scheduler,
+        _,
+        _,
+        _,
+        cycle,
+        play_calls,
+        selected,
+        presented,
+    ) = make_action_session()
+    session.start()
+
+    result = session.request_named_action("shake")
+
+    assert result is _module().SessionResult.ACCEPTED
+    assert session.state == "playing"
+    assert play_calls == ["shake"]
+    assert selected == ["shake"]
+    assert presented == ["phrase:shake"]
+    assert cycle.peek() == "jump"
+    assert session.logical_frame("shake", 2) is not None
+    assert session.animation_finished("shake") is _module().SessionResult.ACCEPTED
+    assert session.state == "following"
+    assert cycle.peek() == "jump"
+    assert len(scheduler.live()) == 1
+
+
+def test_named_action_rejects_invalid_name_without_side_effects() -> None:
+    session, _, _, _, _, _, cycle, play_calls, selected, presented = (
+        make_action_session()
+    )
+    session.start()
+
+    with pytest.raises(ValueError, match="named action"):
+        session.request_named_action("unknown")
+
+    assert session.state == "following"
+    assert cycle.peek() == "jump"
+    assert play_calls == selected == presented == []
+
+
+def test_manual_blink_plays_once_and_restarts_random_cooldown() -> None:
+    module = _module()
+    clock = Clock()
+    scheduler = ManualScheduler(clock)
+    compositor = BlinkCompositor()
+    displayed: list[object] = []
+    blink = NaturalBlinkMotion(uniform=lambda low, high: low)
+    session = module.RuntimeEyeSession(
+        compositor=compositor,
+        cursor_provider=Cursor(None),
+        rect_provider=lambda: Rect(0, 0, 512, 768),
+        display=displayed.append,
+        scheduler=scheduler,
+        cancel=scheduler.cancel,
+        clock=clock,
+        on_disabled=lambda: None,
+        action_cycle=ActionCycle(),
+        physical_frames={
+            action: tuple(object() for _ in range(6)) for action in ACTIONS
+        },
+        play_action=lambda _action: True,
+        cancel_action=lambda _action: True,
+        choose_phrase=lambda action: action,
+        present_phrase=lambda _phrase: None,
+        on_action_failed=lambda _action, _failure: None,
+        blink_motion=blink,
+    )
+    assert session.start() is module.SessionResult.ACCEPTED
+    assert blink.next_blink_at == pytest.approx(MIN_BLINK_INTERVAL_SECONDS)
+
+    assert session.request_blink() is module.SessionResult.ACCEPTED
+    assert blink.next_blink_at == pytest.approx(0.0)
+    clock.value = CLOSE_SECONDS
+    session._following_ambient_pulse()
+    assert compositor.blink_calls[-1][2] == pytest.approx(1.0)
+
+    clock.value = TOTAL_BLINK_SECONDS + 1e-6
+    session._following_ambient_pulse()
+    assert compositor.blink_calls[-1][2] == pytest.approx(0.0)
+    assert blink.next_blink_at == pytest.approx(
+        clock.value + MIN_BLINK_INTERVAL_SECONDS
+    )
 
 
 def test_repeated_requests_during_recentering_and_playing_have_no_side_effects() -> None:

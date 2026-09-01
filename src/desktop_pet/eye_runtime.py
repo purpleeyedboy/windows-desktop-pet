@@ -16,7 +16,12 @@ from .eye_follow import (
 )
 from .blink import NaturalBlinkMotion
 from .head_neck_deformation import HeadPose
-from .idle_head_tilt import IdleHeadTiltMotion, IdleTiltPose
+from .idle_head_tilt import (
+    TILT_MODES,
+    IdleHeadTiltMotion,
+    IdleTiltPose,
+    TiltMode,
+)
 from .model import ACTIONS, ActionCycle
 
 
@@ -379,7 +384,54 @@ class RuntimeEyeSession:
             return SessionResult.REJECTED
         return SessionResult.ACCEPTED
 
+    def request_idle_tilt(self, mode: TiltMode) -> SessionResult:
+        """Start one explicitly selected idle-tilt pattern."""
+
+        if mode not in TILT_MODES:
+            raise ValueError("idle tilt mode is invalid")
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._idle_tilt_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._idle_tilt_motion.trigger(mode, self._clock())
+        except Exception:
+            self._idle_tilt_motion = None
+            self._idle_tilt_pose = IdleTiltPose()
+            return SessionResult.REJECTED
+
+        self._idle_tilt_pose = IdleTiltPose()
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        if not self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        ):
+            return SessionResult.REJECTED
+        return SessionResult.ACCEPTED
+
     def request_action(self) -> SessionResult:
+        """Play the next action in the ordinary click cycle."""
+
+        return self._request_action(self._action_cycle.peek(), advance_cycle=True)
+
+    def request_named_action(self, action: str) -> SessionResult:
+        """Play exactly one named action without advancing the click cycle."""
+
+        if action not in ACTIONS:
+            raise ValueError("named action is invalid")
+        return self._request_action(action, advance_cycle=False)
+
+    def _request_action(
+        self,
+        action: str,
+        *,
+        advance_cycle: bool,
+    ) -> SessionResult:
         if self._terminal:
             return SessionResult.REJECTED
         if self._state == "disabled":
@@ -393,11 +445,12 @@ class RuntimeEyeSession:
         ):
             return SessionResult.REJECTED
 
-        action = self._action_cycle.peek()
         self._action_failure = None
         self._pending_action = action
         self._early_finish = False
-        result = self.pause_and_recenter(lambda: self._begin_action(action))
+        result = self.pause_and_recenter(
+            lambda: self._begin_action(action, advance_cycle=advance_cycle)
+        )
         if result is not SessionResult.ACCEPTED and self._pending_action == action:
             self._pending_action = None
         return result
@@ -583,7 +636,7 @@ class RuntimeEyeSession:
             self._center_frame = frame
         return True
 
-    def _begin_action(self, action: str) -> None:
+    def _begin_action(self, action: str, *, advance_cycle: bool) -> None:
         if self._state != "playing" or self._pending_action != action:
             return
         epoch = self._lifecycle_epoch
@@ -600,12 +653,13 @@ class RuntimeEyeSession:
             self._abandon_action_request()
             return
 
-        try:
-            self._action_cycle.commit(action)
-        except Exception:
-            if self._work_is_current(epoch, "playing"):
-                self._cancel_accepted_action(action, epoch)
-            return
+        if advance_cycle:
+            try:
+                self._action_cycle.commit(action)
+            except Exception:
+                if self._work_is_current(epoch, "playing"):
+                    self._cancel_accepted_action(action, epoch)
+                return
         if not self._work_is_current(epoch, "playing"):
             return
         self._pending_action = None

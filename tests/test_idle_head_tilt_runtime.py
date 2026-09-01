@@ -6,7 +6,12 @@ import pytest
 
 from desktop_pet.eye_runtime import RuntimeEyeSession, SessionResult
 from desktop_pet.head_neck_deformation import HeadPose
-from desktop_pet.idle_head_tilt import IdleHeadTiltMotion
+from desktop_pet.idle_head_tilt import (
+    APPROACH_SECONDS,
+    ARC_TRAVEL_SECONDS,
+    MIN_HOLD_SECONDS,
+    IdleHeadTiltMotion,
+)
 from desktop_pet.model import ACTIONS, ActionCycle
 
 
@@ -109,6 +114,53 @@ def test_pointer_press_interrupts_tilt_and_restarts_its_cooldown() -> None:
     assert compositor.calls[-1][2].rotation_degrees == 0.0
     assert compositor.calls[-1][2].arc == 0.0
     assert motion.next_action_at == pytest.approx(71.0)
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_rotation"),
+    (("left", -30.0), ("right", 30.0)),
+)
+def test_named_tilt_request_plays_the_selected_direction_immediately(
+    mode: str,
+    expected_rotation: float,
+) -> None:
+    clock = Clock()
+    compositor = RecordingHeadCompositor()
+    session, motion, _ = make_session(clock, compositor)
+    session.start()
+
+    assert session.request_idle_tilt(mode) is SessionResult.ACCEPTED
+    assert motion.active_mode == mode
+    clock.now = APPROACH_SECONDS
+    session._following_ambient_pulse()
+
+    assert compositor.calls[-1][2].rotation_degrees == expected_rotation
+    assert compositor.calls[-1][2].arc == 0.0
+
+
+def test_named_arc_request_plays_the_selected_arc_mode() -> None:
+    clock = Clock()
+    compositor = RecordingHeadCompositor()
+    session, motion, _ = make_session(clock, compositor)
+    session.start()
+    assert session.request_idle_tilt("left_arc_right") is SessionResult.ACCEPTED
+    assert motion.active_mode == "left_arc_right"
+
+    clock.now = APPROACH_SECONDS + MIN_HOLD_SECONDS + ARC_TRAVEL_SECONDS / 2.0
+    session._following_ambient_pulse()
+
+    assert compositor.calls[-1][2].rotation_degrees == pytest.approx(0.0)
+    assert compositor.calls[-1][2].arc == pytest.approx(1.0)
+
+
+def test_named_tilt_rejects_invalid_mode_and_non_following_state() -> None:
+    clock = Clock()
+    compositor = RecordingHeadCompositor()
+    session, _, _ = make_session(clock, compositor)
+
+    assert session.request_idle_tilt("left") is SessionResult.REJECTED
+    with pytest.raises(ValueError, match="mode"):
+        session.request_idle_tilt("unknown")
 
 
 def test_idle_tilt_is_rejected_without_head_following() -> None:

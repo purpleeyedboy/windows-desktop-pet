@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from desktop_pet import assets as assets_module
 from desktop_pet.assets import (
@@ -259,3 +259,19 @@ def test_load_head_neck_compositor_rejects_unapproved_backplate(
     )
     with pytest.raises(ValueError, match="SHA mismatch"):
         assets_module.load_head_neck_compositor()
+
+
+def test_production_backplate_preserves_original_neck_and_chest_band() -> None:
+    root = assets_module.neutral_eye_source_probe_root()
+    neutral = assets_module.NeutralEyeCompositor.load(root).compose(0.0, 0.0)
+    with Image.open(root / "body-backplate.png") as image:
+        backplate = image.convert("RGBA")
+
+    neck_and_chest = (0, 462, 512, 501)
+    assert (
+        ImageChops.difference(
+            backplate.crop(neck_and_chest),
+            neutral.crop(neck_and_chest),
+        ).getbbox()
+        is None
+    )

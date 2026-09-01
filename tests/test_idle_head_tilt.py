@@ -107,6 +107,60 @@ def test_reset_cancels_an_active_motion() -> None:
 
 
 @pytest.mark.parametrize(
+    ("mode", "expected_tilt"),
+    (
+        ("left", -30.0),
+        ("right", 30.0),
+        ("left_arc_right", -30.0),
+    ),
+)
+def test_trigger_starts_the_requested_mode_without_idle_wait_or_random_choice(
+    mode: str,
+    expected_tilt: float,
+) -> None:
+    choices: list[tuple[str, ...]] = []
+    motion = IdleHeadTiltMotion(
+        uniform=lowest_uniform,
+        choice=lambda modes: choices.append(modes) or "right",
+    )
+
+    motion.trigger(mode, 10.0)
+
+    assert motion.active_mode == mode
+    assert motion.next_action_at == pytest.approx(10.0)
+    assert motion.sample(10.0 + APPROACH_SECONDS) == IdleTiltPose(expected_tilt)
+    assert choices == []
+
+
+def test_triggered_arc_mode_keeps_the_existing_large_arc_contract() -> None:
+    motion = IdleHeadTiltMotion(uniform=lowest_uniform)
+    motion.trigger("left_arc_right", 10.0)
+    midpoint_at = (
+        10.0
+        + APPROACH_SECONDS
+        + MIN_HOLD_SECONDS
+        + ARC_TRAVEL_SECONDS / 2.0
+    )
+
+    midpoint = motion.sample(midpoint_at)
+
+    assert midpoint.rotation_degrees == pytest.approx(0.0, abs=1e-12)
+    assert midpoint.arc == pytest.approx(1.0)
+
+
+def test_trigger_rejects_an_invalid_mode_without_changing_the_motion() -> None:
+    motion = IdleHeadTiltMotion(uniform=lowest_uniform)
+    motion.reset(10.0)
+    next_action_at = motion.next_action_at
+
+    with pytest.raises(ValueError, match="mode"):
+        motion.trigger("unknown", 11.0)
+
+    assert motion.next_action_at == next_action_at
+    assert motion.active_mode is None
+
+
+@pytest.mark.parametrize(
     "pose",
     (
         lambda: IdleTiltPose(50.01, 0.0),

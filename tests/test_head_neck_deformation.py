@@ -462,6 +462,9 @@ def test_rotation_does_not_reintroduce_pixel_stretch_offsets() -> None:
 def test_idle_rotation_layer_contains_head_but_excludes_neck_and_chest() -> None:
     mask = deformation._HEAD_LAYER_MASK
     assert mask.getpixel((120, 350)) >= 250
+    assert mask.getpixel((204, 414)) >= 250
+    assert mask.getpixel((150, 455)) == 0
+    assert mask.getpixel((180, 460)) == 0
     assert mask.getpixel((150, 500)) == 0
     assert mask.getpixel((175, 560)) == 0
 
@@ -490,16 +493,33 @@ def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
     angle = 40.0
     compositor.compose(0.0, 0.0, HeadPose(0.0, 0.0, angle, 1.0))
     source_x, source_y = (79.0, 351.0)
-    pivot_x, pivot_y = (202.0, 416.0)
+    pivot_x, pivot_y = (204.0, 414.0)
     radians = math.radians(angle)
     dx = source_x - pivot_x
     dy = source_y - pivot_y
     rendered = (
         64.0 + pivot_x + math.cos(radians) * dx + math.sin(radians) * dy,
-        pivot_y - math.sin(radians) * dx + math.cos(radians) * dy - 8.0,
+        pivot_y - math.sin(radians) * dx + math.cos(radians) * dy,
     )
     assert compositor.hit_test_eye(rendered)
     assert not compositor.hit_test_eye((639.0, 10.0))
+
+
+def test_arc_path_does_not_translate_the_fixed_head_neck_joint() -> None:
+    source = _synthetic_cat()
+    backplate = _synthetic_cat()
+    compositor = ContinuousHeadNeckCompositor(
+        RecordingCompositor(source), body_backplate=backplate
+    )
+
+    without_arc = compositor.compose(
+        0.0, 0.0, HeadPose(0.0, 0.0, 20.0, 0.0)
+    )
+    with_arc = compositor.compose(
+        0.0, 0.0, HeadPose(0.0, 0.0, 20.0, 1.0)
+    )
+
+    assert ImageChops.difference(without_arc, with_arc).getbbox() is None
 
 
 @pytest.mark.parametrize(
