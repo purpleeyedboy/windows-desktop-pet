@@ -459,6 +459,13 @@ def test_rotation_does_not_reintroduce_pixel_stretch_offsets() -> None:
     assert rotated == neutral == (0.0, 0.0)
 
 
+def test_idle_rotation_layer_contains_head_but_excludes_neck_and_chest() -> None:
+    mask = deformation._HEAD_LAYER_MASK
+    assert mask.getpixel((120, 350)) >= 250
+    assert mask.getpixel((150, 500)) == 0
+    assert mask.getpixel((175, 560)) == 0
+
+
 def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
     source = _synthetic_cat()
     backplate = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
@@ -483,7 +490,7 @@ def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
     angle = 40.0
     compositor.compose(0.0, 0.0, HeadPose(0.0, 0.0, angle, 1.0))
     source_x, source_y = (79.0, 351.0)
-    pivot_x, pivot_y = (182.0, 438.0)
+    pivot_x, pivot_y = (202.0, 416.0)
     radians = math.radians(angle)
     dx = source_x - pivot_x
     dy = source_y - pivot_y
