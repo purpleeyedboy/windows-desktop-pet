@@ -55,6 +55,35 @@ def test_short_blink_closes_holds_and_reopens_symmetrically() -> None:
     )
 
 
+def test_explicit_trigger_restarts_blink_and_rearms_cooldown_after_opening() -> None:
+    calls: list[tuple[float, float]] = []
+    motion = NaturalBlinkMotion(
+        lambda low, high: calls.append((low, high)) or 18.0
+    )
+    motion.reset(0.0)
+    assert motion.next_blink_at == 18.0
+
+    motion.trigger(4.0)
+    assert motion.next_blink_at == 4.0
+    assert motion.sample(4.0 + CLOSE_SECONDS / 2.0) == pytest.approx(0.5)
+
+    finished_at = 4.0 + CLOSE_SECONDS + CLOSED_HOLD_SECONDS + OPEN_SECONDS
+    assert motion.sample(finished_at) == 0.0
+    assert motion.next_blink_at == pytest.approx(finished_at + 18.0)
+    assert calls == [
+        (MIN_BLINK_INTERVAL_SECONDS, MAX_BLINK_INTERVAL_SECONDS),
+        (MIN_BLINK_INTERVAL_SECONDS, MAX_BLINK_INTERVAL_SECONDS),
+    ]
+
+
+@pytest.mark.parametrize("now", [float("nan"), float("inf"), "bad"])
+def test_explicit_trigger_rejects_invalid_clock(now: object) -> None:
+    motion = NaturalBlinkMotion(lambda _low, _high: 20.0)
+
+    with pytest.raises(ValueError, match="blink clock"):
+        motion.trigger(now)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("interval", [11.999, 36.001, float("nan")])
 def test_invalid_interval_source_is_rejected(interval: float) -> None:
     motion = NaturalBlinkMotion(lambda _low, _high: interval)
