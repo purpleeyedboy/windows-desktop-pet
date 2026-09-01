@@ -637,8 +637,9 @@ class PetWindow:
             return False
         source_x = (point[0] - rect.x) * source_width / rect.width
         source_y = (point[1] - rect.y) * source_height / rect.height
-        if self._eye_hit_test is not None:
-            return self._eye_hit_test((source_x, source_y))
+        eye_hit_test = getattr(self, "_eye_hit_test", None)
+        if eye_hit_test is not None:
+            return eye_hit_test((source_x, source_y))
         return any(
             left <= source_x < right and top <= source_y < bottom
             for left, top, right, bottom in self._eye_interaction_boxes
