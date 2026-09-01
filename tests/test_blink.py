@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from PIL import ImageChops
 
+from desktop_pet.assets import load_neutral_eye_source_probe
+from desktop_pet.head_neck_deformation import ContinuousHeadNeckCompositor, HeadPose
 from desktop_pet.blink import (
     CLOSE_SECONDS,
     CLOSED_HOLD_SECONDS,
@@ -66,3 +69,36 @@ def test_invalid_clock_is_rejected(now: object) -> None:
 
     with pytest.raises(ValueError, match="blink clock"):
         motion.sample(now)  # type: ignore[arg-type]
+
+
+def test_zero_closure_is_pixel_identical_and_full_blink_is_local() -> None:
+    compositor = load_neutral_eye_source_probe()
+    tracked = compositor.compose(1.25, -0.75)
+    open_blink = compositor.compose_blink(1.25, -0.75, 0.0)
+    closed = compositor.compose_blink(1.25, -0.75, 1.0)
+
+    assert open_blink.tobytes() == tracked.tobytes()
+    assert closed.getchannel("A").tobytes() == tracked.getchannel("A").tobytes()
+    difference = ImageChops.difference(tracked, closed)
+    bbox = difference.getbbox(alpha_only=False)
+    assert bbox is not None
+    assert 50 <= bbox[0] < bbox[2] <= 190
+    assert 320 <= bbox[1] < bbox[3] <= 380
+
+
+def test_blink_is_composed_before_the_approved_head_warp() -> None:
+    compositor = ContinuousHeadNeckCompositor(
+        load_neutral_eye_source_probe()
+    )
+    pose = HeadPose(0.45, -0.25)
+
+    established = compositor.compose(1.0, -0.5, pose)
+    runtime_named = compositor.compose_head(1.0, -0.5, pose)
+    open_blink = compositor.compose_head_blink(1.0, -0.5, pose, 0.0)
+    closed = compositor.compose_head_blink(1.0, -0.5, pose, 1.0)
+
+    assert runtime_named.tobytes() == established.tobytes()
+    assert open_blink.tobytes() == established.tobytes()
+    assert ImageChops.difference(established, closed).getbbox(
+        alpha_only=False
+    ) is not None
