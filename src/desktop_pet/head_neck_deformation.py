@@ -95,7 +95,7 @@ _LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
 # centre between the eyes and nose in the neutral 512x768 source artwork.
 _TILT_PIVOT = (125.0, 360.0)
 _TILT_LIMIT_DEGREES = 50.0
-_ARC_LIFT_PIXELS = 0.0
+_ARC_LIFT_PIXELS = 24.0
 
 
 def _build_head_layer_mask() -> Image.Image:

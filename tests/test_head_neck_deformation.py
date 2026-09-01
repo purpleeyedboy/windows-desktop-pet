@@ -506,13 +506,16 @@ def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
     dy = source_y - pivot_y
     rendered = (
         64.0 + pivot_x + math.cos(radians) * dx + math.sin(radians) * dy,
-        pivot_y - math.sin(radians) * dx + math.cos(radians) * dy,
+        pivot_y
+        - math.sin(radians) * dx
+        + math.cos(radians) * dy
+        - deformation._ARC_LIFT_PIXELS,
     )
     assert compositor.hit_test_eye(rendered)
     assert not compositor.hit_test_eye((639.0, 10.0))
 
 
-def test_arc_path_does_not_translate_the_fixed_face_centre() -> None:
+def test_arc_path_lifts_the_head_without_moving_the_static_body() -> None:
     source = _synthetic_cat()
     backplate = _synthetic_cat()
     compositor = ContinuousHeadNeckCompositor(
@@ -526,7 +529,15 @@ def test_arc_path_does_not_translate_the_fixed_face_centre() -> None:
         0.0, 0.0, HeadPose(0.0, 0.0, 20.0, 1.0)
     )
 
-    assert ImageChops.difference(without_arc, with_arc).getbbox() is None
+    assert ImageChops.difference(without_arc, with_arc).getbbox() is not None
+    assert deformation._ARC_LIFT_PIXELS == 24.0
+    assert (
+        ImageChops.difference(
+            without_arc.crop((64, 500, 576, 768)),
+            with_arc.crop((64, 500, 576, 768)),
+        ).getbbox()
+        is None
+    )
 
 
 @pytest.mark.parametrize(
