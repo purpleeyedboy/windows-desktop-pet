@@ -90,7 +90,10 @@ _DEFORMATION_GAIN = 2.0
 _AREA_RATIO_LIMITS = (0.60, 1.40)
 _LAYER_PADDING_X = 64
 _LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
-_TILT_PIVOT = (204.0, 414.0)
+# The visible head tilt must read as an in-place roll of the face, not as the
+# whole head orbiting around the chest.  This point is the marked facial
+# centre between the eyes and nose in the neutral 512x768 source artwork.
+_TILT_PIVOT = (125.0, 360.0)
 _TILT_LIMIT_DEGREES = 50.0
 _ARC_LIFT_PIXELS = 0.0
 
@@ -118,7 +121,7 @@ def _build_head_layer_mask() -> Image.Image:
         ),
         fill=255,
     )
-    return mask.filter(ImageFilter.GaussianBlur(2.0))
+    return mask.filter(ImageFilter.GaussianBlur(6.0))
 
 
 _HEAD_LAYER_MASK = _build_head_layer_mask()
