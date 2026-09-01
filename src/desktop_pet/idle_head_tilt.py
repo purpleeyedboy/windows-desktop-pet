@@ -13,6 +13,8 @@ MIN_IDLE_INTERVAL_SECONDS: Final = 35.0
 MAX_IDLE_INTERVAL_SECONDS: Final = 80.0
 MIN_HOLD_SECONDS: Final = 0.8
 MAX_HOLD_SECONDS: Final = 2.0
+MIN_TILT_DEGREES: Final = 30.0
+MAX_TILT_DEGREES: Final = 50.0
 APPROACH_SECONDS: Final = 0.55
 ARC_TRAVEL_SECONDS: Final = 1.15
 RETURN_SECONDS: Final = 0.55
@@ -42,17 +44,17 @@ def _smoothstep(value: float) -> float:
 
 @dataclass(frozen=True)
 class IdleTiltPose:
-    tilt: float = 0.0
+    rotation_degrees: float = 0.0
     arc: float = 0.0
 
     def __post_init__(self) -> None:
-        tilt = _finite_time(self.tilt, "idle tilt")
+        rotation = _finite_time(self.rotation_degrees, "idle tilt rotation")
         arc = _finite_time(self.arc, "idle tilt arc")
-        if abs(tilt) > 1.0:
-            raise ValueError("idle tilt must be within -1..1")
+        if abs(rotation) > MAX_TILT_DEGREES:
+            raise ValueError("idle tilt rotation is outside the supported range")
         if not 0.0 <= arc <= 1.0:
             raise ValueError("idle tilt arc must be within 0..1")
-        object.__setattr__(self, "tilt", tilt)
+        object.__setattr__(self, "rotation_degrees", rotation)
         object.__setattr__(self, "arc", arc)
 
 
@@ -73,6 +75,8 @@ class IdleHeadTiltMotion:
         self._mode: TiltMode | None = None
         self._first_hold = 0.0
         self._second_hold = 0.0
+        self._first_rotation = 0.0
+        self._second_rotation = 0.0
 
     @property
     def next_action_at(self) -> float | None:
@@ -94,6 +98,8 @@ class IdleHeadTiltMotion:
         self._mode = None
         self._first_hold = 0.0
         self._second_hold = 0.0
+        self._first_rotation = 0.0
+        self._second_rotation = 0.0
 
     def sample(self, now: float) -> IdleTiltPose:
         current = _finite_time(now, "idle tilt clock")
@@ -108,33 +114,34 @@ class IdleHeadTiltMotion:
         assert self._started_at is not None
         assert self._mode is not None
         elapsed = max(0.0, current - self._started_at)
-        direction = -1.0 if self._mode != "right" else 1.0
+        rotation = self._first_rotation
 
         if elapsed < APPROACH_SECONDS:
             return IdleTiltPose(
-                direction * _smoothstep(elapsed / APPROACH_SECONDS)
+                rotation * _smoothstep(elapsed / APPROACH_SECONDS)
             )
         elapsed -= APPROACH_SECONDS
         if elapsed < self._first_hold:
-            return IdleTiltPose(direction)
+            return IdleTiltPose(rotation)
         elapsed -= self._first_hold
 
         if self._mode == "left_arc_right":
             if elapsed < ARC_TRAVEL_SECONDS:
                 progress = _smoothstep(elapsed / ARC_TRAVEL_SECONDS)
                 return IdleTiltPose(
-                    -math.cos(math.pi * progress),
+                    self._first_rotation
+                    + (self._second_rotation - self._first_rotation) * progress,
                     math.sin(math.pi * progress),
                 )
             elapsed -= ARC_TRAVEL_SECONDS
             if elapsed < self._second_hold:
-                return IdleTiltPose(1.0)
+                return IdleTiltPose(self._second_rotation)
             elapsed -= self._second_hold
-            direction = 1.0
+            rotation = self._second_rotation
 
         if elapsed < RETURN_SECONDS:
             return IdleTiltPose(
-                direction
+                rotation
                 * (1.0 - _smoothstep(elapsed / RETURN_SECONDS))
             )
 
@@ -150,6 +157,12 @@ class IdleHeadTiltMotion:
             raise ValueError("idle tilt mode source returned an invalid mode")
         self._mode = mode
         self._started_at = started_at
+        self._first_rotation = self._random_rotation(
+            -1.0 if mode != "right" else 1.0
+        )
+        self._second_rotation = (
+            self._random_rotation(1.0) if mode == "left_arc_right" else 0.0
+        )
         self._first_hold = self._random_duration(
             MIN_HOLD_SECONDS,
             MAX_HOLD_SECONDS,
@@ -173,3 +186,11 @@ class IdleHeadTiltMotion:
         if not math.isfinite(value) or value < low or value > high:
             raise ValueError(f"{name} is outside the supported range")
         return value
+
+    def _random_rotation(self, direction: float) -> float:
+        magnitude = self._random_duration(
+            MIN_TILT_DEGREES,
+            MAX_TILT_DEGREES,
+            "idle tilt angle",
+        )
+        return direction * magnitude

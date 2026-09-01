@@ -202,20 +202,60 @@ def test_load_neutral_eye_source_probe_uses_validated_compositor_loader(
 
 def test_load_head_neck_compositor_wraps_the_selected_neutral_eye_compositor(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     neutral = object()
     wrapped = object()
-    calls: list[object] = []
+    calls: list[tuple[object, Image.Image]] = []
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    backplate_path = runtime_root / "body-backplate.png"
+    Image.new("RGBA", (512, 768), (0, 0, 0, 0)).save(backplate_path)
+    monkeypatch.setattr(
+        assets_module,
+        "HEAD_TILT_BACKPLATE_SHA256",
+        assets_module.hashlib.sha256(backplate_path.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        assets_module, "neutral_eye_runtime_root", lambda: runtime_root
+    )
     monkeypatch.setattr(
         assets_module,
         "load_neutral_eye_compositor",
-        lambda: neutral,
+        lambda root: neutral,
     )
+
+    def wrap(base, *, body_backplate):
+        calls.append((base, body_backplate))
+        return wrapped
+
     monkeypatch.setattr(
         assets_module,
         "ContinuousHeadNeckCompositor",
-        lambda base: calls.append(base) or wrapped,
+        wrap,
     )
 
     assert assets_module.load_head_neck_compositor() is wrapped
-    assert calls == [neutral]
+    assert len(calls) == 1
+    assert calls[0][0] is neutral
+    assert calls[0][1].mode == "RGBA"
+    assert calls[0][1].size == (512, 768)
+
+
+def test_load_head_neck_compositor_rejects_unapproved_backplate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    Image.new("RGBA", (512, 768), (0, 0, 0, 0)).save(
+        runtime_root / "body-backplate.png"
+    )
+    monkeypatch.setattr(
+        assets_module, "neutral_eye_runtime_root", lambda: runtime_root
+    )
+    monkeypatch.setattr(
+        assets_module, "HEAD_TILT_BACKPLATE_SHA256", "0" * 64
+    )
+    with pytest.raises(ValueError, match="SHA mismatch"):
+        assets_module.load_head_neck_compositor()

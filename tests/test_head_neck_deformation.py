@@ -438,7 +438,7 @@ def test_invalid_injected_frame_fails_closed() -> None:
 @pytest.mark.parametrize(
     "pose",
     (
-        lambda: HeadPose(0.0, 0.0, 1.01, 0.0),
+        lambda: HeadPose(0.0, 0.0, 50.01, 0.0),
         lambda: HeadPose(0.0, 0.0, 0.0, -0.01),
         lambda: HeadPose(0.0, 0.0, 0.0, 1.01),
     ),
@@ -448,53 +448,73 @@ def test_head_pose_rejects_invalid_idle_tilt_components(pose) -> None:
         pose()
 
 
-def test_idle_tilt_uses_opposed_height_and_asymmetric_outward_stretch() -> None:
-    left = deformation._sampling_offset(36.0, 250.0, HeadPose(0.0, 0.0, 1.0))
-    right = deformation._sampling_offset(223.0, 250.0, HeadPose(0.0, 0.0, 1.0))
-    assert left[0] < 0.0
-    assert right[0] < 0.0
-    assert left[1] > 0.0
-    assert right[1] < 0.0
-
-    reversed_left = deformation._sampling_offset(
-        36.0, 250.0, HeadPose(0.0, 0.0, -1.0)
+def test_rotation_does_not_reintroduce_pixel_stretch_offsets() -> None:
+    point = (118.0, 397.0)
+    neutral = deformation._sampling_offset(
+        *point, HeadPose(0.0, 0.0, 0.0, 0.0)
     )
-    reversed_right = deformation._sampling_offset(
-        223.0, 250.0, HeadPose(0.0, 0.0, -1.0)
+    rotated = deformation._sampling_offset(
+        *point, HeadPose(0.0, 0.0, 50.0, 1.0)
     )
-    assert reversed_left == pytest.approx((-left[0], -left[1]))
-    assert reversed_right == pytest.approx((-right[0], -right[1]))
+    assert rotated == neutral == (0.0, 0.0)
 
 
-def test_arc_lifts_dynamic_head_but_keeps_protected_body_pinned() -> None:
-    lifted = deformation._sampling_offset(
-        135.0, 350.0, HeadPose(0.0, 0.0, 0.0, 1.0)
+def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
+    source = _synthetic_cat()
+    backplate = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+    compositor = ContinuousHeadNeckCompositor(
+        RecordingCompositor(source), body_backplate=backplate
     )
-    chest = deformation._sampling_offset(
-        139.0, 555.0, HeadPose(0.0, 0.0, 0.0, 1.0)
+    result = compositor.compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    assert compositor.source_size == (640, 768)
+    assert result.size == (640, 768)
+    assert ImageChops.difference(result.crop((64, 0, 576, 768)), source).getbbox() is None
+    assert result.crop((0, 0, 64, 768)).getbbox() is None
+    assert result.crop((576, 0, 640, 768)).getbbox() is None
+
+
+def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
+    base = RecordingCompositor()
+    base.eye_interaction_boxes = ((62, 335, 96, 367),)
+    compositor = ContinuousHeadNeckCompositor(
+        base,
+        body_backplate=Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0)),
     )
-    assert lifted[0] == 0.0
-    assert lifted[1] > 0.0
-    assert chest == (0.0, 0.0)
+    angle = 40.0
+    compositor.compose(0.0, 0.0, HeadPose(0.0, 0.0, angle, 1.0))
+    source_x, source_y = (79.0, 351.0)
+    pivot_x, pivot_y = (182.0, 438.0)
+    radians = math.radians(angle)
+    dx = source_x - pivot_x
+    dy = source_y - pivot_y
+    rendered = (
+        64.0 + pivot_x + math.cos(radians) * dx + math.sin(radians) * dy,
+        pivot_y - math.sin(radians) * dx + math.cos(radians) * dy - 8.0,
+    )
+    assert compositor.hit_test_eye(rendered)
+    assert not compositor.hit_test_eye((639.0, 10.0))
 
 
 @pytest.mark.parametrize(
     "pose",
     (
-        HeadPose(0.0, 0.0, -1.0, 0.0),
-        HeadPose(0.0, 0.0, 1.0, 0.0),
+        HeadPose(0.0, 0.0, -50.0, 0.0),
+        HeadPose(0.0, 0.0, 50.0, 0.0),
         HeadPose(0.0, 0.0, 0.0, 1.0),
-        HeadPose(0.6, 0.4, -1.0, 1.0),
-        HeadPose(-0.6, 0.4, 1.0, 1.0),
+        HeadPose(0.6, 0.4, -50.0, 1.0),
+        HeadPose(-0.6, 0.4, 50.0, 1.0),
     ),
 )
 def test_idle_tilt_and_mouse_follow_extremes_keep_a_valid_mesh(pose) -> None:
-    compositor = ContinuousHeadNeckCompositor(RecordingCompositor())
+    compositor = ContinuousHeadNeckCompositor(
+        RecordingCompositor(),
+        body_backplate=Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0)),
+    )
     mesh = compositor.mesh_for(pose)
     assert len(mesh) == (len(X_VERTICES) - 1) * (len(Y_VERTICES) - 1)
     result = compositor.compose(0.0, 0.0, pose)
     assert result.mode == "RGBA"
-    assert result.size == CANVAS_SIZE
+    assert result.size == (640, 768)
 
 
 def test_production_module_has_only_pillow_and_standard_library_dependencies() -> None:

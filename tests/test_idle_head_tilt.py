@@ -10,7 +10,9 @@ from desktop_pet.idle_head_tilt import (
     IdleHeadTiltMotion,
     IdleTiltPose,
     MAX_HOLD_SECONDS,
+    MAX_TILT_DEGREES,
     MIN_HOLD_SECONDS,
+    MIN_TILT_DEGREES,
     RETURN_SECONDS,
     TILT_MODES,
 )
@@ -35,7 +37,7 @@ def test_first_sample_arms_an_occasional_cooldown() -> None:
 
 @pytest.mark.parametrize(
     ("mode", "expected_tilt"),
-    (("left", -1.0), ("right", 1.0)),
+    (("left", -30.0), ("right", 30.0)),
 )
 def test_single_direction_modes_approach_hold_and_return(
     mode: str,
@@ -55,7 +57,7 @@ def test_single_direction_modes_approach_hold_and_return(
     returning = motion.sample(
         start + APPROACH_SECONDS + MIN_HOLD_SECONDS + RETURN_SECONDS / 2.0
     )
-    assert returning.tilt == pytest.approx(expected_tilt / 2.0)
+    assert returning.rotation_degrees == pytest.approx(expected_tilt / 2.0)
     assert returning.arc == 0.0
 
 
@@ -69,10 +71,10 @@ def test_arc_mode_moves_over_a_large_lifted_arc_and_holds_right() -> None:
     assert start is not None
     arc_start = start + APPROACH_SECONDS + MIN_HOLD_SECONDS
     midpoint = motion.sample(arc_start + ARC_TRAVEL_SECONDS / 2.0)
-    assert midpoint.tilt == pytest.approx(0.0, abs=1e-12)
+    assert midpoint.rotation_degrees == pytest.approx(0.0, abs=1e-12)
     assert midpoint.arc == pytest.approx(1.0)
     right_hold = motion.sample(arc_start + ARC_TRAVEL_SECONDS + 0.4)
-    assert right_hold == IdleTiltPose(1.0)
+    assert right_hold == IdleTiltPose(30.0)
 
 
 def test_completed_action_returns_to_center_and_restarts_cooldown() -> None:
@@ -92,13 +94,13 @@ def test_completed_action_returns_to_center_and_restarts_cooldown() -> None:
 
 
 def test_reset_cancels_an_active_motion() -> None:
-    values = iter((35.0, MIN_HOLD_SECONDS, 40.0))
+    values = iter((35.0, MIN_TILT_DEGREES, MIN_HOLD_SECONDS, 40.0))
     motion = IdleHeadTiltMotion(
         uniform=lambda low, high: next(values),
         choice=lambda _: "left",
     )
     motion.reset(0.0)
-    assert motion.sample(35.4).tilt < 0.0
+    assert motion.sample(35.4).rotation_degrees < 0.0
     motion.reset(36.0)
     assert motion.sample(36.1) == IdleTiltPose()
     assert motion.next_action_at == pytest.approx(76.0)
@@ -107,7 +109,7 @@ def test_reset_cancels_an_active_motion() -> None:
 @pytest.mark.parametrize(
     "pose",
     (
-        lambda: IdleTiltPose(1.01, 0.0),
+        lambda: IdleTiltPose(50.01, 0.0),
         lambda: IdleTiltPose(0.0, -0.01),
         lambda: IdleTiltPose(0.0, 1.01),
         lambda: IdleTiltPose(math.nan, 0.0),
@@ -136,3 +138,5 @@ def test_public_timing_and_mode_ranges_match_the_idle_contract() -> None:
     assert set(TILT_MODES) == {"left", "right", "left_arc_right"}
     assert MIN_HOLD_SECONDS == 0.8
     assert MAX_HOLD_SECONDS == 2.0
+    assert MIN_TILT_DEGREES == 30.0
+    assert MAX_TILT_DEGREES == 50.0

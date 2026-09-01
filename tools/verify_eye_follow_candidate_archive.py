@@ -22,6 +22,7 @@ EYE_SOURCE = "assets/rig/v1/source/eye-neutral-v1"
 EYE_RUNTIME = "assets/rig/v1/runtime/eye-neutral-v1"
 EYE_FILES = (
     "authoring.json",
+    "body-backplate.png",
     "eye-left-mask.png",
     "eye-left.png",
     "eye-right-mask.png",
@@ -130,7 +131,7 @@ def verify_archive(executable: Path) -> None:
 
     print(
         "Archive verification passed: "
-        f"stable {len(stable)}, neutral-eye 6, total {len(expected)}"
+        f"stable {len(stable)}, neutral-eye {len(eyes)}, total {len(expected)}"
     )
 
 

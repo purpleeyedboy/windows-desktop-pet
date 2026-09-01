@@ -20,6 +20,7 @@ RUNTIME_EYE = "assets/rig/v1/runtime/eye-neutral-v1"
 SOURCE_EYE = "assets/rig/v1/source/eye-neutral-v1"
 EYE_FILES = (
     "authoring.json",
+    "body-backplate.png",
     "eye-left-mask.png",
     "eye-left.png",
     "eye-right-mask.png",
@@ -168,7 +169,7 @@ def test_archive_verifier_enforces_the_candidate_archive_contract():
     assert RUNTIME_EYE in verifier
     for file_name in EYE_FILES:
         assert file_name in verifier
-    assert "neutral-eye 6" in verifier
+    assert "neutral-eye {len(eyes)}" in verifier
     assert ".gif" in verifier
     assert "byte" in verifier.lower()
 
@@ -208,7 +209,7 @@ def test_archive_verifier_compares_all_resource_bytes_and_rejects_forbidden_path
     CArchiveWriter(str(executable), entries, "libpython3.12.so")
 
     verifier.verify_archive(executable)
-    assert "neutral-eye 6" in capsys.readouterr().out
+    assert "neutral-eye 7" in capsys.readouterr().out
 
     (source_root / "assets/keyframes/shake/00.png").write_bytes(b"changed")
     with pytest.raises(verifier.VerificationError, match="byte mismatch"):
@@ -264,7 +265,7 @@ def test_archive_verifier_normalizes_windows_member_names_and_rejects_collisions
     CArchiveWriter(str(windows_archive), entries, "libpython3.12.so")
 
     verifier.verify_archive(windows_archive)
-    assert "neutral-eye 6" in capsys.readouterr().out
+    assert "neutral-eye 7" in capsys.readouterr().out
 
     with pytest.raises(verifier.VerificationError, match="normalized archive path collision"):
         verifier.normalized_archive_members(

@@ -90,7 +90,7 @@ def test_idle_tilt_combines_with_current_eye_and_head_follow_pose() -> None:
     eye_x, eye_y, pose = compositor.calls[-1]
     assert (eye_x, eye_y) == (1.4, -0.7)
     assert (pose.x, pose.y) == (0.3, -0.2)
-    assert pose.tilt == pytest.approx(-1.0)
+    assert pose.rotation_degrees == pytest.approx(-30.0)
     assert pose.arc == 0.0
     assert session.state == "following"
 
@@ -102,11 +102,11 @@ def test_pointer_press_interrupts_tilt_and_restarts_its_cooldown() -> None:
     session.start()
     clock.now = 35.4
     session._following_ambient_pulse()
-    assert compositor.calls[-1][2].tilt < 0.0
+    assert compositor.calls[-1][2].rotation_degrees < 0.0
 
     clock.now = 36.0
     assert session.interrupt_idle() is SessionResult.ACCEPTED
-    assert compositor.calls[-1][2].tilt == 0.0
+    assert compositor.calls[-1][2].rotation_degrees == 0.0
     assert compositor.calls[-1][2].arc == 0.0
     assert motion.next_action_at == pytest.approx(71.0)
 

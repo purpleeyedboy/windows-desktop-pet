@@ -7,6 +7,7 @@ EYE_SOURCE = ROOT / "assets/rig/v1/source/eye-neutral-v1"
 EYE_RUNTIME = "assets/rig/v1/runtime/eye-neutral-v1"
 EYE_FILES = (
     "authoring.json",
+    "body-backplate.png",
     "eye-left-mask.png",
     "eye-left.png",
     "eye-right-mask.png",

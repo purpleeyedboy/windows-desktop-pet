@@ -536,7 +536,7 @@ class RuntimeEyeSession:
                 )
                 combined_head_pose = HeadPose(
                     *head_pose,
-                    idle_pose.tilt,
+                    idle_pose.rotation_degrees,
                     idle_pose.arc,
                 )
                 if self._blink_motion is not None:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from numbers import Real
 from typing import Protocol
 
-from PIL import Image, ImageChops, ImageMath
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageMath
 
 
 _CANVAS_SIZE = (512, 768)
@@ -88,10 +88,36 @@ _EYE_LIMITS = (3.0, 2.0)
 _BOUNDARY_RAMP = 20.0
 _DEFORMATION_GAIN = 2.0
 _AREA_RATIO_LIMITS = (0.60, 1.40)
-_TILT_CENTER_X = 135.0
-_TILT_ROLL_GAIN = 0.05
-_TILT_OUTWARD_GAIN = 4.5
-_TILT_ARC_LIFT = 2.5
+_LAYER_PADDING_X = 64
+_LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
+_TILT_PIVOT = (182.0, 438.0)
+_TILT_LIMIT_DEGREES = 50.0
+_ARC_LIFT_PIXELS = 8.0
+
+
+def _build_head_layer_mask() -> Image.Image:
+    mask = Image.new("L", _CANVAS_SIZE, 0)
+    ImageDraw.Draw(mask).polygon(
+        (
+            (0, 160),
+            (270, 160),
+            (270, 390),
+            (246, 426),
+            (220, 455),
+            (198, 476),
+            (168, 488),
+            (136, 490),
+            (105, 478),
+            (79, 459),
+            (54, 440),
+            (0, 435),
+        ),
+        fill=255,
+    )
+    return mask.filter(ImageFilter.GaussianBlur(4.0))
+
+
+_HEAD_LAYER_MASK = _build_head_layer_mask()
 
 
 class _BaseCompositor(Protocol):
@@ -116,23 +142,23 @@ class HeadPose:
 
     x: float
     y: float
-    tilt: float = 0.0
+    rotation_degrees: float = 0.0
     arc: float = 0.0
 
     def __post_init__(self) -> None:
         x = _finite_real(self.x, "head x")
         y = _finite_real(self.y, "head y")
-        tilt = _finite_real(self.tilt, "head tilt")
+        rotation = _finite_real(self.rotation_degrees, "head rotation")
         arc = _finite_real(self.arc, "head tilt arc")
         if math.hypot(x, y) > 1.0:
             raise ValueError("head pose must be inside the unit disk")
-        if abs(tilt) > 1.0:
-            raise ValueError("head tilt must be within -1..1")
+        if abs(rotation) > _TILT_LIMIT_DEGREES:
+            raise ValueError("head rotation is outside the supported range")
         if not 0.0 <= arc <= 1.0:
             raise ValueError("head tilt arc must be within 0..1")
         object.__setattr__(self, "x", x)
         object.__setattr__(self, "y", y)
-        object.__setattr__(self, "tilt", tilt)
+        object.__setattr__(self, "rotation_degrees", rotation)
         object.__setattr__(self, "arc", arc)
 
 
@@ -287,25 +313,9 @@ def _sampling_offset(x: float, y: float, pose: HeadPose) -> tuple[float, float]:
     support = _support_weight(x, y)
     if support == 0.0:
         return 0.0, 0.0
-    normalized_side = abs((x - _TILT_CENTER_X) / 125.0)
-    tilt_x = (
-        -pose.tilt
-        * support
-        * _TILT_OUTWARD_GAIN
-        * min(1.0, normalized_side) ** 1.35
-    )
-    tilt_y = (
-        -pose.tilt
-        * support
-        * (x - _TILT_CENTER_X)
-        * _TILT_ROLL_GAIN
-        + pose.arc * support * _TILT_ARC_LIFT
-    )
     return (
-        -pose.x * support * _horizontal_amplitude(x, y) * _DEFORMATION_GAIN
-        + tilt_x,
-        -pose.y * support * _vertical_amplitude(x, y) * _DEFORMATION_GAIN
-        + tilt_y,
+        -pose.x * support * _horizontal_amplitude(x, y) * _DEFORMATION_GAIN,
+        -pose.y * support * _vertical_amplitude(x, y) * _DEFORMATION_GAIN,
     )
 
 
@@ -326,24 +336,9 @@ _VERTEX_FIELD = _vertex_field()
 
 def _source_vertex(x: int, y: int, pose: HeadPose) -> tuple[float, float]:
     horizontal, vertical = _VERTEX_FIELD[(x, y)]
-    support = _support_weight(float(x), float(y))
-    normalized_side = abs((float(x) - _TILT_CENTER_X) / 125.0)
-    tilt_x = (
-        -pose.tilt
-        * support
-        * _TILT_OUTWARD_GAIN
-        * min(1.0, normalized_side) ** 1.35
-    )
-    tilt_y = (
-        -pose.tilt
-        * support
-        * (float(x) - _TILT_CENTER_X)
-        * _TILT_ROLL_GAIN
-        + pose.arc * support * _TILT_ARC_LIFT
-    )
     return (
-        float(x) - pose.x * horizontal + tilt_x,
-        float(y - _HEAD_ROI[1]) - pose.y * vertical + tilt_y,
+        float(x) - pose.x * horizontal,
+        float(y - _HEAD_ROI[1]) - pose.y * vertical,
     )
 
 
@@ -450,7 +445,11 @@ class ContinuousHeadNeckCompositor:
 
     deformation_gain = _DEFORMATION_GAIN
 
-    def __init__(self, base_compositor: _BaseCompositor) -> None:
+    def __init__(
+        self,
+        base_compositor: _BaseCompositor,
+        body_backplate: Image.Image | None = None,
+    ) -> None:
         try:
             source_size = tuple(base_compositor.source_size)
             midpoint = tuple(base_compositor.eye_midpoint)
@@ -461,18 +460,75 @@ class ContinuousHeadNeckCompositor:
             raise ValueError("base compositor source size must be 512x768")
         if len(midpoint) != 2:
             raise ValueError("base compositor eye midpoint must contain two values")
-        self.eye_midpoint = (
+        base_midpoint = (
             _finite_real(midpoint[0], "eye midpoint x"),
             _finite_real(midpoint[1], "eye midpoint y"),
         )
-        self.source_size = _CANVAS_SIZE
+        if body_backplate is not None and (
+            not isinstance(body_backplate, Image.Image)
+            or body_backplate.mode != "RGBA"
+            or body_backplate.size != _CANVAS_SIZE
+        ):
+            raise ValueError("body backplate must be a 512x768 RGBA image")
+        self._body_backplate = (
+            body_backplate.copy() if body_backplate is not None else None
+        )
+        self._layer_padding_x = (
+            _LAYER_PADDING_X if self._body_backplate is not None else 0
+        )
+        self.source_size = (
+            _LAYER_CANVAS_SIZE
+            if self._body_backplate is not None
+            else _CANVAS_SIZE
+        )
+        self.eye_midpoint = (
+            base_midpoint[0] + self._layer_padding_x,
+            base_midpoint[1],
+        )
         self.head_roi = _HEAD_ROI
-        self.eye_interaction_boxes = tuple(
+        self._base_eye_interaction_boxes = tuple(
             getattr(base_compositor, "eye_interaction_boxes", ())
+        )
+        self.eye_interaction_boxes = tuple(
+            (
+                left + self._layer_padding_x,
+                top,
+                right + self._layer_padding_x,
+                bottom,
+            )
+            for left, top, right, bottom in self._base_eye_interaction_boxes
+        )
+        self._last_rotation_degrees = 0.0
+        self._last_arc = 0.0
+        self._padded_body_backplate = (
+            self._pad_layer(self._body_backplate)
+            if self._body_backplate is not None
+            else None
         )
         self._compose_base = compose
         compose_blink = getattr(base_compositor, "compose_blink", None)
         self._compose_blink = compose_blink if callable(compose_blink) else None
+
+    def hit_test_eye(self, point: tuple[float, float]) -> bool:
+        """Test a padded point against eye boxes in rotating head coordinates."""
+
+        if not isinstance(point, tuple) or len(point) != 2:
+            raise TypeError("point must be an x/y tuple")
+        x = _finite_real(point[0], "point x") - self._layer_padding_x
+        y = _finite_real(point[1], "point y")
+        y += self._last_arc * _ARC_LIFT_PIXELS
+        angle = math.radians(self._last_rotation_degrees)
+        if angle != 0.0:
+            dx = x - _TILT_PIVOT[0]
+            dy = y - _TILT_PIVOT[1]
+            cosine = math.cos(angle)
+            sine = math.sin(angle)
+            x = _TILT_PIVOT[0] + cosine * dx - sine * dy
+            y = _TILT_PIVOT[1] + sine * dx + cosine * dy
+        return any(
+            left <= x < right and top <= y < bottom
+            for left, top, right, bottom in self._base_eye_interaction_boxes
+        )
 
     def sampling_offset_at(
         self,
@@ -609,24 +665,67 @@ class ContinuousHeadNeckCompositor:
             raise ValueError("base compositor frame must use RGBA mode")
         if source.size != _CANVAS_SIZE:
             raise ValueError("base compositor frame must be 512x768")
-        if (
-            pose.x == 0.0
-            and pose.y == 0.0
-            and pose.tilt == 0.0
-            and pose.arc == 0.0
-        ):
-            return source
+        if pose.x == 0.0 and pose.y == 0.0:
+            deformed = source
+        else:
+            left, top, right, bottom = _RUNTIME_WARP_BOX
+            roi = source.crop((left, top, right, bottom))
+            warped = _premultiply(roi).transform(
+                roi.size,
+                Image.Transform.MESH,
+                self._runtime_mesh_for(pose),
+                Image.Resampling.BICUBIC,
+            )
+            straight = _normalize_near_opaque_alpha(_unpremultiply(warped))
+            restored = Image.composite(straight, roi, _RUNTIME_PIXEL_MASK)
+            deformed = source.copy()
+            deformed.paste(restored, (left, top))
 
-        left, top, right, bottom = _RUNTIME_WARP_BOX
-        roi = source.crop((left, top, right, bottom))
-        warped = _premultiply(roi).transform(
-            roi.size,
-            Image.Transform.MESH,
-            self._runtime_mesh_for(pose),
-            Image.Resampling.BICUBIC,
+        self._last_rotation_degrees = pose.rotation_degrees
+        self._last_arc = pose.arc
+        if self._body_backplate is None:
+            return deformed
+        if pose.rotation_degrees == 0.0 and pose.arc == 0.0:
+            return self._pad_layer(deformed)
+        return self._compose_rotated_head(deformed, pose)
+
+    def _compose_rotated_head(
+        self,
+        deformed: Image.Image,
+        pose: HeadPose,
+    ) -> Image.Image:
+        assert self._padded_body_backplate is not None
+        alpha = ImageChops.multiply(
+            deformed.getchannel("A"),
+            _HEAD_LAYER_MASK,
         )
-        straight = _normalize_near_opaque_alpha(_unpremultiply(warped))
-        restored = Image.composite(straight, roi, _RUNTIME_PIXEL_MASK)
-        result = source.copy()
-        result.paste(restored, (left, top))
-        return result
+        head = deformed.copy()
+        head.putalpha(alpha)
+        padded_head = self._pad_layer(head)
+        pivot = (
+            _TILT_PIVOT[0] + self._layer_padding_x,
+            _TILT_PIVOT[1],
+        )
+        rotated = _unpremultiply(
+            _premultiply(padded_head).rotate(
+                pose.rotation_degrees,
+                resample=Image.Resampling.BICUBIC,
+                center=pivot,
+                expand=False,
+            )
+        )
+        lift = round(pose.arc * _ARC_LIFT_PIXELS)
+        if lift:
+            lifted = Image.new("RGBA", self.source_size, (0, 0, 0, 0))
+            lifted.alpha_composite(rotated, (0, -lift))
+            rotated = lifted
+        result = self._padded_body_backplate.copy()
+        result.alpha_composite(rotated)
+        return _normalize_near_opaque_alpha(result)
+
+    def _pad_layer(self, image: Image.Image) -> Image.Image:
+        if self._layer_padding_x == 0:
+            return image.copy()
+        padded = Image.new("RGBA", self.source_size, (0, 0, 0, 0))
+        padded.alpha_composite(image, (self._layer_padding_x, 0))
+        return padded

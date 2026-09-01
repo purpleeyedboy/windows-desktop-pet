@@ -116,7 +116,7 @@ class _CachedCenterCompositor:
             and eye_y == 0.0
             and head_pose.x == 0.0
             and head_pose.y == 0.0
-            and head_pose.tilt == 0.0
+            and head_pose.rotation_degrees == 0.0
             and head_pose.arc == 0.0
         ):
             if self.center_frame is None:
@@ -162,13 +162,23 @@ class _CachedCenterCompositor:
             and eye_y == 0.0
             and head_pose.x == 0.0
             and head_pose.y == 0.0
-            and head_pose.tilt == 0.0
+            and head_pose.rotation_degrees == 0.0
             and head_pose.arc == 0.0
             and closure == 0.0
         ):
             return self.compose_head(0.0, 0.0, head_pose)
         compose_head_blink = getattr(self._compositor, "compose_head_blink")
         return compose_head_blink(eye_x, eye_y, head_pose, closure)
+
+    def hit_test_eye(self, point: tuple[float, float]) -> bool:
+        hit_test = getattr(self._compositor, "hit_test_eye", None)
+        if callable(hit_test):
+            return bool(hit_test(point))
+        x, y = point
+        return any(
+            left <= x < right and top <= y < bottom
+            for left, top, right, bottom in self.eye_interaction_boxes
+        )
 
 
 @dataclass(frozen=True)
@@ -256,6 +266,7 @@ class PetWindow:
         self.eye_session: RuntimeEyeSession | None = None
         self._eye_interaction_boxes: tuple[tuple[int, int, int, int], ...] = ()
         self._eye_source_size: tuple[int, int] = (0, 0)
+        self._eye_hit_test: Callable[[tuple[float, float]], bool] | None = None
         self._presentation_snapshot: _PresentationSnapshot | None = None
         self._startup_presentation_error: Exception | None = None
         self._constructing = True
@@ -298,6 +309,7 @@ class PetWindow:
                 cached_compositor = _CachedCenterCompositor(compositor)
                 self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
                 self._eye_source_size = tuple(cached_compositor.source_size)
+                self._eye_hit_test = cached_compositor.hit_test_eye
                 self.eye_session = RuntimeEyeSession(
                     compositor=cached_compositor,
                     cursor_provider=cursor_provider,
@@ -625,6 +637,8 @@ class PetWindow:
             return False
         source_x = (point[0] - rect.x) * source_width / rect.width
         source_y = (point[1] - rect.y) * source_height / rect.height
+        if self._eye_hit_test is not None:
+            return self._eye_hit_test((source_x, source_y))
         return any(
             left <= source_x < right and top <= source_y < bottom
             for left, top, right, bottom in self._eye_interaction_boxes
