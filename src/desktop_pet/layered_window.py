@@ -239,6 +239,12 @@ class LayeredWindowRenderer:
         return bitmap, bits
 
     def render(self, image: Image.Image, x: int, y: int) -> None:
+        try:
+            self._render_once(image, x, y)
+        except OSError:
+            self._render_once(image, x, y)
+
+    def _render_once(self, image: Image.Image, x: int, y: int) -> None:
         pixels = rgba_to_premultiplied_bgra(image)
         screen_dc = self._user32.GetDC(None)
         if not screen_dc:

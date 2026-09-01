@@ -459,9 +459,15 @@ class PetWindow:
                 self._startup_presentation_error = error
             elif self._consecutive_renderer_failures >= 2:
                 self._mark_rendering_unavailable()
-            else:
+            elif self.animation.busy:
                 self._activate_legacy_fallback()
-            if not self._constructing:
+            if (
+                not self._constructing
+                and (
+                    self._presentation_snapshot is None
+                    or not self._rendering_available
+                )
+            ):
                 self._report_runtime_failure_once()
             raise
 
@@ -726,11 +732,7 @@ class PetWindow:
         )
 
     def _show_runtime_failure(self, message: str) -> None:
-        messagebox.showwarning(
-            "桌面宠物提示",
-            message,
-            parent=self.root,
-        )
+        del message
 
     def _report_runtime_failure_once(
         self,

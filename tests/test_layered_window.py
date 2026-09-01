@@ -65,6 +65,23 @@ def test_win32_error_delegates_to_native_winerror(monkeypatch):
     assert delegated_codes == [error_code]
 
 
+def test_render_retries_one_transient_os_error(monkeypatch):
+    renderer = object.__new__(LayeredWindowRenderer)
+    attempts: list[tuple[tuple[int, int], int, int]] = []
+
+    def render_once(image, x, y):
+        attempts.append((image.size, x, y))
+        if len(attempts) == 1:
+            raise OSError(1450, "insufficient system resources")
+
+    monkeypatch.setattr(renderer, "_render_once", render_once, raising=False)
+    image = Image.new("RGBA", (4, 3), (10, 20, 30, 255))
+
+    renderer.render(image, 40, 50)
+
+    assert attempts == [((4, 3), 40, 50), ((4, 3), 40, 50)]
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows layered window contract")
 def test_renderer_applies_layered_toolwindow_style():
     root = tk.Tk()

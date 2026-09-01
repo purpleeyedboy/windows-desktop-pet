@@ -371,16 +371,23 @@ def test_head_follow_recenter_interpolates_both_channels_to_exact_center() -> No
     assert completed == ["done"]
 
 
-def test_head_follow_composition_failure_uses_existing_disabled_fallback() -> None:
+def test_head_follow_composition_failure_skips_one_frame_then_recovers() -> None:
     session, _, scheduler, compositor, _, disabled = make_head_session()
     session.start()
     compositor.fail_next = True
 
     scheduler.run_next()
 
-    assert session.state == "disabled"
-    assert disabled == ["disabled"]
-    assert scheduler.live() == []
+    assert session.state == "following"
+    assert disabled == []
+    assert len(scheduler.live()) == 1
+
+    scheduler.run_next()
+
+    assert session.state == "following"
+    assert session.last_displayed_head_pose != (0.0, 0.0)
+    assert disabled == []
+    assert len(scheduler.live()) == 1
 
 
 @pytest.mark.parametrize(
@@ -630,10 +637,17 @@ def test_following_callback_failure_is_contained_and_preserves_last_pose(
 
     scheduler.run_next()
 
-    assert session.state == "disabled"
+    assert session.state == "following"
     assert session.last_displayed_pose == (0.0, 0.0)
-    assert disabled == ["disabled"]
-    assert scheduler.live() == []
+    assert disabled == []
+    assert len(scheduler.live()) == 1
+
+    scheduler.run_next()
+
+    assert session.state == "following"
+    assert session.last_displayed_pose != (0.0, 0.0)
+    assert disabled == []
+    assert len(scheduler.live()) == 1
 
 
 @pytest.mark.parametrize("failure_site", ["compose", "display"])

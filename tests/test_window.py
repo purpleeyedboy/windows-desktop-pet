@@ -883,7 +883,7 @@ def test_headless_resize_failure_during_action_cancels_owner_before_fallback(
     assert window._current_image is frames["squash"][0]
 
 
-def test_headless_transient_renderer_failure_rolls_back_then_legacy_action_succeeds(
+def test_headless_transient_renderer_failure_rolls_back_without_stopping_follow(
     monkeypatch,
 ):
     window, _root, renderer, bubble, _compositor, _cursor, frames, reports = (
@@ -908,15 +908,15 @@ def test_headless_transient_renderer_failure_rolls_back_then_legacy_action_succe
     assert window.display_height == snapshot[3]
     assert window.root.geometries[-1] == snapshot[4]
     assert window._consecutive_renderer_failures == 1
-    assert window._legacy_fallback is True
-    assert reports == ["眼睛跟随已停用，点击动作仍可继续。"]
+    assert window._legacy_fallback is False
+    assert window.eye_session.state == "following"
+    assert reports == []
 
-    window.trigger_next_action()
+    window._apply_image(frames["jump"][0])
 
-    assert window._current_image is frames["jump"][0]
-    assert window.action_cycle.peek() == "squash"
     assert window._consecutive_renderer_failures == 0
-    assert len(bubble.messages) == 1
+    assert window.eye_session.state == "following"
+    assert bubble.messages == []
 
 
 def test_headless_success_resets_renderer_failure_streak(monkeypatch):
@@ -941,7 +941,7 @@ def test_headless_success_resets_renderer_failure_streak(monkeypatch):
 def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but_close_works(
     monkeypatch,
 ):
-    window, _root, renderer, _bubble, _compositor, _cursor, frames, reports = (
+    window, root, renderer, _bubble, _compositor, _cursor, frames, reports = (
         make_headless_window(monkeypatch)
     )
     renderer.failures.extend([True, True])
@@ -949,7 +949,7 @@ def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but
         window._apply_image(frames["jump"][1])
     attempts_after_first = len(renderer.attempts)
 
-    window.trigger_next_action()
+    root.run_next(advance_ms=33)
 
     assert len(renderer.attempts) == attempts_after_first + 1
     assert window._consecutive_renderer_failures == 2
@@ -964,7 +964,7 @@ def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but
     assert window.root.destroyed is True
 
 
-def test_headless_composition_failure_reports_once_and_keeps_physical_click_actions(
+def test_headless_transient_composition_failure_skips_one_frame_then_recovers(
     monkeypatch,
 ):
     window, root, renderer, bubble, compositor, cursor, frames, reports = (
@@ -976,14 +976,30 @@ def test_headless_composition_failure_reports_once_and_keeps_physical_click_acti
 
     root.run_next(advance_ms=33)
 
-    assert window._legacy_fallback is True
-    assert window.eye_session.state == "disabled"
+    assert window._legacy_fallback is False
+    assert window.eye_session.state == "following"
     assert len(renderer.attempts) == calls_before
-    assert len(reports) == 1
-    window.trigger_next_action()
-    assert window._current_image is frames["jump"][0]
-    assert window.action_cycle.peek() == "squash"
-    assert len(bubble.messages) == 1
+    assert reports == []
+
+    root.run_next(advance_ms=33)
+
+    assert window.eye_session.state == "following"
+    assert len(renderer.attempts) == calls_before + 1
+    assert reports == []
+    assert bubble.messages == []
+
+
+def test_default_runtime_failure_reporter_is_non_modal(monkeypatch):
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        "desktop_pet.window.messagebox.showwarning",
+        lambda *args, **kwargs: calls.append((*args, kwargs)),
+    )
+    window = object.__new__(PetWindow)
+
+    window._show_runtime_failure("injected failure")
+
+    assert calls == []
 
 
 def test_headless_later_action_callback_failure_aborts_owner_before_fallback(

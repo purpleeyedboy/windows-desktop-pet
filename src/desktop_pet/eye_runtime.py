@@ -407,7 +407,10 @@ class RuntimeEyeSession:
             else:
                 frame = self._compositor.compose(*pose)
         except Exception:
-            if self._work_is_current(epoch, expected_state):
+            if (
+                expected_state != "following"
+                and self._work_is_current(epoch, expected_state)
+            ):
                 self._disable()
             return False
         if not self._work_is_current(epoch, expected_state):
@@ -415,7 +418,10 @@ class RuntimeEyeSession:
         try:
             self._display(frame)
         except Exception:
-            if self._work_is_current(epoch, expected_state):
+            if (
+                expected_state != "following"
+                and self._work_is_current(epoch, expected_state)
+            ):
                 self._disable()
             return False
         if not self._work_is_current(epoch, expected_state):
