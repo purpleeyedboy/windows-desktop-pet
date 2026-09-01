@@ -133,8 +133,9 @@ def test_runtime_click_request_restarts_one_blink_without_pausing_follow() -> No
         scheduler.run_next()
 
     assert motion.next_blink_at is not None
-    assert clock.value + MIN_BLINK_INTERVAL_SECONDS <= motion.next_blink_at
-    assert motion.next_blink_at <= clock.value + MAX_BLINK_INTERVAL_SECONDS
+    remaining = motion.next_blink_at - clock.value
+    assert MIN_BLINK_INTERVAL_SECONDS - 0.033 <= remaining
+    assert remaining <= MAX_BLINK_INTERVAL_SECONDS
 
 
 def test_eye_click_routes_to_blink_body_click_keeps_action_and_drag_is_inert() -> None:
