@@ -179,7 +179,7 @@ def _build_eye_cache(
     if anchor_distance <= 0.0:
         raise ValueError(f"movement anchor is not strictly inside support for {eye} eye")
 
-    padding = 2
+    padding = 10
     crop_box = (
         max(0, bbox[0] - padding),
         max(0, bbox[1] - padding),
@@ -389,46 +389,101 @@ class NeutralEyeCompositor:
                 warped_crop.putdata(cache.source_rgb)
             else:
                 warped_crop.putdata(self._warped_rgb(cache, dx, dy))
-            support = self._blink_support(cache, amount)
-            composed_rgb.paste(warped_crop, cache.crop_box[:2], support)
+            composed_rgb.paste(warped_crop, cache.crop_box[:2], cache.support)
+            if amount > 0.0:
+                lid_rgb, lid_mask = self._eyelid_layer(cache, amount)
+                composed_rgb.paste(lid_rgb, cache.crop_box[:2], lid_mask)
 
         composed = composed_rgb.convert("RGBA")
         composed.putalpha(self._source_alpha)
-        if amount > 0.65:
+        if amount > 0.72:
             composed = self._draw_closed_eye_creases(composed, amount)
             composed.putalpha(self._source_alpha)
         return composed
 
-    @staticmethod
-    def _blink_support(cache: _EyeCache, closure: float) -> Image.Image:
-        if closure == 0.0:
-            return cache.support
-        if closure == 1.0:
-            return Image.new("L", cache.size)
+    def _eyelid_layer(
+        self,
+        cache: _EyeCache,
+        closure: float,
+    ) -> tuple[Image.Image, Image.Image]:
+        width, height = cache.size
+        crop_left, crop_top = cache.crop_box[:2]
+        support = self._expanded_lid_support(cache)
+        lid_rgb = Image.new("RGB", cache.size)
+        lid_mask = Image.new("L", cache.size)
+        rgb_values: list[tuple[int, int, int]] = []
+        alpha_values: list[int] = []
+        column_bounds: list[tuple[int, int] | None] = []
+        for x in range(width):
+            supported = [
+                y for y in range(height) if support.getpixel((x, y)) != 0
+            ]
+            column_bounds.append(
+                (min(supported), max(supported)) if supported else None
+            )
 
+        for y in range(height):
+            for x in range(width):
+                bounds = column_bounds[x]
+                support_alpha = support.getpixel((x, y))
+                if bounds is None or support_alpha == 0:
+                    rgb_values.append((0, 0, 0))
+                    alpha_values.append(0)
+                    continue
+                top, bottom = bounds
+                span = max(1.0, float(bottom - top))
+                normalized_x = x / max(1.0, width - 1.0)
+                sag = 1.35 * math.sin(math.pi * normalized_x)
+                seam = top + span * 0.60 + sag
+                upper_edge = top + (seam - top) * closure
+                lower_edge = bottom - (bottom - seam) * closure
+                upper_coverage = min(1.0, max(0.0, upper_edge - y + 0.5))
+                lower_coverage = min(1.0, max(0.0, y - lower_edge + 0.5))
+                coverage = max(upper_coverage, lower_coverage)
+                if coverage == 0.0:
+                    rgb_values.append((0, 0, 0))
+                    alpha_values.append(0)
+                    continue
+
+                if y <= seam:
+                    fraction = min(
+                        1.0,
+                        max(0.0, (seam - y) / max(1.0, seam - top)),
+                    )
+                    sample_y = crop_top + top - 2 - round(fraction * 7.0)
+                else:
+                    fraction = min(
+                        1.0,
+                        max(0.0, (y - seam) / max(1.0, bottom - seam)),
+                    )
+                    sample_y = crop_top + bottom + 2 + round(fraction * 5.0)
+                sample_x = crop_left + x
+                sample_x = min(CANVAS_SIZE[0] - 1, max(0, sample_x))
+                sample_y = min(CANVAS_SIZE[1] - 1, max(0, sample_y))
+                rgb_values.append(self._base_rgb.getpixel((sample_x, sample_y)))
+                alpha_values.append(round(support_alpha * coverage))
+
+        lid_rgb.putdata(rgb_values)
+        lid_rgb = lid_rgb.filter(ImageFilter.GaussianBlur(0.7))
+        lid_mask.putdata(alpha_values)
+        return lid_rgb, lid_mask
+
+    @staticmethod
+    def _expanded_lid_support(cache: _EyeCache) -> Image.Image:
         bbox = cache.support.getbbox()
+        support = Image.new("L", cache.size)
         if bbox is None:
-            return Image.new("L", cache.size)
-        center_y = (bbox[1] + bbox[3] - 1.0) / 2.0
-        open_half_height = (bbox[3] - bbox[1]) * (1.0 - closure) / 2.0
-        softness = 1.25
-        rows = []
-        for y in range(cache.size[1]):
-            distance = abs(y - center_y)
-            if distance <= open_half_height - softness:
-                value = 255
-            elif distance >= open_half_height + softness:
-                value = 0
-            else:
-                normalized = (
-                    open_half_height + softness - distance
-                ) / (2.0 * softness)
-                eased = normalized * normalized * (3.0 - 2.0 * normalized)
-                value = round(255.0 * eased)
-            rows.extend([value] * cache.size[0])
-        vertical = Image.new("L", cache.size)
-        vertical.putdata(rows)
-        return ImageChops.multiply(cache.support, vertical)
+            return support
+        expansion_x = 7
+        expansion_y = 5
+        expanded = (
+            max(0, bbox[0] - expansion_x),
+            max(0, bbox[1] - expansion_y),
+            min(cache.size[0] - 1, bbox[2] - 1 + expansion_x),
+            min(cache.size[1] - 1, bbox[3] - 1 + expansion_y),
+        )
+        ImageDraw.Draw(support).ellipse(expanded, fill=255)
+        return support.filter(ImageFilter.GaussianBlur(0.6))
 
     def _draw_closed_eye_creases(
         self,
@@ -440,33 +495,31 @@ class NeutralEyeCompositor:
         overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
         for cache in self._eye_caches:
-            support_bbox = cache.support.getbbox()
-            if support_bbox is None:
-                continue
             crop_left, crop_top = cache.crop_box[:2]
-            left = crop_left + support_bbox[0] + 2
-            right = crop_left + support_bbox[2] - 3
-            center_x = (left + right) // 2
-            center_y = round(
-                crop_top + (support_bbox[1] + support_bbox[3] - 1) / 2.0
-            )
-            sample_y = max(0, crop_top + support_bbox[1] - 2)
-            sample = self._base_rgb.getpixel((center_x, sample_y))
-            color = tuple(max(12, round(channel * 0.42)) for channel in sample)
-            alpha = round(190.0 * strength)
-            quarter = max(1, (right - left) // 4)
-            draw.line(
-                (
-                    (left, center_y),
-                    (left + quarter, center_y + 1),
-                    (center_x, center_y + 2),
-                    (right - quarter, center_y + 1),
-                    (right, center_y),
-                ),
-                fill=(*color, alpha),
-                width=2,
-                joint="curve",
-            )
+            points: list[tuple[int, int]] = []
+            seam_support = self._expanded_lid_support(cache)
+            for x in range(cache.size[0]):
+                supported = [
+                    y
+                    for y in range(cache.size[1])
+                    if seam_support.getpixel((x, y)) != 0
+                ]
+                if not supported:
+                    continue
+                top, bottom = min(supported), max(supported)
+                span = max(1.0, float(bottom - top))
+                normalized_x = x / max(1.0, cache.size[0] - 1.0)
+                sag = 1.35 * math.sin(math.pi * normalized_x)
+                seam = round(top + span * 0.60 + sag)
+                points.append((crop_left + x, crop_top + seam))
+            if len(points) < 2:
+                continue
+            middle_x, middle_y = points[len(points) // 2]
+            sample_y = max(0, middle_y - 8)
+            sample = self._base_rgb.getpixel((middle_x, sample_y))
+            color = tuple(max(10, round(channel * 0.36)) for channel in sample)
+            alpha = round(168.0 * strength)
+            draw.line(points, fill=(*color, alpha), width=1, joint="curve")
         return Image.alpha_composite(composed, overlay)
 
     @staticmethod
