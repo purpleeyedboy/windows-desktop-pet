@@ -11,7 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Final
 
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 CANONICAL_SHA256: Final = (
@@ -342,29 +342,122 @@ class NeutralEyeCompositor:
         return cls(base_rgb, source_alpha, center, caches, midpoint)
 
     def compose(self, eye_x: float, eye_y: float) -> Image.Image:
+        return self.compose_blink(eye_x, eye_y, 0.0)
+
+    def compose_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        closure: float,
+    ) -> Image.Image:
         try:
             dx = float(eye_x)
             dy = float(eye_y)
+            amount = float(closure)
         except (TypeError, ValueError, OverflowError) as error:
-            raise ValueError("eye offsets must be finite and within motion limits") from error
+            raise ValueError(
+                "eye offsets and blink closure must be finite and within limits"
+            ) from error
         if (
             not math.isfinite(dx)
             or not math.isfinite(dy)
+            or not math.isfinite(amount)
             or abs(dx) > MOTION_LIMITS["x"]
             or abs(dy) > MOTION_LIMITS["y"]
+            or not 0.0 <= amount <= 1.0
         ):
-            raise ValueError("eye offsets must be finite and within motion limits")
-        if dx == 0.0 and dy == 0.0:
+            raise ValueError(
+                "eye offsets and blink closure must be finite and within limits"
+            )
+        if dx == 0.0 and dy == 0.0 and amount == 0.0:
             return self._center.copy()
 
         composed_rgb = self._base_rgb.copy()
         for cache in self._eye_caches:
             warped_crop = Image.new("RGB", cache.size)
-            warped_crop.putdata(self._warped_rgb(cache, dx, dy))
-            composed_rgb.paste(warped_crop, cache.crop_box[:2], cache.support)
+            if dx == 0.0 and dy == 0.0:
+                warped_crop.putdata(cache.source_rgb)
+            else:
+                warped_crop.putdata(self._warped_rgb(cache, dx, dy))
+            support = self._blink_support(cache, amount)
+            composed_rgb.paste(warped_crop, cache.crop_box[:2], support)
+
         composed = composed_rgb.convert("RGBA")
         composed.putalpha(self._source_alpha)
+        if amount > 0.65:
+            composed = self._draw_closed_eye_creases(composed, amount)
+            composed.putalpha(self._source_alpha)
         return composed
+
+    @staticmethod
+    def _blink_support(cache: _EyeCache, closure: float) -> Image.Image:
+        if closure == 0.0:
+            return cache.support
+        if closure == 1.0:
+            return Image.new("L", cache.size)
+
+        bbox = cache.support.getbbox()
+        if bbox is None:
+            return Image.new("L", cache.size)
+        center_y = (bbox[1] + bbox[3] - 1.0) / 2.0
+        open_half_height = (bbox[3] - bbox[1]) * (1.0 - closure) / 2.0
+        softness = 1.25
+        rows = []
+        for y in range(cache.size[1]):
+            distance = abs(y - center_y)
+            if distance <= open_half_height - softness:
+                value = 255
+            elif distance >= open_half_height + softness:
+                value = 0
+            else:
+                normalized = (
+                    open_half_height + softness - distance
+                ) / (2.0 * softness)
+                eased = normalized * normalized * (3.0 - 2.0 * normalized)
+                value = round(255.0 * eased)
+            rows.extend([value] * cache.size[0])
+        vertical = Image.new("L", cache.size)
+        vertical.putdata(rows)
+        return ImageChops.multiply(cache.support, vertical)
+
+    def _draw_closed_eye_creases(
+        self,
+        composed: Image.Image,
+        closure: float,
+    ) -> Image.Image:
+        strength = min(1.0, max(0.0, (closure - 0.65) / 0.35))
+        strength = strength * strength * (3.0 - 2.0 * strength)
+        overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        for cache in self._eye_caches:
+            support_bbox = cache.support.getbbox()
+            if support_bbox is None:
+                continue
+            crop_left, crop_top = cache.crop_box[:2]
+            left = crop_left + support_bbox[0] + 2
+            right = crop_left + support_bbox[2] - 3
+            center_x = (left + right) // 2
+            center_y = round(
+                crop_top + (support_bbox[1] + support_bbox[3] - 1) / 2.0
+            )
+            sample_y = max(0, crop_top + support_bbox[1] - 2)
+            sample = self._base_rgb.getpixel((center_x, sample_y))
+            color = tuple(max(12, round(channel * 0.42)) for channel in sample)
+            alpha = round(190.0 * strength)
+            quarter = max(1, (right - left) // 4)
+            draw.line(
+                (
+                    (left, center_y),
+                    (left + quarter, center_y + 1),
+                    (center_x, center_y + 2),
+                    (right - quarter, center_y + 1),
+                    (right, center_y),
+                ),
+                fill=(*color, alpha),
+                width=2,
+                joint="curve",
+            )
+        return Image.alpha_composite(composed, overlay)
 
     @staticmethod
     def _warped_rgb(
@@ -429,3 +522,4 @@ class NeutralEyeCompositor:
                 )
             )
         return output
+
