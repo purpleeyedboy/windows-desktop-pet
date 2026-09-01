@@ -422,6 +422,9 @@ class ContinuousHeadNeckCompositor:
         )
         self.source_size = _CANVAS_SIZE
         self.head_roi = _HEAD_ROI
+        self.eye_interaction_boxes = tuple(
+            getattr(base_compositor, "eye_interaction_boxes", ())
+        )
         self._compose_base = compose
         compose_blink = getattr(base_compositor, "compose_blink", None)
         self._compose_blink = compose_blink if callable(compose_blink) else None
