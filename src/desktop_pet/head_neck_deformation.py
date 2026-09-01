@@ -423,6 +423,8 @@ class ContinuousHeadNeckCompositor:
         self.source_size = _CANVAS_SIZE
         self.head_roi = _HEAD_ROI
         self._compose_base = compose
+        compose_blink = getattr(base_compositor, "compose_blink", None)
+        self._compose_blink = compose_blink if callable(compose_blink) else None
 
     def sampling_offset_at(
         self,
@@ -504,13 +506,55 @@ class ContinuousHeadNeckCompositor:
         eye_y: float,
         pose: HeadPose,
     ) -> Image.Image:
+        return self._compose_with_source(
+            eye_x,
+            eye_y,
+            pose,
+            lambda dx, dy: self._compose_base(dx, dy),
+        )
+
+    def compose_head(
+        self,
+        eye_x: float,
+        eye_y: float,
+        pose: HeadPose,
+    ) -> Image.Image:
+        """Runtime-named form of the established eye-plus-head composition."""
+
+        return self.compose(eye_x, eye_y, pose)
+
+    def compose_head_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        pose: HeadPose,
+        closure: float,
+    ) -> Image.Image:
+        if self._compose_blink is None:
+            if float(closure) != 0.0:
+                raise RuntimeError("base compositor does not support blinking")
+            return self.compose(eye_x, eye_y, pose)
+        return self._compose_with_source(
+            eye_x,
+            eye_y,
+            pose,
+            lambda dx, dy: self._compose_blink(dx, dy, closure),
+        )
+
+    def _compose_with_source(
+        self,
+        eye_x: float,
+        eye_y: float,
+        pose: HeadPose,
+        source_factory,
+    ) -> Image.Image:
         dx = _finite_real(eye_x, "eye x")
         dy = _finite_real(eye_y, "eye y")
         if abs(dx) > _EYE_LIMITS[0] or abs(dy) > _EYE_LIMITS[1]:
             raise ValueError("eye offsets are outside the accepted envelope")
         if not isinstance(pose, HeadPose):
             raise TypeError("pose must be a HeadPose")
-        source = self._compose_base(dx, dy)
+        source = source_factory(dx, dy)
         if not isinstance(source, Image.Image):
             raise TypeError("base compositor must return a Pillow image")
         if source.mode != "RGBA":
@@ -533,3 +577,4 @@ class ContinuousHeadNeckCompositor:
         result = source.copy()
         result.paste(restored, (left, top))
         return result
+
