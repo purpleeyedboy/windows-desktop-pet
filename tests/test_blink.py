@@ -129,8 +129,8 @@ def test_closed_lids_cover_the_pale_eye_underlay_with_local_fur_color() -> None:
         pixels = [
             pixel
             for pixel, alpha in zip(
-                closed.get_flattened_data(),
-                mask.get_flattened_data(),
+                closed.getdata(),
+                mask.getdata(),
                 strict=True,
             )
             if alpha
