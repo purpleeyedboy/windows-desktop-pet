@@ -93,6 +93,9 @@ class _CachedCenterCompositor:
         self._compositor = compositor
         self.source_size = compositor.source_size
         self.eye_midpoint = compositor.eye_midpoint
+        self.eye_interaction_boxes = tuple(
+            getattr(compositor, "eye_interaction_boxes", ())
+        )
         self.center_frame: object | None = None
 
     def compose(self, eye_x: float, eye_y: float) -> object:
@@ -122,6 +125,46 @@ class _CachedCenterCompositor:
                 )
             return self.center_frame
         return self._compositor.compose(eye_x, eye_y, head_pose)
+
+    def __getattr__(self, name: str) -> object:
+        if name == "compose_blink" and callable(
+            getattr(self._compositor, name, None)
+        ):
+            return self._compose_blink
+        if name == "compose_head_blink" and callable(
+            getattr(self._compositor, name, None)
+        ):
+            return self._compose_head_blink
+        raise AttributeError(name)
+
+    def _compose_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        closure: float,
+    ) -> object:
+        if eye_x == 0.0 and eye_y == 0.0 and closure == 0.0:
+            return self.compose(0.0, 0.0)
+        compose_blink = getattr(self._compositor, "compose_blink")
+        return compose_blink(eye_x, eye_y, closure)
+
+    def _compose_head_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_pose: HeadPose,
+        closure: float,
+    ) -> object:
+        if (
+            eye_x == 0.0
+            and eye_y == 0.0
+            and head_pose.x == 0.0
+            and head_pose.y == 0.0
+            and closure == 0.0
+        ):
+            return self.compose_head(0.0, 0.0, head_pose)
+        compose_head_blink = getattr(self._compositor, "compose_head_blink")
+        return compose_head_blink(eye_x, eye_y, head_pose, closure)
 
 
 @dataclass(frozen=True)
@@ -207,6 +250,8 @@ class PetWindow:
         )
         self._neutral_center_frame: object | None = None
         self.eye_session: RuntimeEyeSession | None = None
+        self._eye_interaction_boxes: tuple[tuple[int, int, int, int], ...] = ()
+        self._eye_source_size: tuple[int, int] = (0, 0)
         self._presentation_snapshot: _PresentationSnapshot | None = None
         self._startup_presentation_error: Exception | None = None
         self._constructing = True
@@ -247,6 +292,8 @@ class PetWindow:
             cached_compositor: _CachedCenterCompositor | None = None
             if not legacy_mode:
                 cached_compositor = _CachedCenterCompositor(compositor)
+                self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
+                self._eye_source_size = tuple(cached_compositor.source_size)
                 self.eye_session = RuntimeEyeSession(
                     compositor=cached_compositor,
                     cursor_provider=cursor_provider,
@@ -553,8 +600,31 @@ class PetWindow:
         release: tuple[int, int],
     ) -> None:
         distance = abs(release[0] - press[0]) + abs(release[1] - press[1])
-        if distance < CLICK_THRESHOLD:
-            self.trigger_next_action()
+        if distance >= CLICK_THRESHOLD:
+            return
+        if self._point_in_eye_region(press):
+            if self.eye_session is not None and not self._legacy_fallback:
+                self.eye_session.request_blink()
+            return
+        self.trigger_next_action()
+
+    def _point_in_eye_region(self, point: tuple[int, int]) -> bool:
+        source_width, source_height = self._eye_source_size
+        rect = self._window_rect
+        if (
+            not self._eye_interaction_boxes
+            or source_width <= 0
+            or source_height <= 0
+            or rect.width <= 0
+            or rect.height <= 0
+        ):
+            return False
+        source_x = (point[0] - rect.x) * source_width / rect.width
+        source_y = (point[1] - rect.y) * source_height / rect.height
+        return any(
+            left <= source_x < right and top <= source_y < bottom
+            for left, top, right, bottom in self._eye_interaction_boxes
+        )
 
     def trigger_next_action(self) -> None:
         if (
