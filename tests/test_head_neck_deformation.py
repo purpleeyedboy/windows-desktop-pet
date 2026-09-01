@@ -482,6 +482,13 @@ def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
     assert result.crop((0, 0, 64, 768)).getbbox() is None
     assert result.crop((576, 0, 640, 768)).getbbox() is None
 
+    arc_apex = compositor.compose(
+        0.0,
+        0.0,
+        HeadPose(0.0, 0.0, 0.0, 1.0),
+    )
+    assert ImageChops.difference(arc_apex, result).getbbox() is None
+
 
 def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
     base = RecordingCompositor()

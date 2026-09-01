@@ -16,7 +16,7 @@ EXPECTED_SIZE = (512, 768)
 FRAME_COUNT = 6
 EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
 HEAD_TILT_BACKPLATE_SHA256 = (
-    "08b32d6868b7e5b1445682c9e686fed15d054e6d2723c66de4dfa728ff4c9c2f"
+    "455dad1c51b66b58ff98df38092f56ac4ec38fac7e3fa76bc0cb46c19e55d774"
 )
 
 
