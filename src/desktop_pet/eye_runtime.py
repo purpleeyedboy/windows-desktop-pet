@@ -14,6 +14,7 @@ from .eye_follow import (
     EyeMotionController,
     SAMPLE_INTERVAL_MS,
 )
+from .blink import NaturalBlinkMotion
 from .head_neck_deformation import HeadPose
 from .model import ACTIONS, ActionCycle
 
@@ -77,6 +78,7 @@ class RuntimeEyeSession:
         present_phrase: Callable[[str], None],
         on_action_failed: Callable[[str, ActionFailure], None],
         head_follow: bool = False,
+        blink_motion: NaturalBlinkMotion | None = None,
     ) -> None:
         self._compositor = compositor
         self._head_follow = bool(head_follow)
@@ -84,6 +86,20 @@ class RuntimeEyeSession:
             getattr(compositor, "compose_head", None)
         ):
             raise ValueError("head-follow compositor must expose compose_head")
+        blink_method = (
+            getattr(compositor, "compose_head_blink", None)
+            if self._head_follow
+            else getattr(compositor, "compose_blink", None)
+        )
+        self._blink_supported = callable(blink_method)
+        if blink_motion is not None and not self._blink_supported:
+            raise ValueError("blink motion requires a blink-capable compositor")
+        self._blink_motion = (
+            blink_motion
+            if blink_motion is not None
+            else NaturalBlinkMotion() if self._blink_supported else None
+        )
+        self._blink_closure = 0.0
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -138,6 +154,11 @@ class RuntimeEyeSession:
             coordinated_pose_changed=(
                 self._following_coordinated_pose_changed
                 if self._head_follow
+                else None
+            ),
+            pulse=(
+                self._following_blink_pulse
+                if self._blink_motion is not None
                 else None
             ),
         )
@@ -368,6 +389,27 @@ class RuntimeEyeSession:
             pass
         self._controller.stop()
 
+    def _following_blink_pulse(self) -> None:
+        if self._state != "following" or self._blink_motion is None:
+            return
+        try:
+            closure = self._blink_motion.sample(self._clock())
+        except Exception:
+            self._blink_motion = None
+            self._blink_closure = 0.0
+            return
+        if closure == self._blink_closure:
+            return
+        self._blink_closure = closure
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        )
+
     def _following_pose_changed(self, eye_x: float, eye_y: float) -> None:
         if self._state != "following":
             return
@@ -402,8 +444,21 @@ class RuntimeEyeSession:
             return False
         try:
             if self._head_follow:
-                compose_head = getattr(self._compositor, "compose_head")
-                frame = compose_head(*pose, HeadPose(*head_pose))
+                if self._blink_motion is not None:
+                    compose_head_blink = getattr(
+                        self._compositor, "compose_head_blink"
+                    )
+                    frame = compose_head_blink(
+                        *pose,
+                        HeadPose(*head_pose),
+                        self._blink_closure,
+                    )
+                else:
+                    compose_head = getattr(self._compositor, "compose_head")
+                    frame = compose_head(*pose, HeadPose(*head_pose))
+            elif self._blink_motion is not None:
+                compose_blink = getattr(self._compositor, "compose_blink")
+                frame = compose_blink(*pose, self._blink_closure)
             else:
                 frame = self._compositor.compose(*pose)
         except Exception:
@@ -694,6 +749,12 @@ class RuntimeEyeSession:
     def _transition(self, state: SessionState) -> None:
         self._lifecycle_epoch += 1
         self._state = state
+        self._blink_closure = 0.0
+        if state == "following" and self._blink_motion is not None:
+            try:
+                self._blink_motion.reset(self._clock())
+            except Exception:
+                self._blink_motion = None
 
     def _work_is_current(self, epoch: int, state: SessionState) -> bool:
         return (
