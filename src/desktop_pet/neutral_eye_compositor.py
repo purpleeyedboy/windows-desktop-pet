@@ -356,7 +356,7 @@ class NeutralEyeCompositor:
             amount = float(closure)
         except (TypeError, ValueError, OverflowError) as error:
             raise ValueError(
-                "eye offsets and blink closure must be finite and within limits"
+                "eye offsets must be finite and within motion limits; blink closure must be finite and within 0..1"
             ) from error
         if (
             not math.isfinite(dx)
@@ -367,7 +367,7 @@ class NeutralEyeCompositor:
             or not 0.0 <= amount <= 1.0
         ):
             raise ValueError(
-                "eye offsets and blink closure must be finite and within limits"
+                "eye offsets must be finite and within motion limits; blink closure must be finite and within 0..1"
             )
         if dx == 0.0 and dy == 0.0 and amount == 0.0:
             return self._center.copy()
