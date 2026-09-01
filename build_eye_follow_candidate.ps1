@@ -11,7 +11,7 @@ $VirtualEnvPython = Join-Path $RepositoryRoot ".venv\Scripts\python.exe"
 $Python = if (Test-Path -LiteralPath $VirtualEnvPython) { $VirtualEnvPython } else { "python" }
 $DistDirectory = Join-Path $RepositoryRoot "dist-eye-follow-candidate"
 $WorkDirectory = Join-Path $RepositoryRoot "build-eye-follow-candidate"
-$CandidateName = "桌面宠物-眼球跟随测试版.exe"
+$CandidateName = "桌面宠物-自然跟随候选版.exe"
 $MaxCandidateBytes = 52428800
 
 function Get-ValidatedChildPath([string]$ChildPath) {

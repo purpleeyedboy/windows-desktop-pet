@@ -15,7 +15,7 @@ SPEC = ROOT / "desktop_pet_eye_follow.spec"
 BUILD = ROOT / "build_eye_follow_candidate.ps1"
 VERIFIER = ROOT / "tools" / "verify_eye_follow_candidate_archive.py"
 
-CANDIDATE_NAME = "桌面宠物-眼球跟随测试版.exe"
+CANDIDATE_NAME = "桌面宠物-自然跟随候选版.exe"
 RUNTIME_EYE = "assets/rig/v1/runtime/eye-neutral-v1"
 SOURCE_EYE = "assets/rig/v1/source/eye-neutral-v1"
 EYE_FILES = (
@@ -34,7 +34,7 @@ def test_candidate_spec_is_onefile_and_packages_only_runtime_eye_assets():
 
     assert "onefile" not in spec.lower()  # EXE() without COLLECT is PyInstaller one-file.
     assert "EXE(" in spec
-    assert "name='桌面宠物-眼球跟随测试版'" in spec
+    assert "name='桌面宠物-自然跟随候选版'" in spec
     assert "assets/keyframes" in spec
     assert "assets/bubble" in spec
     assert "assets/fonts" in spec
