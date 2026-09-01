@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import pytest
-from PIL import ImageChops
+from PIL import Image, ImageChops
 
-from desktop_pet.assets import load_neutral_eye_source_probe
+from desktop_pet.assets import (
+    load_neutral_eye_source_probe,
+    neutral_eye_source_probe_root,
+)
 from desktop_pet.head_neck_deformation import ContinuousHeadNeckCompositor, HeadPose
 from desktop_pet.blink import (
     CLOSE_SECONDS,
@@ -18,11 +21,11 @@ from desktop_pet.blink import (
 def test_first_sample_only_arms_an_infrequent_blink() -> None:
     calls: list[tuple[float, float]] = []
     motion = NaturalBlinkMotion(
-        lambda low, high: calls.append((low, high)) or 24.0
+        lambda low, high: calls.append((low, high)) or 16.0
     )
 
     assert motion.sample(10.0) == 0.0
-    assert motion.next_blink_at == 34.0
+    assert motion.next_blink_at == 26.0
     assert calls == [
         (MIN_BLINK_INTERVAL_SECONDS, MAX_BLINK_INTERVAL_SECONDS)
     ]
@@ -84,7 +87,7 @@ def test_explicit_trigger_rejects_invalid_clock(now: object) -> None:
         motion.trigger(now)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("interval", [11.999, 36.001, float("nan")])
+@pytest.mark.parametrize("interval", [11.999, 20.001, float("nan")])
 def test_invalid_interval_source_is_rejected(interval: float) -> None:
     motion = NaturalBlinkMotion(lambda _low, _high: interval)
 
@@ -113,6 +116,27 @@ def test_zero_closure_is_pixel_identical_and_full_blink_is_local() -> None:
     assert bbox is not None
     assert 50 <= bbox[0] < bbox[2] <= 190
     assert 320 <= bbox[1] < bbox[3] <= 380
+
+
+def test_closed_lids_cover_the_pale_eye_underlay_with_local_fur_color() -> None:
+    compositor = load_neutral_eye_source_probe()
+    closed = compositor.compose_blink(0.0, 0.0, 1.0).convert("RGB")
+    root = neutral_eye_source_probe_root()
+
+    for name in ("eye-left-mask.png", "eye-right-mask.png"):
+        with Image.open(root / name) as opened:
+            mask = opened.convert("L")
+        pixels = [
+            pixel
+            for pixel, alpha in zip(
+                closed.get_flattened_data(),
+                mask.get_flattened_data(),
+                strict=True,
+            )
+            if alpha
+        ]
+        assert pixels
+        assert sum(min(pixel) > 220 for pixel in pixels) < len(pixels) * 0.05
 
 
 def test_blink_is_composed_before_the_approved_head_warp() -> None:
