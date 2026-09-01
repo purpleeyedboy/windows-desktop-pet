@@ -310,6 +310,33 @@ class RuntimeEyeSession:
             )
         return SessionResult.ACCEPTED
 
+    def request_blink(self) -> SessionResult:
+        """Restart one ordinary blink without pausing cursor following."""
+
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._blink_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._blink_motion.trigger(self._clock())
+        except Exception:
+            self._blink_motion = None
+            self._blink_closure = 0.0
+            return SessionResult.REJECTED
+        if self._blink_closure != 0.0:
+            self._blink_closure = 0.0
+            pose = self._last_displayed_pose or (0.0, 0.0)
+            head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+            self._try_display_pose(
+                pose,
+                self._lifecycle_epoch,
+                "following",
+                head_pose,
+            )
+        return SessionResult.ACCEPTED
+
     def request_action(self) -> SessionResult:
         if self._terminal:
             return SessionResult.REJECTED
