@@ -692,7 +692,7 @@ class ContinuousHeadNeckCompositor:
         self._last_arc = pose.arc
         if self._body_backplate is None:
             return deformed
-        if pose.rotation_degrees == 0.0:
+        if pose.rotation_degrees == 0.0 and pose.arc == 0.0:
             return self._pad_layer(deformed)
         return self._compose_rotated_head(deformed, pose)
 

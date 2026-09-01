@@ -487,7 +487,7 @@ def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
         0.0,
         HeadPose(0.0, 0.0, 0.0, 1.0),
     )
-    assert ImageChops.difference(arc_apex, result).getbbox() is None
+    assert ImageChops.difference(arc_apex, result).getbbox() is not None
 
 
 def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
@@ -538,6 +538,44 @@ def test_arc_path_lifts_the_head_without_moving_the_static_body() -> None:
         ).getbbox()
         is None
     )
+
+
+def test_arc_apex_is_continuous_through_exact_zero_rotation() -> None:
+    source = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+    ImageDraw.Draw(source).ellipse(
+        (120, 355, 130, 365),
+        fill=(255, 0, 0, 255),
+    )
+    compositor = ContinuousHeadNeckCompositor(
+        RecordingCompositor(source),
+        body_backplate=Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0)),
+    )
+
+    def alpha_centroid(frame: Image.Image) -> tuple[float, float]:
+        alpha = frame.getchannel("A")
+        box = alpha.getbbox()
+        assert box is not None
+        total = weighted_x = weighted_y = 0
+        for y in range(box[1], box[3]):
+            for x in range(box[0], box[2]):
+                value = alpha.getpixel((x, y))
+                total += value
+                weighted_x += x * value
+                weighted_y += y * value
+        return weighted_x / total, weighted_y / total
+
+    centres = [
+        alpha_centroid(
+            compositor.compose(
+                0.0,
+                0.0,
+                HeadPose(0.0, 0.0, angle, 1.0),
+            )
+        )
+        for angle in (-0.0104, 0.0, 0.0104)
+    ]
+
+    assert centres == pytest.approx([(189.0, 336.0)] * 3, abs=0.01)
 
 
 @pytest.mark.parametrize(
