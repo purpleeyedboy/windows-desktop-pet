@@ -123,6 +123,7 @@ class EyeMotionController:
             [float, float, float, float], None
         ]
         | None = None,
+        pulse: Callable[[], None] | None = None,
     ) -> None:
         self._scheduler = scheduler
         self._cancel = cancel
@@ -130,6 +131,7 @@ class EyeMotionController:
         self._geometry_provider = geometry_provider
         self._pose_changed = pose_changed
         self._coordinated_pose_changed = coordinated_pose_changed
+        self._pulse = pulse
         self._clock = clock
         self._pose = (0.0, 0.0)
         self._head_pose = (0.0, 0.0)
@@ -371,6 +373,8 @@ class EyeMotionController:
             ):
                 self._last_emitted_coordinated = coordinated
                 self._coordinated_pose_changed(*coordinated)
+        if self._pulse is not None:
+            self._pulse()
         self._schedule()
 
     def _fail_schedule(self, generation: int, slot: object) -> None:
