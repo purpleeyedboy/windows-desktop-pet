@@ -487,7 +487,7 @@ def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
         0.0,
         HeadPose(0.0, 0.0, 0.0, 1.0),
     )
-    assert ImageChops.difference(arc_apex, result).getbbox() is not None
+    assert ImageChops.difference(arc_apex, result).getbbox() is None
 
 
 def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
@@ -506,16 +506,13 @@ def test_rotated_eye_hit_testing_uses_inverse_head_rotation() -> None:
     dy = source_y - pivot_y
     rendered = (
         64.0 + pivot_x + math.cos(radians) * dx + math.sin(radians) * dy,
-        pivot_y
-        - math.sin(radians) * dx
-        + math.cos(radians) * dy
-        - deformation._ARC_LIFT_PIXELS,
+        pivot_y - math.sin(radians) * dx + math.cos(radians) * dy,
     )
     assert compositor.hit_test_eye(rendered)
     assert not compositor.hit_test_eye((639.0, 10.0))
 
 
-def test_arc_path_lifts_the_head_without_moving_the_static_body() -> None:
+def test_arc_path_never_translates_the_head_or_static_body() -> None:
     source = _synthetic_cat()
     backplate = _synthetic_cat()
     compositor = ContinuousHeadNeckCompositor(
@@ -529,15 +526,8 @@ def test_arc_path_lifts_the_head_without_moving_the_static_body() -> None:
         0.0, 0.0, HeadPose(0.0, 0.0, 20.0, 1.0)
     )
 
-    assert ImageChops.difference(without_arc, with_arc).getbbox() is not None
-    assert deformation._ARC_LIFT_PIXELS == 24.0
-    assert (
-        ImageChops.difference(
-            without_arc.crop((64, 500, 576, 768)),
-            with_arc.crop((64, 500, 576, 768)),
-        ).getbbox()
-        is None
-    )
+    assert ImageChops.difference(without_arc, with_arc).getbbox() is None
+    assert deformation._ARC_LIFT_PIXELS == 0.0
 
 
 def test_arc_apex_is_continuous_through_exact_zero_rotation() -> None:
@@ -569,13 +559,15 @@ def test_arc_apex_is_continuous_through_exact_zero_rotation() -> None:
             compositor.compose(
                 0.0,
                 0.0,
-                HeadPose(0.0, 0.0, angle, 1.0),
+                HeadPose(0.0, 0.0, angle, arc),
             )
         )
-        for angle in (-0.0104, 0.0, 0.0104)
+        for angle, arc in ((-35.0, 0.0), (0.0, 1.0), (50.0, 0.0))
     ]
 
-    assert centres == pytest.approx([(189.0, 336.0)] * 3, abs=0.01)
+    for centre_x, centre_y in centres:
+        assert centre_x == pytest.approx(189.0, abs=0.6)
+        assert centre_y == pytest.approx(360.0, abs=0.6)
 
 
 @pytest.mark.parametrize(

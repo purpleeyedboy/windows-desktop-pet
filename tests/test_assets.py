@@ -261,17 +261,21 @@ def test_load_head_neck_compositor_rejects_unapproved_backplate(
         assets_module.load_head_neck_compositor()
 
 
-def test_production_backplate_preserves_original_neck_and_chest_band() -> None:
+def test_production_backplate_completes_neck_and_preserves_lower_body() -> None:
     root = assets_module.neutral_eye_source_probe_root()
     neutral = assets_module.NeutralEyeCompositor.load(root).compose(0.0, 0.0)
     with Image.open(root / "body-backplate.png") as image:
         backplate = image.convert("RGBA")
 
-    neck_and_chest = (0, 462, 512, 501)
+    lower_body = (0, 501, 512, 768)
     assert (
         ImageChops.difference(
-            backplate.crop(neck_and_chest),
-            neutral.crop(neck_and_chest),
+            backplate.crop(lower_body),
+            neutral.crop(lower_body),
         ).getbbox()
         is None
     )
+    alpha = backplate.getchannel("A")
+    assert alpha.getpixel((125, 342)) > 200
+    assert alpha.getpixel((165, 339)) > 200
+    assert alpha.getpixel((225, 360)) > 200

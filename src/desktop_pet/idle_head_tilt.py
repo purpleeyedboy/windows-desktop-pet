@@ -15,6 +15,7 @@ MIN_HOLD_SECONDS: Final = 0.8
 MAX_HOLD_SECONDS: Final = 2.0
 MIN_TILT_DEGREES: Final = 30.0
 MAX_TILT_DEGREES: Final = 50.0
+MAX_CLOCKWISE_TILT_DEGREES: Final = 35.0
 APPROACH_SECONDS: Final = 0.55
 ARC_TRAVEL_SECONDS: Final = 1.15
 RETURN_SECONDS: Final = 0.55
@@ -202,9 +203,14 @@ class IdleHeadTiltMotion:
         return value
 
     def _random_rotation(self, direction: float) -> float:
+        maximum = (
+            MAX_CLOCKWISE_TILT_DEGREES
+            if direction < 0.0
+            else MAX_TILT_DEGREES
+        )
         magnitude = self._random_duration(
             MIN_TILT_DEGREES,
-            MAX_TILT_DEGREES,
+            maximum,
             "idle tilt angle",
         )
         return direction * magnitude

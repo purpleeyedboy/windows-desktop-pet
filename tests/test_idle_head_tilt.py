@@ -10,6 +10,7 @@ from desktop_pet.idle_head_tilt import (
     IdleHeadTiltMotion,
     IdleTiltPose,
     MAX_HOLD_SECONDS,
+    MAX_CLOCKWISE_TILT_DEGREES,
     MAX_TILT_DEGREES,
     MIN_HOLD_SECONDS,
     MIN_TILT_DEGREES,
@@ -148,6 +149,25 @@ def test_triggered_arc_mode_keeps_the_existing_large_arc_contract() -> None:
     assert midpoint.arc == pytest.approx(1.0)
 
 
+def test_clockwise_angle_cap_is_reduced_without_changing_counterclockwise_cap() -> None:
+    calls: list[tuple[float, float]] = []
+
+    def highest_uniform(low: float, high: float) -> float:
+        calls.append((low, high))
+        return high
+
+    clockwise = IdleHeadTiltMotion(uniform=highest_uniform)
+    clockwise.trigger("left", 0.0)
+    assert clockwise.sample(APPROACH_SECONDS).rotation_degrees == -35.0
+    assert (MIN_TILT_DEGREES, MAX_CLOCKWISE_TILT_DEGREES) in calls
+
+    calls.clear()
+    counterclockwise = IdleHeadTiltMotion(uniform=highest_uniform)
+    counterclockwise.trigger("right", 0.0)
+    assert counterclockwise.sample(APPROACH_SECONDS).rotation_degrees == 50.0
+    assert (MIN_TILT_DEGREES, MAX_TILT_DEGREES) in calls
+
+
 def test_trigger_rejects_an_invalid_mode_without_changing_the_motion() -> None:
     motion = IdleHeadTiltMotion(uniform=lowest_uniform)
     motion.reset(10.0)
@@ -193,4 +213,5 @@ def test_public_timing_and_mode_ranges_match_the_idle_contract() -> None:
     assert MIN_HOLD_SECONDS == 0.8
     assert MAX_HOLD_SECONDS == 2.0
     assert MIN_TILT_DEGREES == 30.0
+    assert MAX_CLOCKWISE_TILT_DEGREES == 35.0
     assert MAX_TILT_DEGREES == 50.0

@@ -95,21 +95,23 @@ _LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
 # centre between the eyes and nose in the neutral 512x768 source artwork.
 _TILT_PIVOT = (125.0, 360.0)
 _TILT_LIMIT_DEGREES = 50.0
-_ARC_LIFT_PIXELS = 24.0
+_ARC_LIFT_PIXELS = 0.0
 
 
 def _build_head_layer_mask() -> Image.Image:
     mask = Image.new("L", _CANVAS_SIZE, 0)
-    ImageDraw.Draw(mask).polygon(
+    draw = ImageDraw.Draw(mask)
+    draw.polygon(
         (
             (0, 160),
-            (270, 160),
-            (270, 345),
-            (254, 366),
-            (237, 381),
-            (222, 399),
-            (207, 417),
-            (188, 431),
+            (258, 160),
+            (258, 320),
+            (246, 339),
+            (231, 355),
+            (218, 375),
+            (207, 398),
+            (193, 420),
+            (174, 435),
             (165, 441),
             (139, 446),
             (112, 443),
@@ -523,7 +525,6 @@ class ContinuousHeadNeckCompositor:
             raise TypeError("point must be an x/y tuple")
         x = _finite_real(point[0], "point x") - self._layer_padding_x
         y = _finite_real(point[1], "point y")
-        y += self._last_arc * _ARC_LIFT_PIXELS
         angle = math.radians(self._last_rotation_degrees)
         if angle != 0.0:
             dx = x - _TILT_PIVOT[0]
@@ -692,7 +693,7 @@ class ContinuousHeadNeckCompositor:
         self._last_arc = pose.arc
         if self._body_backplate is None:
             return deformed
-        if pose.rotation_degrees == 0.0 and pose.arc == 0.0:
+        if pose.rotation_degrees == 0.0:
             return self._pad_layer(deformed)
         return self._compose_rotated_head(deformed, pose)
 
@@ -721,11 +722,6 @@ class ContinuousHeadNeckCompositor:
                 expand=False,
             )
         )
-        lift = round(pose.arc * _ARC_LIFT_PIXELS)
-        if lift:
-            lifted = Image.new("RGBA", self.source_size, (0, 0, 0, 0))
-            lifted.alpha_composite(rotated, (0, -lift))
-            rotated = lifted
         result = self._padded_body_backplate.copy()
         result.alpha_composite(rotated)
         return _normalize_near_opaque_alpha(result)
