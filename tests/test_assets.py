@@ -261,9 +261,12 @@ def test_load_head_neck_compositor_rejects_unapproved_backplate(
         assets_module.load_head_neck_compositor()
 
 
-def test_production_backplate_completes_neck_and_preserves_lower_body() -> None:
+def test_production_backplate_is_the_exact_approved_body() -> None:
     root = assets_module.neutral_eye_source_probe_root()
     neutral = assets_module.NeutralEyeCompositor.load(root).compose(0.0, 0.0)
+    approved_body_path = (
+        root.parent / "approved" / "猫身-原像素保留-仅补头部缺口.png"
+    )
     with Image.open(root / "body-backplate.png") as image:
         backplate = image.convert("RGBA")
 
@@ -275,7 +278,6 @@ def test_production_backplate_completes_neck_and_preserves_lower_body() -> None:
         ).getbbox()
         is None
     )
-    alpha = backplate.getchannel("A")
-    assert alpha.getpixel((125, 342)) > 200
-    assert alpha.getpixel((165, 339)) > 200
-    assert alpha.getpixel((225, 360)) > 200
+    assert (
+        root / "body-backplate.png"
+    ).read_bytes() == approved_body_path.read_bytes()

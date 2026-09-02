@@ -32,8 +32,8 @@ def test_windows_candidate_workflow_is_pinned_read_only_and_uploads_only_candida
     assert "python -m pytest -q --ignore=tests/test_interpolate_action.py" in workflow
     assert ".\\build_eye_follow_candidate.ps1 -SkipTests" in workflow
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
-    assert "name: desktop-pet-natural-follow-candidate" in workflow
-    assert "dist-eye-follow-candidate/桌面宠物-自然跟随候选版.exe" in workflow
+    assert "name: desktop-pet-approved-head-neck-assets" in workflow
+    assert "dist-eye-follow-candidate/桌面宠物-头颈素材更新版.exe" in workflow
     assert "retention-days: 7" in workflow
     assert "if-no-files-found: error" in workflow
     assert "secrets." not in workflow.lower()

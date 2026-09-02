@@ -8,6 +8,54 @@
     ],
     "source": "assets/rig/v1/source/canonical-idle.png"
   },
+  "approved_runtime_assets": {
+    "composition": {
+      "head_offset": [
+        24,
+        204
+      ],
+      "rule": "alpha-composite the approved head over the approved body, then Image.composite(previous_underlay, approved_composite, max(eye-left-mask, eye-right-mask))",
+      "transparent_rgb": "clear RGB only where final alpha is zero"
+    },
+    "derived_outputs": {
+      "body-backplate.png": {
+        "mode": "RGBA",
+        "sha256": "527eaad70a84c611f0839bc3898b5c00f41df383c191771c7e07a1af588e5ce8",
+        "size": [
+          512,
+          768
+        ]
+      },
+      "underlay.png": {
+        "mode": "RGBA",
+        "sha256": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
+        "size": [
+          512,
+          768
+        ]
+      }
+    },
+    "sources": {
+      "body": {
+        "mode": "RGBA",
+        "sha256": "527eaad70a84c611f0839bc3898b5c00f41df383c191771c7e07a1af588e5ce8",
+        "size": [
+          512,
+          768
+        ],
+        "source": "assets/rig/v1/source/approved/猫身-原像素保留-仅补头部缺口.png"
+      },
+      "head": {
+        "mode": "RGBA",
+        "sha256": "6e57c1be03db1a97a484576f6f88be8639d8f01bbfe5b0d792c68e3d985864e6",
+        "size": [
+          230,
+          241
+        ],
+        "source": "assets/rig/v1/source/approved/猫头-精准抠图.png"
+      }
+    }
+  },
   "eyes": {
     "left": {
       "fixed_exclusion_boxes": [
@@ -273,7 +321,7 @@
     },
     "underlay.png": {
       "mode": "RGBA",
-      "sha256": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+      "sha256": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
       "size": [
         512,
         768

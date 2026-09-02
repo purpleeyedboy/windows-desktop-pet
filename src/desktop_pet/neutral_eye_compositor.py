@@ -28,7 +28,7 @@ OUTPUTS: Final = {
     "eye-right-mask.png": "L",
 }
 OUTPUT_SHA256: Final = {
-    "underlay.png": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+    "underlay.png": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
     "eye-left.png": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
     "eye-right.png": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
     "eye-left-mask.png": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",

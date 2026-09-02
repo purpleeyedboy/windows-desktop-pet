@@ -44,7 +44,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物-自然跟随候选版',
+    name='桌面宠物-头颈素材更新版',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -28,27 +28,26 @@ OUTPUTS = {
     "eye-right-mask.png": "L",
 }
 OUTPUT_SHA256 = {
-    "underlay.png": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+    "underlay.png": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
     "eye-left.png": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
     "eye-right.png": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
     "eye-left-mask.png": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",
     "eye-right-mask.png": "fba54f4eb10884d5a284ea6c16cd762d0786f61e09ddc5297e99d793c3a092e4",
 }
 RAW_RGBA_GOLDENS = {
-    (0.0, 0.0): "775551951b58abb62221bb5e48d1d6077966c9d1690dcfeb54460a5f63842e30",
-    (-3.0, 0.0): "67b65d916f3f29c12a93b79d6909ed021bf14f8ee92f76f92ea183c8de760824",
-    (3.0, 0.0): "958805f0c83e2db304b1ccf1283bd2d6786eee7965b38fc12cc0816ced479255",
-    (0.0, -2.0): "b5637b4f79868c1d802719916da11f20fe522e796dea62628039a46489ae7f42",
-    (0.0, 2.0): "5fbafff4524657b5f1b49b2fcafa40af048a35a1a9347ba4a5c82cd8c36764cd",
-    (-3.0, -2.0): "e159b61d635c784fb4b6cebd52ad17e40250b2f119bf4f05e7c4391cd7849ff6",
-    (3.0, -2.0): "135534bfbaac9a3a17018df11468ed669947dd13b6e64a28f2e11213c284b33c",
-    (-3.0, 2.0): "8162ff36d3147dc03c6c28ba3c4d4f81a25f5be115da42db8e3b4d3caa790e71",
-    (3.0, 2.0): "eb1a2e714d1c999e944503e804e6293333e8a8f8dc6c790ab43b8eb695ec74e1",
-    (1.25, -0.75): "61ad584c2f4da09b249375480be26a3e47e6c4660ff687594bc65aed2a3da1fe",
-    (-2.4, 1.1): "1aa300fa0815d5cb30f0a4a615c20def485192ec272941ea98d6d68287cba6dc",
-    (1.0 / 3.0, -1.2345): "7d873f13ed7f81f45e8de1c8bc384b3dc8d1ebf9e10321b97220468c3ed9b53e",
+    (0.0, 0.0): "67a599d92c8065df95b8cec85a1e5d0841e1023ee04b1a21f5719613077a328e",
+    (-3.0, 0.0): "2057931808a7ab55b05851e4957c603dfc75057953c4c9b8799a033539bbf321",
+    (3.0, 0.0): "ca341760500c3b5afedafaa065f98880bbdb4672f1e37f2ea3a90a3e488e4909",
+    (0.0, -2.0): "49da1352ab2ec3fd9840ab9e46a1a5af2fb5158cfbd8ff30838ed69e37e6012f",
+    (0.0, 2.0): "5cd56af316aea3b3c69e6ce35ac578af52019a131a57d447ef8ec0823587211c",
+    (-3.0, -2.0): "907464507980b2527cc5917a2c8f3ca5437da10b679f072762ec038b2cd5ec0d",
+    (3.0, -2.0): "d045ad0ad7161f5b62f966128d782d33aaf2526616d17d40daf52d3ca7e97de2",
+    (-3.0, 2.0): "4c872b57ebb313a98cda35f98b467b491863d39b8965cf1cb7bb58fb2d7754e7",
+    (3.0, 2.0): "f4ec4e1a7b35bd1d6bf720cbf07a846c168fab40b76e75b018835dd1f25e12f0",
+    (1.25, -0.75): "dd9e07abb1875a6f5a3457a742103c684d87d3c359dc2a25767882426ce74fdb",
+    (-2.4, 1.1): "ac4f0ec90c05ca33085803e5391ddd100ac2f587fdefb0af897e220cf2e3b493",
+    (1.0 / 3.0, -1.2345): "f26113bf8f11e0def527e1d4e96263534770237047548d6421512283482883dc",
 }
-
 
 def _compositor_class():
     from desktop_pet.neutral_eye_compositor import NeutralEyeCompositor
@@ -193,6 +192,7 @@ def test_supported_pillow_api_does_not_require_post_pillow_11_methods(
         ROOT / "src/desktop_pet/neutral_eye_compositor.py",
         ROOT / "tools/build_neutral_eye_layers.py",
         ROOT / "tools/build_neutral_eye_preview.py",
+        ROOT / "tools/build_approved_runtime_assets.py",
         ROOT / "tests/test_neutral_eye_compositor.py",
         ROOT / "tests/test_neutral_eye_layers.py",
         ROOT / "tests/test_neutral_eye_preview.py",
