@@ -16,6 +16,7 @@ MAX_HOLD_SECONDS: Final = 2.0
 MIN_TILT_DEGREES: Final = 30.0
 MAX_TILT_DEGREES: Final = 50.0
 MAX_CLOCKWISE_TILT_DEGREES: Final = 35.0
+MAX_COUNTERCLOCKWISE_TILT_DEGREES: Final = 35.0
 APPROACH_SECONDS: Final = 0.55
 ARC_TRAVEL_SECONDS: Final = 1.15
 RETURN_SECONDS: Final = 0.55
@@ -38,9 +39,17 @@ def _finite_time(value: object, name: str) -> float:
     return result
 
 
-def _smoothstep(value: float) -> float:
+def _minimum_jerk(value: float) -> float:
+    """Return a rest-to-rest position curve with zero endpoint acceleration."""
+
     value = min(1.0, max(0.0, value))
-    return value * value * (3.0 - 2.0 * value)
+    if value <= 1e-12:
+        return 0.0
+    if value >= 1.0 - 1e-12:
+        return 1.0
+    return value * value * value * (
+        10.0 + value * (-15.0 + 6.0 * value)
+    )
 
 
 @dataclass(frozen=True)
@@ -128,7 +137,7 @@ class IdleHeadTiltMotion:
 
         if elapsed < APPROACH_SECONDS:
             return IdleTiltPose(
-                rotation * _smoothstep(elapsed / APPROACH_SECONDS)
+                rotation * _minimum_jerk(elapsed / APPROACH_SECONDS)
             )
         elapsed -= APPROACH_SECONDS
         if elapsed < self._first_hold:
@@ -137,7 +146,7 @@ class IdleHeadTiltMotion:
 
         if self._mode == "left_arc_right":
             if elapsed < ARC_TRAVEL_SECONDS:
-                progress = _smoothstep(elapsed / ARC_TRAVEL_SECONDS)
+                progress = _minimum_jerk(elapsed / ARC_TRAVEL_SECONDS)
                 return IdleTiltPose(
                     self._first_rotation
                     + (self._second_rotation - self._first_rotation) * progress,
@@ -152,7 +161,7 @@ class IdleHeadTiltMotion:
         if elapsed < RETURN_SECONDS:
             return IdleTiltPose(
                 rotation
-                * (1.0 - _smoothstep(elapsed / RETURN_SECONDS))
+                * (1.0 - _minimum_jerk(elapsed / RETURN_SECONDS))
             )
 
         self.reset(current)
@@ -206,7 +215,7 @@ class IdleHeadTiltMotion:
         maximum = (
             MAX_CLOCKWISE_TILT_DEGREES
             if direction < 0.0
-            else MAX_TILT_DEGREES
+            else MAX_COUNTERCLOCKWISE_TILT_DEGREES
         )
         magnitude = self._random_duration(
             MIN_TILT_DEGREES,

@@ -45,7 +45,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物-头部透明修正版',
+    name='桌面宠物-转头缓动与角度修正版',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

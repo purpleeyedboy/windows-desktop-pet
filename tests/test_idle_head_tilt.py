@@ -4,6 +4,7 @@ import math
 
 import pytest
 
+import desktop_pet.idle_head_tilt as idle_head_tilt
 from desktop_pet.idle_head_tilt import (
     APPROACH_SECONDS,
     ARC_TRAVEL_SECONDS,
@@ -11,6 +12,7 @@ from desktop_pet.idle_head_tilt import (
     IdleTiltPose,
     MAX_HOLD_SECONDS,
     MAX_CLOCKWISE_TILT_DEGREES,
+    MAX_COUNTERCLOCKWISE_TILT_DEGREES,
     MAX_TILT_DEGREES,
     MIN_HOLD_SECONDS,
     MIN_TILT_DEGREES,
@@ -60,6 +62,24 @@ def test_single_direction_modes_approach_hold_and_return(
     )
     assert returning.rotation_degrees == pytest.approx(expected_tilt / 2.0)
     assert returning.arc == 0.0
+
+
+def test_approach_uses_a_minimum_jerk_position_curve() -> None:
+    motion = IdleHeadTiltMotion(
+        uniform=lowest_uniform,
+        choice=lambda _: "right",
+    )
+    motion.trigger("right", 0.0)
+
+    quarter = motion.sample(APPROACH_SECONDS * 0.25)
+    midpoint = motion.sample(APPROACH_SECONDS * 0.5)
+    three_quarters = motion.sample(APPROACH_SECONDS * 0.75)
+
+    assert quarter.rotation_degrees == pytest.approx(30.0 * 0.103515625)
+    assert midpoint.rotation_degrees == pytest.approx(15.0)
+    assert three_quarters.rotation_degrees == pytest.approx(30.0 * 0.896484375)
+    assert idle_head_tilt._minimum_jerk(0.0) == 0.0
+    assert idle_head_tilt._minimum_jerk(1.0) == 1.0
 
 
 def test_arc_mode_moves_over_a_large_lifted_arc_and_holds_right() -> None:
@@ -149,7 +169,7 @@ def test_triggered_arc_mode_keeps_the_existing_large_arc_contract() -> None:
     assert midpoint.arc == pytest.approx(1.0)
 
 
-def test_clockwise_angle_cap_is_reduced_without_changing_counterclockwise_cap() -> None:
+def test_both_visual_direction_angle_caps_are_thirty_percent_below_fifty() -> None:
     calls: list[tuple[float, float]] = []
 
     def highest_uniform(low: float, high: float) -> float:
@@ -164,8 +184,8 @@ def test_clockwise_angle_cap_is_reduced_without_changing_counterclockwise_cap() 
     calls.clear()
     counterclockwise = IdleHeadTiltMotion(uniform=highest_uniform)
     counterclockwise.trigger("right", 0.0)
-    assert counterclockwise.sample(APPROACH_SECONDS).rotation_degrees == 50.0
-    assert (MIN_TILT_DEGREES, MAX_TILT_DEGREES) in calls
+    assert counterclockwise.sample(APPROACH_SECONDS).rotation_degrees == 35.0
+    assert (MIN_TILT_DEGREES, MAX_COUNTERCLOCKWISE_TILT_DEGREES) in calls
 
 
 def test_trigger_rejects_an_invalid_mode_without_changing_the_motion() -> None:
@@ -214,4 +234,5 @@ def test_public_timing_and_mode_ranges_match_the_idle_contract() -> None:
     assert MAX_HOLD_SECONDS == 2.0
     assert MIN_TILT_DEGREES == 30.0
     assert MAX_CLOCKWISE_TILT_DEGREES == 35.0
+    assert MAX_COUNTERCLOCKWISE_TILT_DEGREES == 35.0
     assert MAX_TILT_DEGREES == 50.0

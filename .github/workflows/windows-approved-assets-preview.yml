@@ -24,7 +24,7 @@ jobs:
         shell: pwsh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-head-alpha-fix-preview
-          path: dist-eye-follow-candidate/桌面宠物-头部透明修正版.exe
+          name: desktop-pet-turn-easing-angle-preview
+          path: dist-eye-follow-candidate/桌面宠物-转头缓动与角度修正版.exe
           retention-days: 7
           if-no-files-found: error
