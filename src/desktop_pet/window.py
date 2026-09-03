@@ -22,11 +22,23 @@ from .eye_runtime import (
     RuntimeEyeSession,
     SessionResult,
 )
+from .head_neck_deformation import HeadPose
+from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
-from .model import ActionCycle, Rect, clamp_height, format_position
+from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
+ACTION_MENU_ITEMS = (
+    ("动作：跳跃", "jump"),
+    ("动作：压扁", "squash"),
+    ("动作：抖动", "shake"),
+)
+TILT_MENU_ITEMS = (
+    ("歪头：向左", "left"),
+    ("歪头：向右", "right"),
+    ("歪头：左到右", "left_arc_right"),
+)
 CLICK_THRESHOLD = 8
 MONITOR_DEFAULTTONEAREST = 2
 
@@ -92,6 +104,9 @@ class _CachedCenterCompositor:
         self._compositor = compositor
         self.source_size = compositor.source_size
         self.eye_midpoint = compositor.eye_midpoint
+        self.eye_interaction_boxes = tuple(
+            getattr(compositor, "eye_interaction_boxes", ())
+        )
         self.center_frame: object | None = None
 
     def compose(self, eye_x: float, eye_y: float) -> object:
@@ -100,6 +115,81 @@ class _CachedCenterCompositor:
                 self.center_frame = self._compositor.compose(0.0, 0.0)
             return self.center_frame
         return self._compositor.compose(eye_x, eye_y)
+
+    def compose_head(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_pose: HeadPose,
+    ) -> object:
+        if (
+            eye_x == 0.0
+            and eye_y == 0.0
+            and head_pose.x == 0.0
+            and head_pose.y == 0.0
+            and head_pose.rotation_degrees == 0.0
+            and head_pose.arc == 0.0
+        ):
+            if self.center_frame is None:
+                self.center_frame = self._compositor.compose(
+                    0.0,
+                    0.0,
+                    head_pose,
+                )
+            return self.center_frame
+        return self._compositor.compose(eye_x, eye_y, head_pose)
+
+    def __getattr__(self, name: str) -> object:
+        if name == "compose_blink" and callable(
+            getattr(self._compositor, name, None)
+        ):
+            return self._compose_blink
+        if name == "compose_head_blink" and callable(
+            getattr(self._compositor, name, None)
+        ):
+            return self._compose_head_blink
+        raise AttributeError(name)
+
+    def _compose_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        closure: float,
+    ) -> object:
+        if eye_x == 0.0 and eye_y == 0.0 and closure == 0.0:
+            return self.compose(0.0, 0.0)
+        compose_blink = getattr(self._compositor, "compose_blink")
+        return compose_blink(eye_x, eye_y, closure)
+
+    def _compose_head_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_pose: HeadPose,
+        closure: float,
+    ) -> object:
+        if (
+            eye_x == 0.0
+            and eye_y == 0.0
+            and head_pose.x == 0.0
+            and head_pose.y == 0.0
+            and head_pose.rotation_degrees == 0.0
+            and head_pose.arc == 0.0
+            and closure == 0.0
+        ):
+            return self.compose_head(0.0, 0.0, head_pose)
+        compose_head_blink = getattr(self._compositor, "compose_head_blink")
+        return compose_head_blink(eye_x, eye_y, head_pose, closure)
+
+    def hit_test_eye(self, point: tuple[float, float]) -> bool:
+        hit_test = getattr(self._compositor, "hit_test_eye", None)
+        if callable(hit_test):
+            return bool(hit_test(point))
+        x, y = point
+        return any(
+            left <= x < right and top <= y < bottom
+            for left, top, right, bottom in self.eye_interaction_boxes
+        )
 
 
 @dataclass(frozen=True)
@@ -148,9 +238,14 @@ class PetWindow:
         legacy_mode: bool = False,
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
+        head_follow: bool = False,
     ) -> None:
         if legacy_mode:
-            if compositor is not None or cursor_provider is not None:
+            if (
+                compositor is not None
+                or cursor_provider is not None
+                or head_follow
+            ):
                 raise ValueError("legacy mode cannot accept eye-follow dependencies")
         elif compositor is None or cursor_provider is None:
             raise ValueError(
@@ -180,6 +275,9 @@ class PetWindow:
         )
         self._neutral_center_frame: object | None = None
         self.eye_session: RuntimeEyeSession | None = None
+        self._eye_interaction_boxes: tuple[tuple[int, int, int, int], ...] = ()
+        self._eye_source_size: tuple[int, int] = (0, 0)
+        self._eye_hit_test: Callable[[tuple[float, float]], bool] | None = None
         self._presentation_snapshot: _PresentationSnapshot | None = None
         self._startup_presentation_error: Exception | None = None
         self._constructing = True
@@ -220,6 +318,9 @@ class PetWindow:
             cached_compositor: _CachedCenterCompositor | None = None
             if not legacy_mode:
                 cached_compositor = _CachedCenterCompositor(compositor)
+                self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
+                self._eye_source_size = tuple(cached_compositor.source_size)
+                self._eye_hit_test = cached_compositor.hit_test_eye
                 self.eye_session = RuntimeEyeSession(
                     compositor=cached_compositor,
                     cursor_provider=cursor_provider,
@@ -236,6 +337,7 @@ class PetWindow:
                     choose_phrase=self.dialogue.choose,
                     present_phrase=self._present_phrase,
                     on_action_failed=self._on_action_failed,
+                    head_follow=head_follow,
                 )
                 result = self.eye_session.start()
                 self._neutral_center_frame = cached_compositor.center_frame
@@ -257,6 +359,18 @@ class PetWindow:
 
     def _create_menu(self) -> tk.Menu:
         menu = tk.Menu(self.root, tearoff=False)
+        for label, action in ACTION_MENU_ITEMS:
+            menu.add_command(
+                label=label,
+                command=lambda value=action: self.trigger_named_action(value),
+            )
+        menu.add_command(label="眨眼", command=self.trigger_blink)
+        for label, mode in TILT_MENU_ITEMS:
+            menu.add_command(
+                label=label,
+                command=lambda value=mode: self.trigger_idle_tilt(value),
+            )
+        menu.add_separator()
         for label, height in SIZE_PRESETS.items():
             menu.add_command(
                 label=label,
@@ -431,9 +545,15 @@ class PetWindow:
                 self._startup_presentation_error = error
             elif self._consecutive_renderer_failures >= 2:
                 self._mark_rendering_unavailable()
-            else:
+            elif self.animation.busy:
                 self._activate_legacy_fallback()
-            if not self._constructing:
+            if (
+                not self._constructing
+                and (
+                    self._presentation_snapshot is None
+                    or not self._rendering_available
+                )
+            ):
                 self._report_runtime_failure_once()
             raise
 
@@ -519,10 +639,66 @@ class PetWindow:
         release: tuple[int, int],
     ) -> None:
         distance = abs(release[0] - press[0]) + abs(release[1] - press[1])
-        if distance < CLICK_THRESHOLD:
-            self.trigger_next_action()
+        if distance >= CLICK_THRESHOLD:
+            return
+        if self._point_in_eye_region(press):
+            if self.eye_session is not None and not self._legacy_fallback:
+                self.eye_session.request_blink()
+            return
+        self.trigger_next_action()
+
+    def _point_in_eye_region(self, point: tuple[int, int]) -> bool:
+        source_width, source_height = self._eye_source_size
+        rect = self._window_rect
+        if (
+            not self._eye_interaction_boxes
+            or source_width <= 0
+            or source_height <= 0
+            or rect.width <= 0
+            or rect.height <= 0
+        ):
+            return False
+        source_x = (point[0] - rect.x) * source_width / rect.width
+        source_y = (point[1] - rect.y) * source_height / rect.height
+        eye_hit_test = getattr(self, "_eye_hit_test", None)
+        if eye_hit_test is not None:
+            return eye_hit_test((source_x, source_y))
+        return any(
+            left <= source_x < right and top <= source_y < bottom
+            for left, top, right, bottom in self._eye_interaction_boxes
+        )
 
     def trigger_next_action(self) -> None:
+        self._trigger_action(None)
+
+    def trigger_named_action(self, action: str) -> None:
+        if action not in ACTIONS:
+            raise ValueError("named action is invalid")
+        self._trigger_action(action)
+
+    def trigger_blink(self) -> None:
+        if (
+            self._closed
+            or not self._rendering_available
+            or self.eye_session is None
+            or self._legacy_fallback
+        ):
+            return
+        self.eye_session.request_blink()
+
+    def trigger_idle_tilt(self, mode: TiltMode) -> None:
+        if mode not in TILT_MODES:
+            raise ValueError("idle tilt mode is invalid")
+        if (
+            self._closed
+            or not self._rendering_available
+            or self.eye_session is None
+            or self._legacy_fallback
+        ):
+            return
+        self.eye_session.request_idle_tilt(mode)
+
+    def _trigger_action(self, action: str | None) -> None:
         if (
             self._closed
             or not self._rendering_available
@@ -531,16 +707,24 @@ class PetWindow:
         ):
             return
         if self.eye_session is not None and not self._legacy_fallback:
-            result = self.eye_session.request_action()
+            result = (
+                self.eye_session.request_action()
+                if action is None
+                else self.eye_session.request_named_action(action)
+            )
             if result is not SessionResult.FALLBACK:
                 return
             self._activate_legacy_fallback()
-        self._trigger_legacy_action()
+        self._trigger_legacy_action(action)
 
-    def _trigger_legacy_action(self) -> None:
+    def _trigger_legacy_action(self, requested_action: str | None = None) -> None:
         if self.animation.busy:
             return
-        action = self.action_cycle.peek()
+        action = (
+            self.action_cycle.peek()
+            if requested_action is None
+            else requested_action
+        )
         try:
             accepted = self._play_action(action)
         except Exception:
@@ -548,12 +732,13 @@ class PetWindow:
             return
         if accepted is not True:
             return
-        try:
-            self.action_cycle.commit(action)
-        except Exception:
-            if self._cancel_action(action) is not True:
-                self._on_action_failed(action, ActionFailure.CANCEL_REJECTED)
-            return
+        if requested_action is None:
+            try:
+                self.action_cycle.commit(action)
+            except Exception:
+                if self._cancel_action(action) is not True:
+                    self._on_action_failed(action, ActionFailure.CANCEL_REJECTED)
+                return
         try:
             phrase = self.dialogue.choose(action)
             self._present_phrase(phrase)
@@ -698,11 +883,7 @@ class PetWindow:
         )
 
     def _show_runtime_failure(self, message: str) -> None:
-        messagebox.showwarning(
-            "桌面宠物提示",
-            message,
-            parent=self.root,
-        )
+        del message
 
     def _report_runtime_failure_once(
         self,
@@ -730,6 +911,9 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
+        interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
+        if callable(interrupt_idle):
+            interrupt_idle()
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
 

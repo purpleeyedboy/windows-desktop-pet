@@ -1,0 +1,30 @@
+name: Windows approved-assets preview build
+
+on:
+  pull_request:
+    branches:
+      - codex/desktop-pet-6-frame-alpha
+
+permissions:
+  contents: read
+
+jobs:
+  windows-approved-assets-preview:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - run: python -m pip install ".[dev]" -r requirements-assets.txt
+      - run: python -c 'import PIL; assert PIL.__version__.split(".", 1)[0] == "11", PIL.__version__'
+      - run: .\build_eye_follow_candidate.ps1 -SkipTests
+        shell: pwsh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-pet-turn-easing-angle-preview
+          path: dist-eye-follow-candidate/桌面宠物-转头缓动与角度修正版.exe
+          retention-days: 7
+          if-no-files-found: error

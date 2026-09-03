@@ -1,8 +1,12 @@
+import hashlib
+from io import BytesIO
 from pathlib import Path
+import sys
 from typing import Sequence
 
 from PIL import Image
 
+from .head_neck_deformation import ContinuousHeadNeckCompositor
 from .model import ACTIONS
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
@@ -11,6 +15,12 @@ from .paths import asset_path
 EXPECTED_SIZE = (512, 768)
 FRAME_COUNT = 6
 EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
+HEAD_TILT_BACKPLATE_SHA256 = (
+    "527eaad70a84c611f0839bc3898b5c00f41df383c191771c7e07a1af588e5ce8"
+)
+HEAD_CUTOUT_SHA256 = (
+    "6e57c1be03db1a97a484576f6f88be8639d8f01bbfe5b0d792c68e3d985864e6"
+)
 
 
 def runtime_frame_root() -> Path:
@@ -26,6 +36,60 @@ def neutral_eye_source_probe_root() -> Path:
         / "v1"
         / "source"
         / "eye-neutral-v1"
+    )
+
+
+def neutral_eye_runtime_root() -> Path:
+    """Return the bundled neutral-eye runtime directory."""
+    return asset_path("assets", "rig", "v1", "runtime", "eye-neutral-v1")
+
+
+def load_neutral_eye_compositor(
+    root: Path | None = None,
+) -> NeutralEyeCompositor:
+    """Load the neutral-eye compositor from an explicit, runtime, or source root."""
+    if root is not None:
+        return NeutralEyeCompositor.load(root)
+
+    runtime_root = neutral_eye_runtime_root()
+    if getattr(sys, "_MEIPASS", None) or runtime_root.exists():
+        return NeutralEyeCompositor.load(runtime_root)
+    return NeutralEyeCompositor.load(neutral_eye_source_probe_root())
+
+
+def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
+    """Load eye motion plus the approved layered head-tilt backplate."""
+
+    runtime_root = neutral_eye_runtime_root()
+    root = (
+        runtime_root
+        if getattr(sys, "_MEIPASS", None) or runtime_root.exists()
+        else neutral_eye_source_probe_root()
+    )
+    try:
+        data = (root / "body-backplate.png").read_bytes()
+        if hashlib.sha256(data).hexdigest() != HEAD_TILT_BACKPLATE_SHA256:
+            raise ValueError("approved body backplate SHA mismatch")
+        with Image.open(BytesIO(data)) as opened:
+            backplate = opened.convert("RGBA")
+            backplate.load()
+    except OSError as error:
+        raise ValueError("invalid body-backplate.png") from error
+    try:
+        data = (root / "head-cutout.png").read_bytes()
+        if hashlib.sha256(data).hexdigest() != HEAD_CUTOUT_SHA256:
+            raise ValueError("approved head cutout SHA mismatch")
+        with Image.open(BytesIO(data)) as opened:
+            if opened.mode != "RGBA" or opened.size != (230, 241):
+                raise ValueError("invalid head-cutout.png")
+            head_cutout = opened.copy()
+            head_cutout.load()
+    except OSError as error:
+        raise ValueError("invalid head-cutout.png") from error
+    return ContinuousHeadNeckCompositor(
+        load_neutral_eye_compositor(root),
+        body_backplate=backplate,
+        head_cutout=head_cutout,
     )
 
 

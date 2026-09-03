@@ -710,3 +710,115 @@ def test_center_target_snaps_and_emits_exact_center_once() -> None:
 
     assert controller.pose == (0.0, 0.0)
     assert observed == [(0.0, 0.0)]
+
+
+def test_coordinated_mode_uses_approved_eye_lead_and_head_lag_constants() -> None:
+    module = _module()
+    clock = Clock()
+    scheduler = FakeScheduler()
+    legacy_observed: list[tuple[float, float]] = []
+    coordinated: list[tuple[float, float, float, float]] = []
+    controller = module.EyeMotionController(
+        scheduler,
+        scheduler.cancel,
+        FakeCursorProvider(module.CursorPoint(200, 100)),
+        FakeGeometryProvider(module.EyeGeometry(100, 100, 280)),
+        lambda x, y: legacy_observed.append((x, y)),
+        clock=clock,
+        coordinated_pose_changed=lambda eye_x, eye_y, head_x, head_y: (
+            coordinated.append((eye_x, eye_y, head_x, head_y))
+        ),
+    )
+
+    controller.start()
+    clock.value = 0.033
+    scheduler.run_one()
+
+    focus = 1.0 - math.exp(-0.033 / 0.060)
+    head = 1.0 - math.exp(-0.033 / 0.220)
+    assert legacy_observed == []
+    assert coordinated == [
+        pytest.approx(
+            (
+                3.0 * (focus - 0.35 * head),
+                0.0,
+                head * 1.225,
+                0.0,
+            )
+        )
+    ]
+    assert coordinated[0][0] / 3.0 > coordinated[0][2] / 1.225
+
+
+def test_coordinated_mode_tracks_one_arbitrary_cursor_vector_without_direction_bins() -> None:
+    module = _module()
+    clock = Clock()
+    scheduler = FakeScheduler()
+    observed: list[tuple[float, float, float, float]] = []
+    controller = module.EyeMotionController(
+        scheduler,
+        scheduler.cancel,
+        FakeCursorProvider(module.CursorPoint(160, 180)),
+        FakeGeometryProvider(module.EyeGeometry(100, 100, 280)),
+        lambda _x, _y: None,
+        clock=clock,
+        coordinated_pose_changed=lambda *pose: observed.append(pose),
+    )
+
+    controller.start()
+    clock.value = 0.033
+    scheduler.run_one()
+
+    eye_x, eye_y, head_x, head_y = observed[-1]
+    assert eye_y / eye_x == pytest.approx((0.8 * 2.0) / (0.6 * 3.0))
+    assert head_y / head_x == pytest.approx(0.8 / 0.6)
+    assert math.hypot(head_x, head_y) < 1.0
+
+
+def test_coordinated_mode_converges_both_channels_to_exact_center() -> None:
+    module = _module()
+    clock = Clock()
+    scheduler = FakeScheduler()
+    provider = FakeCursorProvider(module.CursorPoint(200, 100))
+    observed: list[tuple[float, float, float, float]] = []
+    controller = module.EyeMotionController(
+        scheduler,
+        scheduler.cancel,
+        provider,
+        FakeGeometryProvider(module.EyeGeometry(100, 100, 280)),
+        lambda _x, _y: None,
+        clock=clock,
+        coordinated_pose_changed=lambda *pose: observed.append(pose),
+    )
+    controller.start()
+    clock.value = 0.100
+    scheduler.run_one()
+    provider.point = None
+
+    for _ in range(40):
+        clock.value += 0.100
+        scheduler.run_one()
+        if observed[-1] == (0.0, 0.0, 0.0, 0.0):
+            break
+
+    assert observed[-1] == (0.0, 0.0, 0.0, 0.0)
+    assert controller.coordinated_pose == (0.0, 0.0, 0.0, 0.0)
+
+
+def test_coordinated_center_synchronization_requires_pause_and_resets_all_state() -> None:
+    module = _module()
+    clock = Clock()
+    controller, scheduler, _, _ = make_controller(
+        module.CursorPoint(200, 100), clock=clock
+    )
+
+    with pytest.raises(RuntimeError, match="paused"):
+        controller.synchronize_center()
+    controller.start()
+    clock.value = 0.060
+    scheduler.run_one()
+    controller.pause()
+    controller.synchronize_center()
+
+    assert controller.pose == (0.0, 0.0)
+    assert controller.coordinated_pose == (0.0, 0.0, 0.0, 0.0)

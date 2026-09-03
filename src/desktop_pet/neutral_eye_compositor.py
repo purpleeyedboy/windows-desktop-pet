@@ -11,7 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Final
 
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 CANONICAL_SHA256: Final = (
@@ -28,7 +28,7 @@ OUTPUTS: Final = {
     "eye-right-mask.png": "L",
 }
 OUTPUT_SHA256: Final = {
-    "underlay.png": "28bc087f2d45a9e2dc2774c96a0b853b55b65795726d0eecb374d90310c5aac9",
+    "underlay.png": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
     "eye-left.png": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
     "eye-right.png": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
     "eye-left-mask.png": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",
@@ -85,27 +85,6 @@ def _support_boundary(support: Image.Image) -> list[tuple[int, int]]:
         for x in range(bbox[0], bbox[2])
         if boundary.getpixel((x, y))
     ]
-
-
-def _bilinear(
-    values: tuple[int, ...], size: tuple[int, int], x: float, y: float
-) -> float:
-    width, height = size
-    x = min(max(x, 0.0), width - 1.0)
-    y = min(max(y, 0.0), height - 1.0)
-    x0 = int(math.floor(x))
-    y0 = int(math.floor(y))
-    x1 = min(x0 + 1, width - 1)
-    y1 = min(y0 + 1, height - 1)
-    tx = x - x0
-    ty = y - y0
-    top = values[y0 * width + x0] * (1.0 - tx) + values[
-        y0 * width + x1
-    ] * tx
-    bottom = values[y1 * width + x0] * (1.0 - tx) + values[
-        y1 * width + x1
-    ] * tx
-    return top * (1.0 - ty) + bottom * ty
 
 
 def _validate_authoring(authoring: object) -> dict:
@@ -200,7 +179,7 @@ def _build_eye_cache(
     if anchor_distance <= 0.0:
         raise ValueError(f"movement anchor is not strictly inside support for {eye} eye")
 
-    padding = 2
+    padding = 10
     crop_box = (
         max(0, bbox[0] - padding),
         max(0, bbox[1] - padding),
@@ -303,6 +282,16 @@ class NeutralEyeCompositor:
     ) -> None:
         self.source_size = CANVAS_SIZE
         self.eye_midpoint = eye_midpoint
+        interaction_padding = 12
+        self.eye_interaction_boxes = tuple(
+            (
+                max(0, cache.crop_box[0] - interaction_padding),
+                max(0, cache.crop_box[1] - interaction_padding),
+                min(CANVAS_SIZE[0], cache.crop_box[2] + interaction_padding),
+                min(CANVAS_SIZE[1], cache.crop_box[3] + interaction_padding),
+            )
+            for cache in eye_caches
+        )
         self._base_rgb = base_rgb
         self._source_alpha = source_alpha
         self._center = center
@@ -363,35 +352,183 @@ class NeutralEyeCompositor:
         return cls(base_rgb, source_alpha, center, caches, midpoint)
 
     def compose(self, eye_x: float, eye_y: float) -> Image.Image:
+        return self.compose_blink(eye_x, eye_y, 0.0)
+
+    def compose_blink(
+        self,
+        eye_x: float,
+        eye_y: float,
+        closure: float,
+    ) -> Image.Image:
         try:
             dx = float(eye_x)
             dy = float(eye_y)
+            amount = float(closure)
         except (TypeError, ValueError, OverflowError) as error:
-            raise ValueError("eye offsets must be finite and within motion limits") from error
+            raise ValueError(
+                "eye offsets must be finite and within motion limits; blink closure must be finite and within 0..1"
+            ) from error
         if (
             not math.isfinite(dx)
             or not math.isfinite(dy)
+            or not math.isfinite(amount)
             or abs(dx) > MOTION_LIMITS["x"]
             or abs(dy) > MOTION_LIMITS["y"]
+            or not 0.0 <= amount <= 1.0
         ):
-            raise ValueError("eye offsets must be finite and within motion limits")
-        if dx == 0.0 and dy == 0.0:
+            raise ValueError(
+                "eye offsets must be finite and within motion limits; blink closure must be finite and within 0..1"
+            )
+        if dx == 0.0 and dy == 0.0 and amount == 0.0:
             return self._center.copy()
 
         composed_rgb = self._base_rgb.copy()
         for cache in self._eye_caches:
             warped_crop = Image.new("RGB", cache.size)
-            warped_crop.putdata(self._warped_rgb(cache, dx, dy))
+            if dx == 0.0 and dy == 0.0:
+                warped_crop.putdata(cache.source_rgb)
+            else:
+                warped_crop.putdata(self._warped_rgb(cache, dx, dy))
             composed_rgb.paste(warped_crop, cache.crop_box[:2], cache.support)
+            if amount > 0.0:
+                lid_rgb, lid_mask = self._eyelid_layer(cache, amount)
+                composed_rgb.paste(lid_rgb, cache.crop_box[:2], lid_mask)
+
         composed = composed_rgb.convert("RGBA")
         composed.putalpha(self._source_alpha)
+        if amount > 0.72:
+            composed = self._draw_closed_eye_creases(composed, amount)
+            composed.putalpha(self._source_alpha)
         return composed
+
+    def _eyelid_layer(
+        self,
+        cache: _EyeCache,
+        closure: float,
+    ) -> tuple[Image.Image, Image.Image]:
+        width, height = cache.size
+        crop_left, crop_top = cache.crop_box[:2]
+        support = self._expanded_lid_support(cache)
+        lid_rgb = Image.new("RGB", cache.size)
+        lid_mask = Image.new("L", cache.size)
+        rgb_values: list[tuple[int, int, int]] = []
+        alpha_values: list[int] = []
+        column_bounds: list[tuple[int, int] | None] = []
+        for x in range(width):
+            supported = [
+                y for y in range(height) if support.getpixel((x, y)) != 0
+            ]
+            column_bounds.append(
+                (min(supported), max(supported)) if supported else None
+            )
+
+        for y in range(height):
+            for x in range(width):
+                bounds = column_bounds[x]
+                support_alpha = support.getpixel((x, y))
+                if bounds is None or support_alpha == 0:
+                    rgb_values.append((0, 0, 0))
+                    alpha_values.append(0)
+                    continue
+                top, bottom = bounds
+                span = max(1.0, float(bottom - top))
+                normalized_x = x / max(1.0, width - 1.0)
+                sag = 1.35 * math.sin(math.pi * normalized_x)
+                seam = top + span * 0.60 + sag
+                upper_edge = top + (seam - top) * closure
+                lower_edge = bottom - (bottom - seam) * closure
+                upper_coverage = min(1.0, max(0.0, upper_edge - y + 0.5))
+                lower_coverage = min(1.0, max(0.0, y - lower_edge + 0.5))
+                coverage = max(upper_coverage, lower_coverage)
+                if coverage == 0.0:
+                    rgb_values.append((0, 0, 0))
+                    alpha_values.append(0)
+                    continue
+
+                if y <= seam:
+                    fraction = min(
+                        1.0,
+                        max(0.0, (seam - y) / max(1.0, seam - top)),
+                    )
+                    sample_y = crop_top + top - 2 - round(fraction * 7.0)
+                else:
+                    fraction = min(
+                        1.0,
+                        max(0.0, (y - seam) / max(1.0, bottom - seam)),
+                    )
+                    sample_y = crop_top + bottom + 2 + round(fraction * 5.0)
+                sample_x = crop_left + x
+                sample_x = min(CANVAS_SIZE[0] - 1, max(0, sample_x))
+                sample_y = min(CANVAS_SIZE[1] - 1, max(0, sample_y))
+                rgb_values.append(self._base_rgb.getpixel((sample_x, sample_y)))
+                alpha_values.append(round(support_alpha * coverage))
+
+        lid_rgb.putdata(rgb_values)
+        lid_rgb = lid_rgb.filter(ImageFilter.GaussianBlur(0.7))
+        lid_mask.putdata(alpha_values)
+        return lid_rgb, lid_mask
+
+    @staticmethod
+    def _expanded_lid_support(cache: _EyeCache) -> Image.Image:
+        bbox = cache.support.getbbox()
+        support = Image.new("L", cache.size)
+        if bbox is None:
+            return support
+        expansion_x = 7
+        expansion_y = 5
+        expanded = (
+            max(0, bbox[0] - expansion_x),
+            max(0, bbox[1] - expansion_y),
+            min(cache.size[0] - 1, bbox[2] - 1 + expansion_x),
+            min(cache.size[1] - 1, bbox[3] - 1 + expansion_y),
+        )
+        ImageDraw.Draw(support).ellipse(expanded, fill=255)
+        return support.filter(ImageFilter.GaussianBlur(0.6))
+
+    def _draw_closed_eye_creases(
+        self,
+        composed: Image.Image,
+        closure: float,
+    ) -> Image.Image:
+        strength = min(1.0, max(0.0, (closure - 0.65) / 0.35))
+        strength = strength * strength * (3.0 - 2.0 * strength)
+        overlay = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        for cache in self._eye_caches:
+            crop_left, crop_top = cache.crop_box[:2]
+            points: list[tuple[int, int]] = []
+            seam_support = self._expanded_lid_support(cache)
+            for x in range(cache.size[0]):
+                supported = [
+                    y
+                    for y in range(cache.size[1])
+                    if seam_support.getpixel((x, y)) != 0
+                ]
+                if not supported:
+                    continue
+                top, bottom = min(supported), max(supported)
+                span = max(1.0, float(bottom - top))
+                normalized_x = x / max(1.0, cache.size[0] - 1.0)
+                sag = 1.35 * math.sin(math.pi * normalized_x)
+                seam = round(top + span * 0.60 + sag)
+                points.append((crop_left + x, crop_top + seam))
+            if len(points) < 2:
+                continue
+            middle_x, middle_y = points[len(points) // 2]
+            sample_y = max(0, middle_y - 8)
+            sample = self._base_rgb.getpixel((middle_x, sample_y))
+            color = tuple(max(10, round(channel * 0.36)) for channel in sample)
+            alpha = round(168.0 * strength)
+            draw.line(points, fill=(*color, alpha), width=1, joint="curve")
+        return Image.alpha_composite(composed, overlay)
 
     @staticmethod
     def _warped_rgb(
         cache: _EyeCache, dx: float, dy: float
     ) -> list[tuple[int, int, int]]:
-        width, _height = cache.size
+        width, height = cache.size
+        maximum_x = width - 1.0
+        maximum_y = height - 1.0
         output: list[tuple[int, int, int]] = []
         for index, output_alpha in enumerate(cache.output_alpha):
             if output_alpha == 0:
@@ -403,11 +540,33 @@ class NeutralEyeCompositor:
             local_x = index % width
             local_y = index // width
             weight = cache.displacement_weights[index]
-            source_x = local_x - dx * weight
-            source_y = local_y - dy * weight
-            sampled_alpha = _bilinear(
-                cache.source_alpha, cache.size, source_x, source_y
-            )
+            source_x = min(max(local_x - dx * weight, 0.0), maximum_x)
+            source_y = min(max(local_y - dy * weight, 0.0), maximum_y)
+            x0 = int(math.floor(source_x))
+            y0 = int(math.floor(source_y))
+            x1 = min(x0 + 1, width - 1)
+            y1 = min(y0 + 1, height - 1)
+            tx = source_x - x0
+            ty = source_y - y0
+            one_minus_tx = 1.0 - tx
+            one_minus_ty = 1.0 - ty
+            top_left = y0 * width + x0
+            top_right = y0 * width + x1
+            bottom_left = y1 * width + x0
+            bottom_right = y1 * width + x1
+
+            def sample(values: tuple[int, ...]) -> float:
+                top = (
+                    values[top_left] * one_minus_tx
+                    + values[top_right] * tx
+                )
+                bottom = (
+                    values[bottom_left] * one_minus_tx
+                    + values[bottom_right] * tx
+                )
+                return top * one_minus_ty + bottom * ty
+
+            sampled_alpha = sample(cache.source_alpha)
             if sampled_alpha <= 0.0:
                 output.append((0, 0, 0))
                 continue
@@ -418,9 +577,7 @@ class NeutralEyeCompositor:
                         max(
                             0,
                             round(
-                                _bilinear(values, cache.size, source_x, source_y)
-                                * 255.0
-                                / sampled_alpha
+                                sample(values) * 255.0 / sampled_alpha
                             ),
                         ),
                     )
@@ -428,3 +585,4 @@ class NeutralEyeCompositor:
                 )
             )
         return output
+

@@ -14,6 +14,9 @@ VERTICAL_LIMIT: Final = 2.0
 SAMPLE_INTERVAL_MS: Final = 33
 SAMPLE_INTERVAL_SECONDS: Final = SAMPLE_INTERVAL_MS / 1000.0
 TIME_CONSTANT_SECONDS: Final = 0.060
+HEAD_TIME_CONSTANT_SECONDS: Final = 0.220
+HEAD_RENDER_GAIN: Final = 1.225
+EYE_HEAD_COMPENSATION: Final = 0.35
 MAX_DT_SECONDS: Final = 0.100
 STABILITY_THRESHOLD: Final = 0.006
 REFERENCE_DISPLAY_HEIGHT: Final = 280.0
@@ -116,15 +119,24 @@ class EyeMotionController:
         geometry_provider: GeometryProvider,
         pose_changed: Callable[[float, float], None],
         clock: Callable[[], float] = time.monotonic,
+        coordinated_pose_changed: Callable[
+            [float, float, float, float], None
+        ]
+        | None = None,
+        pulse: Callable[[], None] | None = None,
     ) -> None:
         self._scheduler = scheduler
         self._cancel = cancel
         self._cursor_provider = cursor_provider
         self._geometry_provider = geometry_provider
         self._pose_changed = pose_changed
+        self._coordinated_pose_changed = coordinated_pose_changed
+        self._pulse = pulse
         self._clock = clock
         self._pose = (0.0, 0.0)
+        self._head_pose = (0.0, 0.0)
         self._last_emitted = self._pose
+        self._last_emitted_coordinated = (0.0, 0.0, 0.0, 0.0)
         self._last_time: float | None = None
         self._next_deadline: float | None = None
         self._scheduled: object | None = None
@@ -137,6 +149,26 @@ class EyeMotionController:
     @property
     def pose(self) -> tuple[float, float]:
         return self._pose
+
+    @property
+    def coordinated_pose(self) -> tuple[float, float, float, float]:
+        """Return rendered eye offsets followed by rendered head coordinates."""
+        focus_x = self._pose[0] / HORIZONTAL_LIMIT
+        focus_y = self._pose[1] / VERTICAL_LIMIT
+        residual_x, residual_y = self._radial_clamp(
+            focus_x - EYE_HEAD_COMPENSATION * self._head_pose[0],
+            focus_y - EYE_HEAD_COMPENSATION * self._head_pose[1],
+        )
+        head_x, head_y = self._radial_clamp(
+            self._head_pose[0] * HEAD_RENDER_GAIN,
+            self._head_pose[1] * HEAD_RENDER_GAIN,
+        )
+        return (
+            HORIZONTAL_LIMIT * residual_x,
+            VERTICAL_LIMIT * residual_y,
+            head_x,
+            head_y,
+        )
 
     def start(self) -> None:
         if self._stopped or self._running:
@@ -205,6 +237,16 @@ class EyeMotionController:
             raise ValueError("eye pose is outside the supported finite range")
         self._pose = pose
         self._last_emitted = pose
+        self._last_emitted_coordinated = self.coordinated_pose
+
+    def synchronize_center(self) -> None:
+        """Synchronize every coordinated channel to exact center while paused."""
+        if not self._paused or self._running or self._stopped:
+            raise RuntimeError("eye pose can only be synchronized while paused")
+        self._pose = (0.0, 0.0)
+        self._head_pose = (0.0, 0.0)
+        self._last_emitted = (0.0, 0.0)
+        self._last_emitted_coordinated = (0.0, 0.0, 0.0, 0.0)
 
     def _schedule(self) -> None:
         if self._running and not self._stopped and self._scheduled is None:
@@ -288,15 +330,51 @@ class EyeMotionController:
         ):
             self._pose = (0.0, 0.0)
 
-        if self._pose == (0.0, 0.0) and self._last_emitted != (0.0, 0.0):
-            self._last_emitted = self._pose
-            self._pose_changed(*self._pose)
-        elif (
-            abs(self._pose[0] - self._last_emitted[0]) >= STABILITY_THRESHOLD
-            or abs(self._pose[1] - self._last_emitted[1]) >= STABILITY_THRESHOLD
+        normalized_target = (
+            target[0] / HORIZONTAL_LIMIT,
+            target[1] / VERTICAL_LIMIT,
+        )
+        head_alpha = 1.0 - math.exp(-dt / HEAD_TIME_CONSTANT_SECONDS)
+        self._head_pose = self._radial_clamp(
+            self._head_pose[0]
+            + head_alpha * (normalized_target[0] - self._head_pose[0]),
+            self._head_pose[1]
+            + head_alpha * (normalized_target[1] - self._head_pose[1]),
+        )
+        if target == (0.0, 0.0) and all(
+            abs(value) <= STABILITY_THRESHOLD for value in self._head_pose
         ):
-            self._last_emitted = self._pose
-            self._pose_changed(*self._pose)
+            self._head_pose = (0.0, 0.0)
+
+        if self._coordinated_pose_changed is None:
+            if self._pose == (0.0, 0.0) and self._last_emitted != (0.0, 0.0):
+                self._last_emitted = self._pose
+                self._pose_changed(*self._pose)
+            elif (
+                abs(self._pose[0] - self._last_emitted[0]) >= STABILITY_THRESHOLD
+                or abs(self._pose[1] - self._last_emitted[1]) >= STABILITY_THRESHOLD
+            ):
+                self._last_emitted = self._pose
+                self._pose_changed(*self._pose)
+        else:
+            coordinated = self.coordinated_pose
+            if coordinated == (0.0, 0.0, 0.0, 0.0) and (
+                self._last_emitted_coordinated != coordinated
+            ):
+                self._last_emitted_coordinated = coordinated
+                self._coordinated_pose_changed(*coordinated)
+            elif any(
+                abs(value - previous) >= STABILITY_THRESHOLD
+                for value, previous in zip(
+                    coordinated,
+                    self._last_emitted_coordinated,
+                    strict=True,
+                )
+            ):
+                self._last_emitted_coordinated = coordinated
+                self._coordinated_pose_changed(*coordinated)
+        if self._pulse is not None:
+            self._pulse()
         self._schedule()
 
     def _fail_schedule(self, generation: int, slot: object) -> None:
@@ -333,3 +411,10 @@ class EyeMotionController:
         if not math.isfinite(activation_radius) or activation_radius <= 0.0:
             raise ValueError("activation radius must be finite and positive")
         return activation_radius
+
+    @staticmethod
+    def _radial_clamp(x: float, y: float) -> tuple[float, float]:
+        magnitude = math.hypot(x, y)
+        if magnitude <= 1.0:
+            return (x, y)
+        return (x / magnitude, y / magnitude)

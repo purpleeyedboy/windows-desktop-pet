@@ -1,0 +1,32 @@
+name: Windows eye-follow candidate
+
+on:
+  pull_request:
+    branches:
+      - codex/desktop-pet-6-frame-alpha
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-eye-follow-candidate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - run: python -m pip install ".[dev]" -r requirements-assets.txt
+      - run: python -c 'import PIL; assert PIL.__version__.split(".", 1)[0] == "11", PIL.__version__'
+      - run: python -m pytest -q --ignore=tests/test_interpolate_action.py
+      - run: .\build_eye_follow_candidate.ps1 -SkipTests
+        shell: pwsh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-pet-approved-head-neck-assets
+          path: dist-eye-follow-candidate/桌面宠物-头颈素材更新版.exe
+          retention-days: 7
+          if-no-files-found: error

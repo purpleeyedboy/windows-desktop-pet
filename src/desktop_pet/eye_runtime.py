@@ -14,6 +14,14 @@ from .eye_follow import (
     EyeMotionController,
     SAMPLE_INTERVAL_MS,
 )
+from .blink import NaturalBlinkMotion
+from .head_neck_deformation import HeadPose
+from .idle_head_tilt import (
+    TILT_MODES,
+    IdleHeadTiltMotion,
+    IdleTiltPose,
+    TiltMode,
+)
 from .model import ACTIONS, ActionCycle
 
 
@@ -75,8 +83,38 @@ class RuntimeEyeSession:
         choose_phrase: Callable[[str], str],
         present_phrase: Callable[[str], None],
         on_action_failed: Callable[[str, ActionFailure], None],
+        head_follow: bool = False,
+        blink_motion: NaturalBlinkMotion | None = None,
+        idle_tilt_motion: IdleHeadTiltMotion | None = None,
     ) -> None:
         self._compositor = compositor
+        self._head_follow = bool(head_follow)
+        if self._head_follow and not callable(
+            getattr(compositor, "compose_head", None)
+        ):
+            raise ValueError("head-follow compositor must expose compose_head")
+        blink_method = (
+            getattr(compositor, "compose_head_blink", None)
+            if self._head_follow
+            else getattr(compositor, "compose_blink", None)
+        )
+        self._blink_supported = callable(blink_method)
+        if blink_motion is not None and not self._blink_supported:
+            raise ValueError("blink motion requires a blink-capable compositor")
+        self._blink_motion = (
+            blink_motion
+            if blink_motion is not None
+            else NaturalBlinkMotion() if self._blink_supported else None
+        )
+        self._blink_closure = 0.0
+        if idle_tilt_motion is not None and not self._head_follow:
+            raise ValueError("idle head tilt requires head following")
+        self._idle_tilt_motion = (
+            idle_tilt_motion
+            if idle_tilt_motion is not None
+            else IdleHeadTiltMotion() if self._head_follow else None
+        )
+        self._idle_tilt_pose = IdleTiltPose()
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -106,6 +144,7 @@ class RuntimeEyeSession:
         self._start_attempted = False
         self._disabled_notified = False
         self._last_displayed_pose: tuple[float, float] | None = None
+        self._last_displayed_head_pose: tuple[float, float] | None = None
         self._center_frame: object | None = None
         self._pending_action: str | None = None
         self._active_action: str | None = None
@@ -117,6 +156,7 @@ class RuntimeEyeSession:
         self._recenter_generation = 0
         self._recenter_started_at = 0.0
         self._recenter_start_pose = (0.0, 0.0)
+        self._recenter_start_head_pose = (0.0, 0.0)
         self._recenter_complete: Callable[[], None] | None = None
 
         self._controller = EyeMotionController(
@@ -126,6 +166,19 @@ class RuntimeEyeSession:
             self._eye_geometry,
             self._following_pose_changed,
             clock=clock,
+            coordinated_pose_changed=(
+                self._following_coordinated_pose_changed
+                if self._head_follow
+                else None
+            ),
+            pulse=(
+                self._following_ambient_pulse
+                if (
+                    self._blink_motion is not None
+                    or self._idle_tilt_motion is not None
+                )
+                else None
+            ),
         )
 
     @property
@@ -135,6 +188,10 @@ class RuntimeEyeSession:
     @property
     def last_displayed_pose(self) -> tuple[float, float] | None:
         return self._last_displayed_pose
+
+    @property
+    def last_displayed_head_pose(self) -> tuple[float, float] | None:
+        return self._last_displayed_head_pose
 
     @property
     def action_failure(self) -> tuple[str, ActionFailure] | None:
@@ -212,9 +269,15 @@ class RuntimeEyeSession:
                 self._disable()
             return SessionResult.FALLBACK
         self._recenter_start_pose = self._last_displayed_pose or (0.0, 0.0)
+        self._recenter_start_head_pose = (
+            self._last_displayed_head_pose or (0.0, 0.0)
+        )
         self._recenter_complete = on_complete
 
-        if self._recenter_start_pose == (0.0, 0.0):
+        if (
+            self._recenter_start_pose == (0.0, 0.0)
+            and self._recenter_start_head_pose == (0.0, 0.0)
+        ):
             self._finish_recenter(epoch)
             if self._state == "disabled":
                 return SessionResult.FALLBACK
@@ -265,7 +328,110 @@ class RuntimeEyeSession:
             )
         return SessionResult.ACCEPTED
 
+    def request_blink(self) -> SessionResult:
+        """Restart one ordinary blink without pausing cursor following."""
+
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._blink_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._blink_motion.trigger(self._clock())
+        except Exception:
+            self._blink_motion = None
+            self._blink_closure = 0.0
+            return SessionResult.REJECTED
+        if self._blink_closure != 0.0:
+            self._blink_closure = 0.0
+            pose = self._last_displayed_pose or (0.0, 0.0)
+            head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+            self._try_display_pose(
+                pose,
+                self._lifecycle_epoch,
+                "following",
+                head_pose,
+            )
+        return SessionResult.ACCEPTED
+
+    def interrupt_idle(self) -> SessionResult:
+        """Cancel a tilt and restart its cooldown for click or drag priority."""
+
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._idle_tilt_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._idle_tilt_motion.reset(self._clock())
+        except Exception:
+            self._idle_tilt_motion = None
+            self._idle_tilt_pose = IdleTiltPose()
+            return SessionResult.REJECTED
+        if self._idle_tilt_pose == IdleTiltPose():
+            return SessionResult.ACCEPTED
+        self._idle_tilt_pose = IdleTiltPose()
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        if not self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        ):
+            return SessionResult.REJECTED
+        return SessionResult.ACCEPTED
+
+    def request_idle_tilt(self, mode: TiltMode) -> SessionResult:
+        """Start one explicitly selected idle-tilt pattern."""
+
+        if mode not in TILT_MODES:
+            raise ValueError("idle tilt mode is invalid")
+        if self._terminal:
+            return SessionResult.REJECTED
+        if self._state == "disabled":
+            return SessionResult.FALLBACK
+        if self._state != "following" or self._idle_tilt_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._idle_tilt_motion.trigger(mode, self._clock())
+        except Exception:
+            self._idle_tilt_motion = None
+            self._idle_tilt_pose = IdleTiltPose()
+            return SessionResult.REJECTED
+
+        self._idle_tilt_pose = IdleTiltPose()
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        if not self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        ):
+            return SessionResult.REJECTED
+        return SessionResult.ACCEPTED
+
     def request_action(self) -> SessionResult:
+        """Play the next action in the ordinary click cycle."""
+
+        return self._request_action(self._action_cycle.peek(), advance_cycle=True)
+
+    def request_named_action(self, action: str) -> SessionResult:
+        """Play exactly one named action without advancing the click cycle."""
+
+        if action not in ACTIONS:
+            raise ValueError("named action is invalid")
+        return self._request_action(action, advance_cycle=False)
+
+    def _request_action(
+        self,
+        action: str,
+        *,
+        advance_cycle: bool,
+    ) -> SessionResult:
         if self._terminal:
             return SessionResult.REJECTED
         if self._state == "disabled":
@@ -279,11 +445,12 @@ class RuntimeEyeSession:
         ):
             return SessionResult.REJECTED
 
-        action = self._action_cycle.peek()
         self._action_failure = None
         self._pending_action = action
         self._early_finish = False
-        result = self.pause_and_recenter(lambda: self._begin_action(action))
+        result = self.pause_and_recenter(
+            lambda: self._begin_action(action, advance_cycle=advance_cycle)
+        )
         if result is not SessionResult.ACCEPTED and self._pending_action == action:
             self._pending_action = None
         return result
@@ -344,24 +511,109 @@ class RuntimeEyeSession:
             pass
         self._controller.stop()
 
+    def _following_ambient_pulse(self) -> None:
+        if self._state != "following":
+            return
+        try:
+            now = self._clock()
+        except Exception:
+            return
+        changed = False
+        if self._blink_motion is not None:
+            try:
+                closure = self._blink_motion.sample(now)
+            except Exception:
+                self._blink_motion = None
+                closure = 0.0
+            if closure != self._blink_closure:
+                self._blink_closure = closure
+                changed = True
+        if self._idle_tilt_motion is not None:
+            try:
+                idle_pose = self._idle_tilt_motion.sample(now)
+            except Exception:
+                self._idle_tilt_motion = None
+                idle_pose = IdleTiltPose()
+            if idle_pose != self._idle_tilt_pose:
+                self._idle_tilt_pose = idle_pose
+                changed = True
+        if not changed:
+            return
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        self._try_display_pose(
+            pose,
+            self._lifecycle_epoch,
+            "following",
+            head_pose,
+        )
+
     def _following_pose_changed(self, eye_x: float, eye_y: float) -> None:
         if self._state != "following":
             return
         epoch = self._lifecycle_epoch
         self._try_display_pose((eye_x, eye_y), epoch, "following")
 
+    def _following_coordinated_pose_changed(
+        self,
+        eye_x: float,
+        eye_y: float,
+        head_x: float,
+        head_y: float,
+    ) -> None:
+        if self._state != "following":
+            return
+        epoch = self._lifecycle_epoch
+        self._try_display_pose(
+            (eye_x, eye_y),
+            epoch,
+            "following",
+            (head_x, head_y),
+        )
+
     def _try_display_pose(
         self,
         pose: tuple[float, float],
         epoch: int,
         expected_state: SessionState,
+        head_pose: tuple[float, float] = (0.0, 0.0),
     ) -> bool:
         if not self._work_is_current(epoch, expected_state):
             return False
         try:
-            frame = self._compositor.compose(*pose)
+            if self._head_follow:
+                idle_pose = (
+                    self._idle_tilt_pose
+                    if expected_state == "following"
+                    else IdleTiltPose()
+                )
+                combined_head_pose = HeadPose(
+                    *head_pose,
+                    idle_pose.rotation_degrees,
+                    idle_pose.arc,
+                )
+                if self._blink_motion is not None:
+                    compose_head_blink = getattr(
+                        self._compositor, "compose_head_blink"
+                    )
+                    frame = compose_head_blink(
+                        *pose,
+                        combined_head_pose,
+                        self._blink_closure,
+                    )
+                else:
+                    compose_head = getattr(self._compositor, "compose_head")
+                    frame = compose_head(*pose, combined_head_pose)
+            elif self._blink_motion is not None:
+                compose_blink = getattr(self._compositor, "compose_blink")
+                frame = compose_blink(*pose, self._blink_closure)
+            else:
+                frame = self._compositor.compose(*pose)
         except Exception:
-            if self._work_is_current(epoch, expected_state):
+            if (
+                expected_state != "following"
+                and self._work_is_current(epoch, expected_state)
+            ):
                 self._disable()
             return False
         if not self._work_is_current(epoch, expected_state):
@@ -369,17 +621,22 @@ class RuntimeEyeSession:
         try:
             self._display(frame)
         except Exception:
-            if self._work_is_current(epoch, expected_state):
+            if (
+                expected_state != "following"
+                and self._work_is_current(epoch, expected_state)
+            ):
                 self._disable()
             return False
         if not self._work_is_current(epoch, expected_state):
             return False
         self._last_displayed_pose = pose
+        if self._head_follow:
+            self._last_displayed_head_pose = head_pose
         if expected_state == "stopped" and pose == (0.0, 0.0):
             self._center_frame = frame
         return True
 
-    def _begin_action(self, action: str) -> None:
+    def _begin_action(self, action: str, *, advance_cycle: bool) -> None:
         if self._state != "playing" or self._pending_action != action:
             return
         epoch = self._lifecycle_epoch
@@ -396,12 +653,13 @@ class RuntimeEyeSession:
             self._abandon_action_request()
             return
 
-        try:
-            self._action_cycle.commit(action)
-        except Exception:
-            if self._work_is_current(epoch, "playing"):
-                self._cancel_accepted_action(action, epoch)
-            return
+        if advance_cycle:
+            try:
+                self._action_cycle.commit(action)
+            except Exception:
+                if self._work_is_current(epoch, "playing"):
+                    self._cancel_accepted_action(action, epoch)
+                return
         if not self._work_is_current(epoch, "playing"):
             return
         self._pending_action = None
@@ -456,7 +714,7 @@ class RuntimeEyeSession:
     ) -> SessionResult:
         if self._active_action != action:
             return SessionResult.REJECTED
-        self._controller.synchronize_pose(0.0, 0.0)
+        self._synchronize_controller_center()
         if not self._work_is_current(epoch, "playing"):
             return SessionResult.REJECTED
         self._pending_action = None
@@ -565,17 +823,27 @@ class RuntimeEyeSession:
         elapsed = max(0.0, self._clock() - self._recenter_started_at)
         if elapsed >= RECENTER_DURATION_SECONDS:
             pose = (0.0, 0.0)
+            head_pose = (0.0, 0.0)
         else:
             remaining = 1.0 - elapsed / RECENTER_DURATION_SECONDS
             pose = (
                 self._recenter_start_pose[0] * remaining,
                 self._recenter_start_pose[1] * remaining,
             )
-        if not self._try_display_pose(pose, epoch, "recentering"):
+            head_pose = (
+                self._recenter_start_head_pose[0] * remaining,
+                self._recenter_start_head_pose[1] * remaining,
+            )
+        if not self._try_display_pose(
+            pose,
+            epoch,
+            "recentering",
+            head_pose,
+        ):
             return
         if not self._work_is_current(epoch, "recentering"):
             return
-        if pose == (0.0, 0.0):
+        if pose == (0.0, 0.0) and head_pose == (0.0, 0.0):
             self._finish_recenter(epoch)
         else:
             self._schedule_recenter()
@@ -584,7 +852,7 @@ class RuntimeEyeSession:
         if not self._work_is_current(epoch, "recentering"):
             return
         self._recenter_generation += 1
-        self._controller.synchronize_pose(0.0, 0.0)
+        self._synchronize_controller_center()
         if not self._work_is_current(epoch, "recentering"):
             return
         self._transition("playing")
@@ -630,6 +898,26 @@ class RuntimeEyeSession:
     def _transition(self, state: SessionState) -> None:
         self._lifecycle_epoch += 1
         self._state = state
+        self._blink_closure = 0.0
+        self._idle_tilt_pose = IdleTiltPose()
+        if state != "following":
+            return
+        try:
+            now = self._clock()
+        except Exception:
+            self._blink_motion = None
+            self._idle_tilt_motion = None
+            return
+        if self._blink_motion is not None:
+            try:
+                self._blink_motion.reset(now)
+            except Exception:
+                self._blink_motion = None
+        if self._idle_tilt_motion is not None:
+            try:
+                self._idle_tilt_motion.reset(now)
+            except Exception:
+                self._idle_tilt_motion = None
 
     def _work_is_current(self, epoch: int, state: SessionState) -> bool:
         return (
@@ -678,6 +966,12 @@ class RuntimeEyeSession:
             y + self._midpoint_y * height / self._source_height,
             height,
         )
+
+    def _synchronize_controller_center(self) -> None:
+        if self._head_follow:
+            self._controller.synchronize_center()
+        else:
+            self._controller.synchronize_pose(0.0, 0.0)
 
     @staticmethod
     def _valid_pair(values: object, name: str) -> tuple[float, float]:

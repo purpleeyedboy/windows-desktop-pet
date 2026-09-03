@@ -275,6 +275,28 @@ class HeadlessCompositor:
         return Image.new("RGBA", self.source_size, color)
 
 
+class HeadlessHeadCompositor:
+    source_size = (512, 768)
+    eye_midpoint = (122.5, 349.0)
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[float, float, float, float]] = []
+        self.events: list[str] | None = None
+
+    def compose(self, eye_x, eye_y, head_pose):
+        if self.events is not None:
+            self.events.append("compose")
+        call = (eye_x, eye_y, head_pose.x, head_pose.y)
+        self.calls.append(call)
+        color = (
+            round((eye_x + 3) * 30),
+            round((eye_y + 2) * 40),
+            round((head_pose.x + 1) * 80),
+            255,
+        )
+        return Image.new("RGBA", self.source_size, color)
+
+
 class HeadlessCursor:
     def __init__(self, point=CursorPoint(1900, 100)) -> None:
         self.point = point
@@ -479,7 +501,20 @@ def test_window_contract_and_menu(tk_root, loaded_frames):
         for index in range(window.menu.index("end") + 1)
         if window.menu.type(index) != "separator"
     ]
-    assert {"小", "中", "大", "始终置顶", "退出"}.issubset(labels)
+    assert {
+        "动作：跳跃",
+        "动作：压扁",
+        "动作：抖动",
+        "眨眼",
+        "歪头：向左",
+        "歪头：向右",
+        "歪头：左到右",
+        "小",
+        "中",
+        "大",
+        "始终置顶",
+        "退出",
+    }.issubset(labels)
 
 
 def test_size_clamp_presets_wheel_and_topmost(tk_root, loaded_frames):
@@ -700,6 +735,68 @@ def test_headless_probe_initialization_displays_cached_center_then_starts_one_lo
     assert reports == []
 
 
+def test_headless_continuous_head_mode_wires_one_coordinated_runtime_loop(
+    monkeypatch,
+) -> None:
+    compositor = HeadlessHeadCompositor()
+    root, renderer, bubbles, reports, frames, compositor, cursor, clock = (
+        prepare_headless(monkeypatch, compositor=compositor)
+    )
+    window = PetWindow(
+        root,
+        frames,
+        renderer_factory=lambda _hwnd: renderer,
+        compositor=compositor,
+        cursor_provider=cursor,
+        runtime_failure_reporter=reports.append,
+        clock=clock,
+        head_follow=True,
+    )
+
+    assert compositor.calls == [(0.0, 0.0, 0.0, 0.0)]
+    root.run_next(advance_ms=33)
+
+    assert len(compositor.calls) == 2
+    assert compositor.calls[-1] != (0.0, 0.0, 0.0, 0.0)
+    assert window.eye_session.last_displayed_head_pose != (0.0, 0.0)
+    assert len(root.live()) == 1
+    assert len(renderer.successes) == 2
+    assert bubbles[0].destroyed is False
+    assert reports == []
+
+
+def test_headless_continuous_head_action_recenters_to_literal_cached_center(
+    monkeypatch,
+) -> None:
+    compositor = HeadlessHeadCompositor()
+    root, renderer, _bubbles, reports, frames, compositor, cursor, clock = (
+        prepare_headless(monkeypatch, compositor=compositor)
+    )
+    window = PetWindow(
+        root,
+        frames,
+        renderer_factory=lambda _hwnd: renderer,
+        compositor=compositor,
+        cursor_provider=cursor,
+        runtime_failure_reporter=reports.append,
+        clock=clock,
+        head_follow=True,
+    )
+    center = window._neutral_center_frame
+    root.run_next(advance_ms=33)
+    calls_before_recenter = len(compositor.calls)
+
+    window.trigger_next_action()
+    root.run_next(advance_ms=132)
+
+    assert window._current_image is center
+    assert len(compositor.calls) == calls_before_recenter
+    assert window.eye_session.last_displayed_pose == (0.0, 0.0)
+    assert window.eye_session.last_displayed_head_pose == (0.0, 0.0)
+    assert window.animation.busy is True
+    assert reports == []
+
+
 def test_headless_follow_uses_live_drag_resize_and_negative_geometry(monkeypatch):
     window, root, renderer, _bubble, compositor, cursor, _frames, _reports = (
         make_headless_window(monkeypatch)
@@ -799,7 +896,7 @@ def test_headless_resize_failure_during_action_cancels_owner_before_fallback(
     assert window._current_image is frames["squash"][0]
 
 
-def test_headless_transient_renderer_failure_rolls_back_then_legacy_action_succeeds(
+def test_headless_transient_renderer_failure_rolls_back_without_stopping_follow(
     monkeypatch,
 ):
     window, _root, renderer, bubble, _compositor, _cursor, frames, reports = (
@@ -824,15 +921,15 @@ def test_headless_transient_renderer_failure_rolls_back_then_legacy_action_succe
     assert window.display_height == snapshot[3]
     assert window.root.geometries[-1] == snapshot[4]
     assert window._consecutive_renderer_failures == 1
-    assert window._legacy_fallback is True
-    assert reports == ["眼睛跟随已停用，点击动作仍可继续。"]
+    assert window._legacy_fallback is False
+    assert window.eye_session.state == "following"
+    assert reports == []
 
-    window.trigger_next_action()
+    window._apply_image(frames["jump"][0])
 
-    assert window._current_image is frames["jump"][0]
-    assert window.action_cycle.peek() == "squash"
     assert window._consecutive_renderer_failures == 0
-    assert len(bubble.messages) == 1
+    assert window.eye_session.state == "following"
+    assert bubble.messages == []
 
 
 def test_headless_success_resets_renderer_failure_streak(monkeypatch):
@@ -857,7 +954,7 @@ def test_headless_success_resets_renderer_failure_streak(monkeypatch):
 def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but_close_works(
     monkeypatch,
 ):
-    window, _root, renderer, _bubble, _compositor, _cursor, frames, reports = (
+    window, root, renderer, _bubble, _compositor, _cursor, frames, reports = (
         make_headless_window(monkeypatch)
     )
     renderer.failures.extend([True, True])
@@ -865,7 +962,7 @@ def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but
         window._apply_image(frames["jump"][1])
     attempts_after_first = len(renderer.attempts)
 
-    window.trigger_next_action()
+    root.run_next(advance_ms=33)
 
     assert len(renderer.attempts) == attempts_after_first + 1
     assert window._consecutive_renderer_failures == 2
@@ -880,7 +977,7 @@ def test_headless_second_consecutive_renderer_failure_blocks_future_attempts_but
     assert window.root.destroyed is True
 
 
-def test_headless_composition_failure_reports_once_and_keeps_physical_click_actions(
+def test_headless_transient_composition_failure_skips_one_frame_then_recovers(
     monkeypatch,
 ):
     window, root, renderer, bubble, compositor, cursor, frames, reports = (
@@ -892,14 +989,30 @@ def test_headless_composition_failure_reports_once_and_keeps_physical_click_acti
 
     root.run_next(advance_ms=33)
 
-    assert window._legacy_fallback is True
-    assert window.eye_session.state == "disabled"
+    assert window._legacy_fallback is False
+    assert window.eye_session.state == "following"
     assert len(renderer.attempts) == calls_before
-    assert len(reports) == 1
-    window.trigger_next_action()
-    assert window._current_image is frames["jump"][0]
-    assert window.action_cycle.peek() == "squash"
-    assert len(bubble.messages) == 1
+    assert reports == []
+
+    root.run_next(advance_ms=33)
+
+    assert window.eye_session.state == "following"
+    assert len(renderer.attempts) == calls_before + 1
+    assert reports == []
+    assert bubble.messages == []
+
+
+def test_default_runtime_failure_reporter_is_non_modal(monkeypatch):
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        "desktop_pet.window.messagebox.showwarning",
+        lambda *args, **kwargs: calls.append((*args, kwargs)),
+    )
+    window = object.__new__(PetWindow)
+
+    window._show_runtime_failure("injected failure")
+
+    assert calls == []
 
 
 def test_headless_later_action_callback_failure_aborts_owner_before_fallback(
@@ -985,6 +1098,69 @@ def test_headless_menu_and_window_protocol_share_close_path(monkeypatch):
     assert window.menu.commands["退出"].__func__ is window.close.__func__
     assert root.protocols["WM_DELETE_WINDOW"].__self__ is window
     assert root.protocols["WM_DELETE_WINDOW"].__func__ is window.close.__func__
+
+
+def test_headless_menu_routes_all_seven_commands_to_exact_runtime_requests(
+    monkeypatch,
+):
+    window, _root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    requests: list[tuple[str, str | None]] = []
+
+    class RecordingSession:
+        def request_named_action(self, action):
+            requests.append(("action", action))
+            return window_module.SessionResult.ACCEPTED
+
+        def request_blink(self):
+            requests.append(("blink", None))
+            return window_module.SessionResult.ACCEPTED
+
+        def request_idle_tilt(self, mode):
+            requests.append(("tilt", mode))
+            return window_module.SessionResult.ACCEPTED
+
+    window.eye_session = RecordingSession()
+    for label in (
+        "动作：跳跃",
+        "动作：压扁",
+        "动作：抖动",
+        "眨眼",
+        "歪头：向左",
+        "歪头：向右",
+        "歪头：左到右",
+    ):
+        window.menu.commands[label]()
+
+    assert requests == [
+        ("action", "jump"),
+        ("action", "squash"),
+        ("action", "shake"),
+        ("blink", None),
+        ("tilt", "left"),
+        ("tilt", "right"),
+        ("tilt", "left_arc_right"),
+    ]
+
+
+def test_headless_named_legacy_action_does_not_advance_click_cycle(monkeypatch):
+    window, _root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    window.eye_session.stop()
+    window._legacy_fallback = True
+    played: list[str] = []
+    monkeypatch.setattr(
+        window.animation,
+        "play",
+        lambda action: played.append(action) or True,
+    )
+
+    window.trigger_named_action("shake")
+
+    assert played == ["shake"]
+    assert window.action_cycle.peek() == "jump"
 
 
 def test_headless_probe_presents_center_while_hidden_before_show_and_eye_timer(
