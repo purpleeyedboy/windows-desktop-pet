@@ -469,6 +469,35 @@ def test_idle_rotation_layer_contains_head_but_excludes_neck_and_chest() -> None
     assert mask.getpixel((175, 560)) == 0
 
 
+def test_rotated_head_uses_exact_cutout_alpha_on_the_right_cheek() -> None:
+    source = Image.new("RGBA", CANVAS_SIZE, (214, 156, 104, 255))
+    backplate = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))
+    head_cutout = Image.new("RGBA", (230, 241), (214, 156, 104, 255))
+    compositor = ContinuousHeadNeckCompositor(
+        RecordingCompositor(source),
+        body_backplate=backplate,
+        head_cutout=head_cutout,
+    )
+
+    angle = 20.0
+    result = compositor.compose(
+        0.0,
+        0.0,
+        HeadPose(0.0, 0.0, angle, 1.0),
+    )
+    source_x, source_y = (230.0, 350.0)
+    pivot_x, pivot_y = (125.0, 360.0)
+    radians = math.radians(angle)
+    dx = source_x - pivot_x
+    dy = source_y - pivot_y
+    rendered = (
+        round(64.0 + pivot_x + math.cos(radians) * dx + math.sin(radians) * dy),
+        round(pivot_y - math.sin(radians) * dx + math.cos(radians) * dy),
+    )
+
+    assert result.getpixel(rendered)[3] >= 252
+
+
 def test_layered_neutral_frame_is_exact_source_with_symmetric_padding() -> None:
     source = _synthetic_cat()
     backplate = Image.new("RGBA", CANVAS_SIZE, (0, 0, 0, 0))

@@ -206,15 +206,22 @@ def test_load_head_neck_compositor_wraps_the_selected_neutral_eye_compositor(
 ) -> None:
     neutral = object()
     wrapped = object()
-    calls: list[tuple[object, Image.Image]] = []
+    calls: list[tuple[object, Image.Image, Image.Image]] = []
     runtime_root = tmp_path / "runtime"
     runtime_root.mkdir()
     backplate_path = runtime_root / "body-backplate.png"
     Image.new("RGBA", (512, 768), (0, 0, 0, 0)).save(backplate_path)
+    head_cutout_path = runtime_root / "head-cutout.png"
+    Image.new("RGBA", (230, 241), (0, 0, 0, 0)).save(head_cutout_path)
     monkeypatch.setattr(
         assets_module,
         "HEAD_TILT_BACKPLATE_SHA256",
         assets_module.hashlib.sha256(backplate_path.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        assets_module,
+        "HEAD_CUTOUT_SHA256",
+        assets_module.hashlib.sha256(head_cutout_path.read_bytes()).hexdigest(),
     )
     monkeypatch.setattr(
         assets_module, "neutral_eye_runtime_root", lambda: runtime_root
@@ -225,8 +232,8 @@ def test_load_head_neck_compositor_wraps_the_selected_neutral_eye_compositor(
         lambda root: neutral,
     )
 
-    def wrap(base, *, body_backplate):
-        calls.append((base, body_backplate))
+    def wrap(base, *, body_backplate, head_cutout):
+        calls.append((base, body_backplate, head_cutout))
         return wrapped
 
     monkeypatch.setattr(
@@ -240,6 +247,8 @@ def test_load_head_neck_compositor_wraps_the_selected_neutral_eye_compositor(
     assert calls[0][0] is neutral
     assert calls[0][1].mode == "RGBA"
     assert calls[0][1].size == (512, 768)
+    assert calls[0][2].mode == "RGBA"
+    assert calls[0][2].size == (230, 241)
 
 
 def test_load_head_neck_compositor_rejects_unapproved_backplate(
@@ -250,6 +259,9 @@ def test_load_head_neck_compositor_rejects_unapproved_backplate(
     runtime_root.mkdir()
     Image.new("RGBA", (512, 768), (0, 0, 0, 0)).save(
         runtime_root / "body-backplate.png"
+    )
+    Image.new("RGBA", (230, 241), (0, 0, 0, 0)).save(
+        runtime_root / "head-cutout.png"
     )
     monkeypatch.setattr(
         assets_module, "neutral_eye_runtime_root", lambda: runtime_root

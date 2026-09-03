@@ -12,6 +12,7 @@ EYE_FILES = (
     "eye-left.png",
     "eye-right-mask.png",
     "eye-right.png",
+    "head-cutout.png",
     "underlay.png",
 )
 
@@ -44,7 +45,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物-头颈素材更新版',
+    name='桌面宠物-头部透明修正版',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

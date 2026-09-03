@@ -78,6 +78,7 @@ def test_build_is_deterministic_and_preserves_sources_and_eye_apertures(
     first_hashes = assembler.build(approved_dir, runtime_source_dir)
     first_underlay_bytes = (runtime_source_dir / "underlay.png").read_bytes()
     first_backplate_bytes = (runtime_source_dir / "body-backplate.png").read_bytes()
+    first_head_cutout_bytes = (runtime_source_dir / "head-cutout.png").read_bytes()
     second_hashes = assembler.build(approved_dir, runtime_source_dir)
 
     assert assembler.HEAD_OFFSET == (24, 204)
@@ -86,6 +87,7 @@ def test_build_is_deterministic_and_preserves_sources_and_eye_apertures(
     assert first_hashes == second_hashes == {
         "underlay.png": _sha256(first_underlay_bytes),
         "body-backplate.png": APPROVED_BODY_SHA256,
+        "head-cutout.png": APPROVED_HEAD_SHA256,
     }
     assert (
         runtime_source_dir / "underlay.png"
@@ -94,6 +96,7 @@ def test_build_is_deterministic_and_preserves_sources_and_eye_apertures(
         runtime_source_dir / "body-backplate.png"
     ).read_bytes() == first_backplate_bytes
     assert first_backplate_bytes == source_bytes_before[body_path.name]
+    assert first_head_cutout_bytes == source_bytes_before[head_path.name]
 
     actual_underlay = Image.open(runtime_source_dir / "underlay.png").convert("RGBA")
     outside_eye_union = eye_union.point(

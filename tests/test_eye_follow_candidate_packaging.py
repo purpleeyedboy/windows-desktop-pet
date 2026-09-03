@@ -15,7 +15,7 @@ SPEC = ROOT / "desktop_pet_eye_follow.spec"
 BUILD = ROOT / "build_eye_follow_candidate.ps1"
 VERIFIER = ROOT / "tools" / "verify_eye_follow_candidate_archive.py"
 
-CANDIDATE_NAME = "桌面宠物-头颈素材更新版.exe"
+CANDIDATE_NAME = "桌面宠物-头部透明修正版.exe"
 RUNTIME_EYE = "assets/rig/v1/runtime/eye-neutral-v1"
 SOURCE_EYE = "assets/rig/v1/source/eye-neutral-v1"
 EYE_FILES = (
@@ -25,6 +25,7 @@ EYE_FILES = (
     "eye-left.png",
     "eye-right-mask.png",
     "eye-right.png",
+    "head-cutout.png",
     "underlay.png",
 )
 
@@ -35,7 +36,7 @@ def test_candidate_spec_is_onefile_and_packages_only_runtime_eye_assets():
 
     assert "onefile" not in spec.lower()  # EXE() without COLLECT is PyInstaller one-file.
     assert "EXE(" in spec
-    assert "name='桌面宠物-头颈素材更新版'" in spec
+    assert "name='桌面宠物-头部透明修正版'" in spec
     assert "assets/keyframes" in spec
     assert "assets/bubble" in spec
     assert "assets/fonts" in spec
@@ -209,7 +210,7 @@ def test_archive_verifier_compares_all_resource_bytes_and_rejects_forbidden_path
     CArchiveWriter(str(executable), entries, "libpython3.12.so")
 
     verifier.verify_archive(executable)
-    assert "neutral-eye 7" in capsys.readouterr().out
+    assert "neutral-eye 8" in capsys.readouterr().out
 
     (source_root / "assets/keyframes/shake/00.png").write_bytes(b"changed")
     with pytest.raises(verifier.VerificationError, match="byte mismatch"):
@@ -265,7 +266,7 @@ def test_archive_verifier_normalizes_windows_member_names_and_rejects_collisions
     CArchiveWriter(str(windows_archive), entries, "libpython3.12.so")
 
     verifier.verify_archive(windows_archive)
-    assert "neutral-eye 7" in capsys.readouterr().out
+    assert "neutral-eye 8" in capsys.readouterr().out
 
     with pytest.raises(verifier.VerificationError, match="normalized archive path collision"):
         verifier.normalized_archive_members(

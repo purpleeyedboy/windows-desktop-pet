@@ -27,6 +27,7 @@ EYE_FILES = (
     "eye-left.png",
     "eye-right-mask.png",
     "eye-right.png",
+    "head-cutout.png",
     "underlay.png",
 )
 

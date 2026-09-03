@@ -96,6 +96,8 @@ _LAYER_CANVAS_SIZE = (_CANVAS_SIZE[0] + 2 * _LAYER_PADDING_X, 768)
 _TILT_PIVOT = (125.0, 360.0)
 _TILT_LIMIT_DEGREES = 50.0
 _ARC_LIFT_PIXELS = 0.0
+_HEAD_CUTOUT_SIZE = (230, 241)
+_HEAD_CUTOUT_OFFSET = (24, 204)
 
 
 def _build_head_layer_mask() -> Image.Image:
@@ -458,6 +460,7 @@ class ContinuousHeadNeckCompositor:
         self,
         base_compositor: _BaseCompositor,
         body_backplate: Image.Image | None = None,
+        head_cutout: Image.Image | None = None,
     ) -> None:
         try:
             source_size = tuple(base_compositor.source_size)
@@ -479,9 +482,26 @@ class ContinuousHeadNeckCompositor:
             or body_backplate.size != _CANVAS_SIZE
         ):
             raise ValueError("body backplate must be a 512x768 RGBA image")
+        if head_cutout is not None and (
+            not isinstance(head_cutout, Image.Image)
+            or head_cutout.mode != "RGBA"
+            or head_cutout.size != _HEAD_CUTOUT_SIZE
+        ):
+            raise ValueError("head cutout must be a 230x241 RGBA image")
+        if head_cutout is not None and body_backplate is None:
+            raise ValueError("head cutout requires a body backplate")
         self._body_backplate = (
             body_backplate.copy() if body_backplate is not None else None
         )
+        self._uses_exact_head_alpha = head_cutout is not None
+        if head_cutout is None:
+            self._head_layer_mask = _HEAD_LAYER_MASK
+        else:
+            self._head_layer_mask = Image.new("L", _CANVAS_SIZE, 0)
+            self._head_layer_mask.paste(
+                head_cutout.getchannel("A"),
+                _HEAD_CUTOUT_OFFSET,
+            )
         self._layer_padding_x = (
             _LAYER_PADDING_X if self._body_backplate is not None else 0
         )
@@ -703,10 +723,13 @@ class ContinuousHeadNeckCompositor:
         pose: HeadPose,
     ) -> Image.Image:
         assert self._padded_body_backplate is not None
-        alpha = ImageChops.multiply(
-            deformed.getchannel("A"),
-            _HEAD_LAYER_MASK,
-        )
+        if self._uses_exact_head_alpha:
+            alpha = self._head_layer_mask
+        else:
+            alpha = ImageChops.multiply(
+                deformed.getchannel("A"),
+                self._head_layer_mask,
+            )
         head = deformed.copy()
         head.putalpha(alpha)
         padded_head = self._pad_layer(head)

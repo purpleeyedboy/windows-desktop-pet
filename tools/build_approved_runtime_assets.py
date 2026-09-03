@@ -105,7 +105,9 @@ def build(
     body_bytes, body = _read_approved(
         body_path, APPROVED_BODY_SHA256, CANVAS_SIZE
     )
-    _, head = _read_approved(head_path, APPROVED_HEAD_SHA256, HEAD_SIZE)
+    head_bytes, head = _read_approved(
+        head_path, APPROVED_HEAD_SHA256, HEAD_SIZE
+    )
     previous_underlay_bytes, previous_underlay = _read_runtime_image(
         runtime_source_dir, "underlay.png", "RGBA"
     )
@@ -136,16 +138,24 @@ def build(
 
     underlay_path = runtime_source_dir / "underlay.png"
     backplate_path = runtime_source_dir / "body-backplate.png"
+    head_cutout_path = runtime_source_dir / "head-cutout.png"
     temporary_underlay = _temporary_path(underlay_path)
     temporary_backplate = _temporary_path(backplate_path)
+    temporary_head_cutout = _temporary_path(head_cutout_path)
     rollback_underlay = _temporary_path(underlay_path)
+    rollback_backplate = _temporary_path(backplate_path)
     try:
         underlay.save(temporary_underlay, format="PNG")
         temporary_backplate.write_bytes(body_bytes)
+        temporary_head_cutout.write_bytes(head_bytes)
         rollback_underlay.write_bytes(previous_underlay_bytes)
+        rollback_backplate.write_bytes(
+            backplate_path.read_bytes() if backplate_path.exists() else b""
+        )
 
         underlay_bytes = temporary_underlay.read_bytes()
         written_body_bytes = temporary_backplate.read_bytes()
+        written_head_bytes = temporary_head_cutout.read_bytes()
         _decode_exact(
             underlay_bytes, underlay_path.name, "RGBA", CANVAS_SIZE
         )
@@ -154,6 +164,8 @@ def build(
         )
         if written_body_bytes != body_bytes:
             raise ValueError("body-backplate.png bytes differ from approved body")
+        if written_head_bytes != head_bytes:
+            raise ValueError("head-cutout.png bytes differ from approved head")
         if _sha256(underlay_bytes) != DERIVED_UNDERLAY_SHA256:
             raise ValueError("derived underlay.png SHA mismatch")
 
@@ -163,14 +175,27 @@ def build(
         except BaseException:
             os.replace(rollback_underlay, underlay_path)
             raise
+        try:
+            os.replace(temporary_head_cutout, head_cutout_path)
+        except BaseException:
+            previous_backplate = rollback_backplate.read_bytes()
+            if previous_backplate:
+                os.replace(rollback_backplate, backplate_path)
+            else:
+                backplate_path.unlink(missing_ok=True)
+            os.replace(rollback_underlay, underlay_path)
+            raise
     finally:
         temporary_underlay.unlink(missing_ok=True)
         temporary_backplate.unlink(missing_ok=True)
+        temporary_head_cutout.unlink(missing_ok=True)
         rollback_underlay.unlink(missing_ok=True)
+        rollback_backplate.unlink(missing_ok=True)
 
     return {
         "underlay.png": _sha256(underlay_bytes),
         "body-backplate.png": _sha256(written_body_bytes),
+        "head-cutout.png": _sha256(written_head_bytes),
     }
 
 
