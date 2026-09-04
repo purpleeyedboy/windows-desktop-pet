@@ -18,6 +18,19 @@ class Scheduler:
         pass
 
 
+class CountingStore:
+    def __init__(self, system):
+        self.system = system
+        self.saves = []
+
+    def load(self, *, now_utc_s):
+        self.system.advance_to(now_utc_s)
+        return self.system
+
+    def save(self, system):
+        self.saves.append(system.payload())
+
+
 def test_runtime_uses_injected_clock_storage_and_persists_on_stop(tmp_path) -> None:
     from datetime import datetime, timezone
 
@@ -53,3 +66,57 @@ def test_debug_time_simulation_requires_mutable_injected_clock() -> None:
     clock = Clock()
     enable_debug_time_simulation(test_build=True, clock=clock, seconds=120)
     assert clock.value == 120
+
+
+def test_unchanged_second_ticks_do_not_write_and_changes_are_throttled() -> None:
+    from desktop_pet.hunger import HungerSystem
+
+    utc = [0]
+    monotonic = [0.0]
+    scheduler = Scheduler()
+    store = CountingStore(HungerSystem(anchor_utc_s=0))
+    runtime = HungerRuntime(
+        store=store,
+        utc_clock=lambda: utc[0],
+        monotonic_clock=lambda: monotonic[0],
+        schedule=scheduler.after,
+        cancel=scheduler.cancel,
+        save_interval_s=60,
+    )
+    runtime.start()
+    for second in range(1, 60):
+        utc[0] = second
+        monotonic[0] = float(second)
+        scheduler.pending.pop()[1]()
+    assert store.saves == []
+    utc[0] = 60
+    monotonic[0] = 60.0
+    scheduler.pending.pop()[1]()
+    assert len(store.saves) == 1
+    for second in range(61, 120):
+        utc[0] = second
+        monotonic[0] = float(second)
+        scheduler.pending.pop()[1]()
+    assert len(store.saves) == 1
+    runtime.stop()
+    assert len(store.saves) <= 2
+
+
+def test_status_change_bypasses_save_throttle_once() -> None:
+    from desktop_pet.hunger import HungerSystem
+
+    utc = [0]
+    scheduler = Scheduler()
+    store = CountingStore(HungerSystem(value_units=4_001, anchor_utc_s=0))
+    runtime = HungerRuntime(
+        store=store,
+        utc_clock=lambda: utc[0],
+        monotonic_clock=lambda: float(utc[0]),
+        schedule=scheduler.after,
+        cancel=scheduler.cancel,
+        save_interval_s=60,
+    )
+    runtime.start()
+    utc[0] = 60
+    scheduler.pending.pop()[1]()
+    assert len(store.saves) == 1

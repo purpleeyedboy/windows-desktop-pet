@@ -34,7 +34,9 @@ def enable_debug_time_simulation(
 
 
 class HungerRuntime:
-    TICK_MS = 1_000
+    # Ten presentation frames per second is enough for the deliberately small
+    # programmatic effect; persistence remains independently throttled.
+    TICK_MS = 100
 
     def __init__(
         self,
@@ -45,14 +47,21 @@ class HungerRuntime:
         schedule: Callable[[int, Callable[[], None]], object],
         cancel: Callable[[object], None],
         on_frame: Callable[[HungerAnimationFrame], None] | None = None,
+        save_interval_s: int = 60,
     ) -> None:
         self.store = store
         self.utc_clock = utc_clock
         self.schedule = schedule
         self.cancel = cancel
         self.on_frame = on_frame or (lambda _frame: None)
+        if save_interval_s <= 0:
+            raise ValueError("save interval must be positive")
+        self.save_interval_s = int(save_interval_s)
+        self.monotonic_clock = monotonic_clock
         self.system: HungerSystem = store.load(now_utc_s=utc_clock())
         self.animation = HungerAnimationController(clock=monotonic_clock)
+        self._saved_signature = self._persistence_signature()
+        self._last_save_time = monotonic_clock()
         self._token: object | None = None
         self._running = False
 
@@ -67,8 +76,29 @@ class HungerRuntime:
             return
         self.system.advance_to(self.utc_clock())
         self.on_frame(self.animation.update(self.system.level))
-        self.store.save(self.system)
+        self._save_if_needed(
+            critical=self.system.level.value != self._saved_signature[1]
+        )
         self._token = self.schedule(self.TICK_MS, self._tick)
+
+    def _persistence_signature(self) -> tuple[object, ...]:
+        payload = self.system.payload()
+        return (
+            payload["value_units"],
+            payload["level"],
+            tuple(payload["reward_ids"]),
+        )
+
+    def _save_if_needed(self, *, critical: bool = False, force: bool = False) -> None:
+        signature = self._persistence_signature()
+        if signature == self._saved_signature:
+            return
+        now = self.monotonic_clock()
+        if not force and not critical and now - self._last_save_time < self.save_interval_s:
+            return
+        self.store.save(self.system)
+        self._saved_signature = signature
+        self._last_save_time = now
 
     def user_animation_started(self) -> None:
         self.animation.user_animation_started()
@@ -85,4 +115,4 @@ class HungerRuntime:
                 pass
             self._token = None
         self.system.advance_to(self.utc_clock())
-        self.store.save(self.system)
+        self._save_if_needed(force=True)

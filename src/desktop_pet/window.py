@@ -27,6 +27,7 @@ from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 from .hunger_animation import HungerAnimationFrame, HungerVisual
+from .hunger_effect import compose_hunger_effect
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -291,7 +292,8 @@ class PetWindow:
             self.display_height,
         )
         self._hunger_runtime: object | None = None
-        self._last_hunger_presentation: tuple[HungerVisual, int] | None = None
+        self._hunger_frame: HungerAnimationFrame | None = None
+        self._last_hunger_presentation: HungerVisual | None = None
 
         try:
             root.title("桌面宠物")
@@ -457,6 +459,7 @@ class PetWindow:
             if requested_height is None
             else clamp_height(requested_height)
         )
+        presentation_image = self._compose_hunger_image(image)
         width = max(1, round(image.width * target_height / image.height))
         if anchor is None:
             x, y = self._window_rect.x, self._window_rect.y
@@ -482,7 +485,7 @@ class PetWindow:
                 x = anchor[0] - width // 2
                 y = anchor[1] - fitted_height
             proposed = Rect(x, y, width, fitted_height)
-        resized_image = image.convert("RGBA").resize(
+        resized_image = presentation_image.resize(
             (width, fitted_height), Image.Resampling.LANCZOS
         )
         window_rect = constrain_rect_to_area(proposed, area)
@@ -807,20 +810,32 @@ class PetWindow:
         )
 
     def present_hunger(self, frame: HungerAnimationFrame) -> None:
-        """Animate hunger via the existing bubble, never by changing approved art."""
-        if self._closed or frame.visual is HungerVisual.SUSPENDED:
+        """Render effects every phase; reserve the bubble for level transitions."""
+        if self._closed:
             return
-        phase = frame.phase_millis // 400
-        presentation = (frame.visual, phase)
-        if presentation == self._last_hunger_presentation:
-            return
-        self._last_hunger_presentation = presentation
-        text = {
-            HungerVisual.NORMAL_HUNGRY: "有点饿了…",
-            HungerVisual.SEVERE_HUNGRY: "肚子好饿……",
-            HungerVisual.EXTREME_HUNGRY: "(╥﹏╥)" + "." * (phase % 3),
-        }[frame.visual]
-        self._present_phrase(text)
+        self._hunger_frame = frame
+        if self._presentation_snapshot is not None:
+            try:
+                self._apply_image(self._current_image, self._anchor())
+            except Exception:
+                return
+        if (
+            frame.visual is not HungerVisual.SUSPENDED
+            and frame.visual is not self._last_hunger_presentation
+        ):
+            self._last_hunger_presentation = frame.visual
+            text = {
+                HungerVisual.NORMAL_HUNGRY: "有点饿了…",
+                HungerVisual.SEVERE_HUNGRY: "肚子好饿……",
+                HungerVisual.EXTREME_HUNGRY: "真的非常饿了……",
+            }[frame.visual]
+            self._present_phrase(text)
+
+    def _compose_hunger_image(self, image: Image.Image) -> Image.Image:
+        frame = self._hunger_frame
+        if frame is None:
+            return image.convert("RGBA")
+        return compose_hunger_effect(image, frame, self._eye_interaction_boxes)
 
     def _cancel_action(self, action: str) -> bool:
         cancelled = self.animation.cancel_current(action)
