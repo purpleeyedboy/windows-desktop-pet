@@ -1,0 +1,46 @@
+from pathlib import Path
+
+from tools.v21_paws_gate import inspect_release_diff, verify_baseline_assets
+
+ROOT = Path(__file__).parents[1]
+EXE = "桌面宠物_双前肢按压鼠标.exe"
+
+
+def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
+    text = (ROOT / "desktop_pet_paws.spec").read_text(encoding="utf-8")
+    assert 'name="桌面宠物_双前肢按压鼠标"' in text
+    assert "COLLECT(" not in text
+    assert '"assets" / "paws"' in text
+    assert "version_info_paws.txt" in text
+    build = (ROOT / "build_paws.ps1").read_text(encoding="utf-8")
+    assert "--require-paws" in build
+
+
+def test_version_resource_contains_required_traceability():
+    text = (ROOT / "version_info_paws.txt").read_text(encoding="utf-8")
+    for value in ("2.1.1.0", "BASE-001", "双前肢按压鼠标", "测试版",
+                  "调试菜单", "BASELINE_V2.1.md", "2026-09-04", "c3b218d"):
+        assert value in text
+
+
+def test_windows_action_tests_builds_checks_unique_exe_hash_size_and_uploads():
+    text = (ROOT / ".github/workflows/windows-v21-paws.yml").read_text(encoding="utf-8")
+    assert text.index("python -m pytest") < text.index("build_paws.ps1")
+    assert 'if ($exes.Count -ne 1)' in text
+    assert EXE in text
+    assert "Length" in text and "Get-FileHash" in text
+    assert "actions/upload-artifact@" in text
+    assert "generate_paws_preview.py" in text
+    assert "preview-path" in text
+
+
+def test_release_diff_contains_no_binary_files_and_no_tracked_preview_pngs():
+    report = inspect_release_diff(ROOT, "c3b218d")
+    assert report.binary_paths == ()
+    assert not any(path.startswith("qa/v2.1-paws/") and path.endswith(".png")
+                   for path in report.changed_paths)
+
+
+def test_all_158_baseline_asset_hashes_are_unchanged():
+    checked = verify_baseline_assets(ROOT / "assets/v2.1-baseline.sha256", ROOT)
+    assert checked == 158
