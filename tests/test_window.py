@@ -631,8 +631,58 @@ def test_bindings_are_on_root(tk_root, loaded_frames):
         "<ButtonRelease-1>",
         "<Button-3>",
         "<MouseWheel>",
+        "<FocusOut>",
+        "<Leave>",
     ):
         assert tk_root.bind(event_name)
+
+
+def test_headless_ear_press_release_is_independent_from_actions_and_restores(monkeypatch):
+    window, root, renderer, bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    render_count = len(renderer.successes)
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(50 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    assert window._ear_motion.active_side == "left"
+    assert window.animation.busy is False
+    assert bubble.messages == []
+    assert len(renderer.successes) == render_count + 1
+
+    window._on_left_release(point)
+    while window._ear_motion.active_side is not None:
+        root.run_next()
+    assert window._ear_amount == 0.0
+    assert window._current_image is window._latest_composed_frame
+    assert window.eye_session.state == "following"
+
+
+def test_headless_ear_pointer_leave_focus_loss_and_close_restore_neutral(monkeypatch):
+    window, _root, renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    window._on_pointer_leave(None)
+    assert renderer.successes[-1][0].tobytes() == baseline
+    window._on_left_press(point)
+    window._on_focus_lost(None)
+    assert renderer.successes[-1][0].tobytes() == baseline
+    window._on_left_press(point)
+    window.close()
+    assert window._ear_motion.active_side is None
 
 
 def test_wheel_resize_preserves_foot_center(tk_root, loaded_frames):
