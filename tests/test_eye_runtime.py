@@ -182,6 +182,7 @@ def make_session(
     scheduler: object | None = None,
     cancel=None,
     clock: Clock | None = None,
+    idle_lick_motion=None,
 ):
     module = _module()
     clock = clock or Clock()
@@ -208,6 +209,7 @@ def make_session(
         choose_phrase=lambda action: f"phrase:{action}",
         present_phrase=lambda _phrase: None,
         on_action_failed=lambda _action, _failure: None,
+        idle_lick_motion=idle_lick_motion,
     )
     return (
         session,
@@ -218,6 +220,76 @@ def make_session(
         disabled,
         rect_holder,
     )
+
+
+def test_existing_environment_tick_samples_idle_lick_without_extra_scheduler() -> None:
+    from desktop_pet.idle_lick import LickPose
+
+    class RecordingLick:
+        def __init__(self) -> None:
+            self.samples = []
+
+        def sample(self, now, target, *, eligible=True):
+            self.samples.append((now, target, eligible))
+            return LickPose("left", "raise", 1.0, 0.0)
+
+        def interrupt(self, _now):
+            return LickPose()
+
+    lick = RecordingLick()
+    session, _, scheduler, _, _, _, _ = make_session(idle_lick_motion=lick)
+    session.start()
+
+    scheduler.run_next()
+
+    assert len(lick.samples) == 1
+    assert session.idle_lick_pose.side == "left"
+    assert len(scheduler.live()) == 1
+
+
+def test_higher_priority_action_interrupts_idle_lick_before_ownership_change() -> None:
+    from desktop_pet.idle_lick import LickPose
+
+    class RecordingLick:
+        def __init__(self) -> None:
+            self.interruptions = 0
+
+        def sample(self, _now, _target, *, eligible=True):
+            return LickPose("right", "contact", 1.0, 1.0)
+
+        def interrupt(self, _now):
+            self.interruptions += 1
+            return LickPose()
+
+    lick = RecordingLick()
+    session, _, _, _, _, _, _ = make_session(idle_lick_motion=lick)
+    session.start()
+
+    assert session.request_named_action("jump") is _module().SessionResult.ACCEPTED
+    assert lick.interruptions == 1
+    assert session.idle_lick_pose == LickPose()
+
+
+def test_stop_restores_idle_lick_pose_to_neutral_even_if_cleanup_raises() -> None:
+    from desktop_pet.idle_lick import LickPose
+
+    class FailingCleanupLick:
+        def sample(self, _now, _target, *, eligible=True):
+            return LickPose("left", "contact", 1.0, 1.0)
+
+        def interrupt(self, _now):
+            raise RuntimeError("injected cleanup failure")
+
+    session, _, scheduler, _, _, _, _ = make_session(
+        idle_lick_motion=FailingCleanupLick()
+    )
+    session.start()
+    scheduler.run_next()
+    assert session.idle_lick_pose.side == "left"
+
+    session.stop()
+
+    assert session.idle_lick_pose == LickPose()
 
 
 def make_action_session(
