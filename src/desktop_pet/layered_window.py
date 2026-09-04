@@ -27,6 +27,21 @@ SWP_NOACTIVATE = 0x0010
 HGDI_ERROR = ctypes.c_void_p(-1).value
 
 
+def alpha_hit_test(
+    alpha: Image.Image,
+    screen_point: tuple[int, int],
+    origin: tuple[int, int],
+    threshold: int = 8,
+) -> bool:
+    """Return whether a screen point hits rendered, perceptibly opaque pet pixels."""
+
+    x = screen_point[0] - origin[0]
+    y = screen_point[1] - origin[1]
+    if not (0 <= x < alpha.width and 0 <= y < alpha.height):
+        return False
+    return int(alpha.getpixel((x, y))) >= threshold
+
+
 def _last_error() -> int:
     get_last_error = getattr(ctypes, "get_last_error", None)
     return get_last_error() if get_last_error is not None else 0
@@ -113,6 +128,8 @@ class LayeredWindowRenderer:
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
         self._configure_functions()
+        self._hit_alpha = Image.new("L", (1, 1), 0)
+        self._hit_origin = (0, 0)
         top_level = self._user32.GetAncestor(self.hwnd, GA_ROOT)
         if top_level:
             self.hwnd = int(top_level)
@@ -243,6 +260,11 @@ class LayeredWindowRenderer:
             self._render_once(image, x, y)
         except OSError:
             self._render_once(image, x, y)
+        self._hit_alpha = image.convert("RGBA").getchannel("A")
+        self._hit_origin = (x, y)
+
+    def is_sensing_point(self, screen_point: tuple[int, int]) -> bool:
+        return alpha_hit_test(self._hit_alpha, screen_point, self._hit_origin)
 
     def _render_once(self, image: Image.Image, x: int, y: int) -> None:
         pixels = rgba_to_premultiplied_bgra(image)

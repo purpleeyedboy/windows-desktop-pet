@@ -6,3 +6,4 @@ __pycache__/
 build/
 dist/
 assets/generated/work/
+qa/drag-expectation/*.png

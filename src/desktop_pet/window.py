@@ -15,6 +15,11 @@ from PIL import Image
 from .animation import AnimationController
 from .bubble import BubbleWindow
 from .dialogue import DialogueChooser, load_phrase_pools
+from .drag_expectation import (
+    DragExpectationController,
+    DragVisualConfig,
+    decorate_drag_expectation,
+)
 from .eye_follow import CursorProvider
 from .eye_runtime import (
     ActionFailure,
@@ -26,6 +31,7 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .ole_drop_target import DropTargetRegistration, OleDropTarget
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -283,6 +289,8 @@ class PetWindow:
         self._constructing = True
         self._pending_runtime_failure = False
         self._window_shown = False
+        self._drag_base_image: Image.Image | None = None
+        self._drop_registration: DropTargetRegistration | None = None
         self._window_rect = Rect(
             root.winfo_x(),
             root.winfo_y(),
@@ -350,6 +358,24 @@ class PetWindow:
                 self._apply_image(self._current_image)
                 self._show_window()
 
+            self.drag_expectation = DragExpectationController(
+                schedule=root.after,
+                cancel=self._cancel_after,
+                show_phase=self._show_drag_expectation_phase,
+                restore=self._restore_drag_expectation,
+                config=self._drag_visual_config(),
+            )
+            if os.name == "nt":
+                target = OleDropTarget(
+                    self.drag_expectation,
+                    self._in_drop_sensing_region,
+                )
+                self._drop_registration = DropTargetRegistration(
+                    int(getattr(self.renderer, "hwnd", root.winfo_id())),
+                    target,
+                )
+                self._drop_registration.register()
+
             self._constructing = False
             if self._pending_runtime_failure:
                 self._report_runtime_failure_once()
@@ -365,6 +391,10 @@ class PetWindow:
                 command=lambda value=action: self.trigger_named_action(value),
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
+        menu.add_command(
+            label="调试：拖动期待态",
+            command=self._debug_drag_expectation,
+        )
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,
@@ -392,6 +422,62 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<FocusOut>", self._on_focus_lost)
+
+    def _drag_visual_config(self) -> DragVisualConfig:
+        boxes = self._eye_interaction_boxes
+        if boxes:
+            left = min(box[0] for box in boxes) - 28
+            top = min(box[1] for box in boxes) - 90
+            right = max(box[2] for box in boxes) + 28
+            bottom = max(box[3] for box in boxes) + 40
+            source_width, source_height = self._eye_source_size
+            head_box = (
+                max(0, left),
+                max(0, top),
+                min(source_width, right),
+                min(source_height, bottom),
+            )
+        else:
+            width, height = self._current_image.size
+            boxes = (
+                (width * 13 // 100, height * 42 // 100, width * 25 // 100, height * 49 // 100),
+                (width * 25 // 100, height * 42 // 100, width * 37 // 100, height * 49 // 100),
+            )
+            head_box = (width * 7 // 100, height * 28 // 100, width * 43 // 100, height * 57 // 100)
+        return DragVisualConfig(eye_boxes=tuple(boxes), head_box=head_box)
+
+    def _show_drag_expectation_phase(self, phase: int) -> None:
+        if self._closed or not self._rendering_available:
+            return
+        if self._drag_base_image is None:
+            self._drag_base_image = self._current_image
+        decorated = decorate_drag_expectation(
+            self._drag_base_image,
+            phase,
+            self.drag_expectation.config,
+        )
+        self._apply_image(decorated, self._anchor())
+
+    def _restore_drag_expectation(self) -> None:
+        base, self._drag_base_image = self._drag_base_image, None
+        if base is None or self._closed or not self._rendering_available:
+            return
+        self._apply_image(base, self._anchor())
+
+    def _in_drop_sensing_region(self, point: tuple[int, int]) -> bool:
+        hit_test = getattr(self.renderer, "is_sensing_point", None)
+        if callable(hit_test):
+            return bool(hit_test(point))
+        rect = self._window_rect
+        return rect.x <= point[0] < rect.right and rect.y <= point[1] < rect.bottom
+
+    def _on_focus_lost(self, _event: tk.Event | None = None) -> None:
+        self.drag_expectation.focus_lost()
+
+    def _debug_drag_expectation(self) -> None:
+        if self.drag_expectation.drag_enter(True, True):
+            self.root.after(1500, self.drag_expectation.cancel)
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -415,6 +501,12 @@ class PetWindow:
 
     def _cleanup_partial_construction(self) -> None:
         self._closed = True
+        registration = self._drop_registration
+        if registration is not None:
+            try:
+                registration.revoke()
+            except Exception:
+                pass
         session = self.eye_session
         if session is not None:
             try:
@@ -762,7 +854,7 @@ class PetWindow:
             and image is self._current_image
         ):
             return
-        self._apply_image(image, self._anchor())
+        self._apply_runtime_image(image)
 
     def _animation_finished(self, action: str) -> None:
         self._active_animation_action = None
@@ -790,7 +882,7 @@ class PetWindow:
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
-        self._apply_image(frame, self._anchor())
+        self._apply_runtime_image(frame)
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
         if self._constructing and not self._window_shown:
@@ -799,6 +891,16 @@ class PetWindow:
             except Exception as error:
                 self._startup_presentation_error = error
                 raise
+
+    def _apply_runtime_image(self, frame: Image.Image) -> None:
+        if getattr(self, "drag_expectation", None) is not None and self.drag_expectation.active:
+            self._drag_base_image = frame
+            frame = decorate_drag_expectation(
+                frame,
+                self.drag_expectation.phase,
+                self.drag_expectation.config,
+            )
+        self._apply_image(frame, self._anchor())
 
     def _present_phrase(self, phrase: str) -> None:
         if self._closed:
@@ -901,6 +1003,18 @@ class PetWindow:
         if self._closed:
             return
         self._closed = True
+        drag_expectation = getattr(self, "drag_expectation", None)
+        if drag_expectation is not None:
+            try:
+                drag_expectation.cancel()
+            except Exception:
+                pass
+        registration = self._drop_registration
+        if registration is not None:
+            try:
+                registration.revoke()
+            except Exception:
+                pass
         if self.eye_session is not None:
             self.eye_session.stop()
         self.animation.stop()
