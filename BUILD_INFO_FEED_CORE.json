@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "date": "2026-09-04",
+  "git_short_hash": "c3b218d",
+  "base_label": "V2.1-FEED-CORE",
+  "features": {
+    "transaction_journal": true,
+    "ifileoperation_recycle": true,
+    "drop": "fake_adapter",
+    "hunger_reward": "idempotent_fake",
+    "eating_animation": "callback_adapter"
+  },
+  "test_build": true,
+  "debug_menu": false,
+  "documentation_baseline": "BASE-001",
+  "release_state": "test candidate; FEED-WIRING/DRAG/HUNGER production wiring pending"
+}

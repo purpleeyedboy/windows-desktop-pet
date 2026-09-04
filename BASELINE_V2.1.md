@@ -27,3 +27,11 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+
+## V2.1-FEED-CORE 独立候选
+
+- 功能标签：`V2.1-FEED-CORE`；版本 `2.1.0`；日期 `2026-09-04`。
+- 新增文件验证、逐次确认、IFileOperation/专用 STA 回收适配器、版本化事务审计、NeedsReview 崩溃恢复，以及幂等奖励与动画回调边界。
+- DRAG 仅为不注册 DropTarget 的标准 Drop 事件 adapter；HUNGER 仅为幂等奖励 fake。生产接线留待 FEED-WIRING，因此该 EXE 如实标为测试候选。
+- 候选文件名：`桌面宠物_文件喂食与回收站事务.exe`。Windows Actions 负责测试、唯一 EXE、大小、SHA-256 和 artifact 门禁。
+- 既有认可素材、运动、转头角度、旧测试及金图均未修改；真实 Windows 构建、IFileOperation opt-in E2E 与用户桌面验收仍为待执行门禁。
