@@ -17,7 +17,7 @@ def test_windows_candidate_workflow_is_pinned_read_only_and_uploads_only_candida
         "on:\n"
         "  pull_request:\n"
         "    branches:\n"
-        "      - codex/desktop-pet-6-frame-alpha\n"
+        "      - codex/head-neck-continuous-preview\n"
         "  workflow_dispatch:\n\n"
         "permissions:\n"
         "  contents: read\n" in workflow
@@ -29,11 +29,13 @@ def test_windows_candidate_workflow_is_pinned_read_only_and_uploads_only_candida
     assert "python-version: \"3.11\"" in workflow
     assert "python -m pip install \".[dev]\" -r requirements-assets.txt" in workflow
     assert "PIL.__version__.split(\".\", 1)[0] == \"11\"" in workflow
-    assert "python -m pytest -q --ignore=tests/test_interpolate_action.py" in workflow
+    assert "python -m pytest -q" in workflow
+    assert "--ignore" not in workflow
     assert ".\\build_eye_follow_candidate.ps1 -SkipTests" in workflow
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow
-    assert "name: desktop-pet-approved-head-neck-assets" in workflow
-    assert "dist-eye-follow-candidate/桌面宠物-头颈素材更新版.exe" in workflow
+    assert "Get-FileHash" in workflow
+    assert "name: desktop-pet-v2-1-baseline" in workflow
+    assert "dist-eye-follow-candidate/桌面宠物_最终素材与转头角度基线修正版.exe" in workflow
     assert "retention-days: 7" in workflow
     assert "if-no-files-found: error" in workflow
     assert "secrets." not in workflow.lower()

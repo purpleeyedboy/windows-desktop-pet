@@ -13,10 +13,12 @@ MIN_IDLE_INTERVAL_SECONDS: Final = 35.0
 MAX_IDLE_INTERVAL_SECONDS: Final = 80.0
 MIN_HOLD_SECONDS: Final = 0.8
 MAX_HOLD_SECONDS: Final = 2.0
-MIN_TILT_DEGREES: Final = 30.0
+# Actual randomized motion envelope.  Keep this distinct from the 50-degree
+# pose/mesh validation ceiling used by IdleTiltPose and head_neck_deformation.
+MIN_TILT_DEGREES: Final = 18.0
 MAX_TILT_DEGREES: Final = 50.0
-MAX_CLOCKWISE_TILT_DEGREES: Final = 35.0
-MAX_COUNTERCLOCKWISE_TILT_DEGREES: Final = 35.0
+MAX_CLOCKWISE_TILT_DEGREES: Final = 30.0
+MAX_COUNTERCLOCKWISE_TILT_DEGREES: Final = 30.0
 APPROACH_SECONDS: Final = 0.55
 ARC_TRAVEL_SECONDS: Final = 1.15
 RETURN_SECONDS: Final = 0.55

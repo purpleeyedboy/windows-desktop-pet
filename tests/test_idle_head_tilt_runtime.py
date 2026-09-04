@@ -95,7 +95,7 @@ def test_idle_tilt_combines_with_current_eye_and_head_follow_pose() -> None:
     eye_x, eye_y, pose = compositor.calls[-1]
     assert (eye_x, eye_y) == (1.4, -0.7)
     assert (pose.x, pose.y) == (0.3, -0.2)
-    assert pose.rotation_degrees == pytest.approx(-30.0)
+    assert pose.rotation_degrees == pytest.approx(-18.0)
     assert pose.arc == 0.0
     assert session.state == "following"
 
@@ -118,7 +118,7 @@ def test_pointer_press_interrupts_tilt_and_restarts_its_cooldown() -> None:
 
 @pytest.mark.parametrize(
     ("mode", "expected_rotation"),
-    (("left", -30.0), ("right", 30.0)),
+    (("left", -18.0), ("right", 18.0)),
 )
 def test_named_tilt_request_plays_the_selected_direction_immediately(
     mode: str,
