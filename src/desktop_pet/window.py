@@ -26,6 +26,7 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .hunger_animation import HungerAnimationFrame, HungerVisual
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -289,6 +290,8 @@ class PetWindow:
             1,
             self.display_height,
         )
+        self._hunger_runtime: object | None = None
+        self._last_hunger_presentation: tuple[HungerVisual, int] | None = None
 
         try:
             root.title("桌面宠物")
@@ -766,6 +769,9 @@ class PetWindow:
 
     def _animation_finished(self, action: str) -> None:
         self._active_animation_action = None
+        resume = getattr(self._hunger_runtime, "user_animation_finished", None)
+        if callable(resume):
+            resume()
         if self._closed or self._legacy_fallback or self.eye_session is None:
             return
         self.eye_session.animation_finished(action)
@@ -779,7 +785,42 @@ class PetWindow:
             raise
         if accepted is not True and not self.animation.busy:
             self._active_animation_action = None
+        elif accepted is True:
+            suspend = getattr(self._hunger_runtime, "user_animation_started", None)
+            if callable(suspend):
+                suspend()
         return accepted
+
+    def attach_hunger_runtime(self, runtime: object) -> None:
+        self._hunger_runtime = runtime
+
+    def add_debug_time_menu(self, advance: Callable[[int], None]) -> None:
+        """Called only by an explicitly marked test build."""
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="测试：时间 +1 小时",
+            command=lambda: advance(3_600),
+        )
+        self.menu.add_command(
+            label="测试：时间 +1 天",
+            command=lambda: advance(86_400),
+        )
+
+    def present_hunger(self, frame: HungerAnimationFrame) -> None:
+        """Animate hunger via the existing bubble, never by changing approved art."""
+        if self._closed or frame.visual is HungerVisual.SUSPENDED:
+            return
+        phase = frame.phase_millis // 400
+        presentation = (frame.visual, phase)
+        if presentation == self._last_hunger_presentation:
+            return
+        self._last_hunger_presentation = presentation
+        text = {
+            HungerVisual.NORMAL_HUNGRY: "有点饿了…",
+            HungerVisual.SEVERE_HUNGRY: "肚子好饿……",
+            HungerVisual.EXTREME_HUNGRY: "(╥﹏╥)" + "." * (phase % 3),
+        }[frame.visual]
+        self._present_phrase(text)
 
     def _cancel_action(self, action: str) -> bool:
         cancelled = self.animation.cancel_current(action)
@@ -901,6 +942,9 @@ class PetWindow:
         if self._closed:
             return
         self._closed = True
+        stop_hunger = getattr(self._hunger_runtime, "stop", None)
+        if callable(stop_hunger):
+            stop_hunger()
         if self.eye_session is not None:
             self.eye_session.stop()
         self.animation.stop()
