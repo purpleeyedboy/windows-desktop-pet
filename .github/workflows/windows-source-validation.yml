@@ -3,7 +3,7 @@ name: Windows source validation
 on:
   pull_request:
     branches:
-      - codex/desktop-pet-6-frame-alpha
+      - codex/head-neck-continuous-preview
   workflow_dispatch:
 
 permissions:
