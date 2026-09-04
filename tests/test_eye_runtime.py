@@ -222,7 +222,7 @@ def make_session(
     )
 
 
-def test_existing_environment_tick_samples_idle_lick_without_extra_scheduler() -> None:
+def test_existing_environment_tick_samples_idle_lick_without_extra_scheduler(monkeypatch) -> None:
     from desktop_pet.idle_lick import LickPose
 
     class RecordingLick:
@@ -237,6 +237,7 @@ def test_existing_environment_tick_samples_idle_lick_without_extra_scheduler() -
             return LickPose()
 
     lick = RecordingLick()
+    monkeypatch.setattr(_module(), "compose_lick", lambda frame, _pose: frame)
     session, _, scheduler, _, _, _, _ = make_session(idle_lick_motion=lick)
     session.start()
 
@@ -261,6 +262,8 @@ def test_higher_priority_action_interrupts_idle_lick_before_ownership_change() -
             self.interruptions += 1
             return LickPose()
 
+        cancel = interrupt
+
     lick = RecordingLick()
     session, _, _, _, _, _, _ = make_session(idle_lick_motion=lick)
     session.start()
@@ -270,7 +273,7 @@ def test_higher_priority_action_interrupts_idle_lick_before_ownership_change() -
     assert session.idle_lick_pose == LickPose()
 
 
-def test_stop_restores_idle_lick_pose_to_neutral_even_if_cleanup_raises() -> None:
+def test_stop_restores_idle_lick_pose_to_neutral_even_if_cleanup_raises(monkeypatch) -> None:
     from desktop_pet.idle_lick import LickPose
 
     class FailingCleanupLick:
@@ -283,12 +286,93 @@ def test_stop_restores_idle_lick_pose_to_neutral_even_if_cleanup_raises() -> Non
     session, _, scheduler, _, _, _, _ = make_session(
         idle_lick_motion=FailingCleanupLick()
     )
+    monkeypatch.setattr(_module(), "compose_lick", lambda frame, _pose: frame)
     session.start()
     scheduler.run_next()
     assert session.idle_lick_pose.side == "left"
 
     session.stop()
 
+    assert session.idle_lick_pose == LickPose()
+
+
+def test_runtime_display_pixels_change_for_each_visible_lick_channel_and_side() -> None:
+    from PIL import Image
+    from desktop_pet.idle_lick import LickPose
+
+    class ImageCompositor(Compositor):
+        def compose(self, eye_x, eye_y):
+            del eye_x, eye_y
+            return Image.new("RGBA", (512, 768), (80, 60, 40, 255))
+
+    class SequencedLick:
+        def __init__(self):
+            self.poses = iter(
+                (
+                    LickPose("left", "raise", 1.0, 0.0),
+                    LickPose("left", "contact", 1.0, 1.0),
+                    LickPose("right", "contact", 1.0, 1.0),
+                )
+            )
+
+        def sample(self, _now, _target, *, eligible=True):
+            return next(self.poses)
+
+        def interrupt(self, _now):
+            return LickPose()
+
+    clock = Clock()
+    scheduler = ManualScheduler(clock)
+    display = Display()
+    session = _module().RuntimeEyeSession(
+        compositor=ImageCompositor(), cursor_provider=Cursor(CursorPoint(200, 100)),
+        rect_provider=lambda: Rect(0, 0, 512, 768), display=display,
+        scheduler=scheduler, cancel=scheduler.cancel, clock=clock,
+        on_disabled=lambda: None, action_cycle=ActionCycle(),
+        physical_frames={action: tuple(object() for _ in range(6)) for action in ACTIONS},
+        play_action=lambda _action: True, cancel_action=lambda _action: True,
+        choose_phrase=lambda action: action, present_phrase=lambda _phrase: None,
+        on_action_failed=lambda _action, _failure: None,
+        idle_lick_motion=SequencedLick(),
+    )
+    session.start()
+    rendered = []
+    for _ in range(3):
+        scheduler.run_next()
+        rendered.append(display.calls[-1])
+
+    raise_frame, tongue_frame, right_frame = rendered
+    assert raise_frame.tobytes() != tongue_frame.tobytes()
+    assert tongue_frame.tobytes() != right_frame.tobytes()
+
+
+def test_lick_composition_exception_cancels_pose_to_neutral(monkeypatch) -> None:
+    from desktop_pet.idle_lick import LickPose
+
+    class ActiveLick:
+        def __init__(self):
+            self.cancelled = 0
+
+        def sample(self, _now, _target, *, eligible=True):
+            return LickPose("left", "contact", 1.0, 1.0)
+
+        def interrupt(self, _now):
+            return LickPose()
+
+        def cancel(self, _now):
+            self.cancelled += 1
+            return LickPose()
+
+    lick = ActiveLick()
+    session, _, scheduler, _, _, _, _ = make_session(idle_lick_motion=lick)
+    session.start()
+    monkeypatch.setattr(
+        _module(), "compose_lick", lambda *_args: (_ for _ in ()).throw(RuntimeError("injected"))
+    )
+
+    scheduler.run_next()
+
+    assert lick.cancelled == 1
     assert session.idle_lick_pose == LickPose()
 
 

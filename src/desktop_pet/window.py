@@ -392,6 +392,7 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<FocusOut>", self._on_focus_out)
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -952,6 +953,9 @@ class PetWindow:
         self._interrupt_idle_motion()
         delta = 24 if event.delta > 0 else -24
         self.set_display_height(self.display_height + delta)
+
+    def _on_focus_out(self, _event: tk.Event) -> None:
+        self._interrupt_idle_motion()
 
     def _interrupt_idle_motion(self) -> None:
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)

@@ -18,9 +18,10 @@ RAISE_SECONDS = 0.12
 LICK_SECONDS = 0.10
 CONTACT_SECONDS = 0.08
 RETRACT_SECONDS = 0.10
+LOWER_SECONDS = 0.12
 
 LickSide = Literal["left", "right"]
-LickPhase = Literal["neutral", "raise", "lick", "contact", "retract"]
+LickPhase = Literal["neutral", "raise", "lick", "contact", "retract", "lower"]
 LickState = Literal["waiting", "active"]
 
 
@@ -149,6 +150,16 @@ class IdleLickMotion:
         self._restore_neutral(current)
         return self._pose
 
+    def cancel(self, now: float) -> LickPose:
+        """Immediately release pose ownership for a higher-priority action."""
+
+        try:
+            current = self._finite(now, "idle lick clock")
+        except ValueError:
+            current = None
+        self._restore_neutral(current)
+        return self._pose
+
     def _clock_discontinuous(self, current: float) -> bool:
         if self._last_now is None:
             return False
@@ -183,16 +194,18 @@ class IdleLickMotion:
         self._set_phase("raise", now)
 
     def _advance_active(self, now: float) -> LickPose:
-        # At most 81 transitions exist in a legal round (raise + 4 * 20).
-        for _ in range(82):
+        # At most 82 transitions exist in a legal round (raise + 4 * 20 + lower).
+        for _ in range(83):
             duration = {
                 "raise": RAISE_SECONDS,
                 "lick": LICK_SECONDS,
                 "contact": CONTACT_SECONDS,
                 "retract": RETRACT_SECONDS,
+                "lower": LOWER_SECONDS,
             }[self._phase]
             boundary = self._phase_started_at + duration
             if now + 1e-9 < boundary:
+                self._update_pose((now - self._phase_started_at) / duration)
                 return self._pose
             if self._interrupt_requested:
                 self._restore_neutral(now)
@@ -203,21 +216,39 @@ class IdleLickMotion:
                 self._set_phase("contact", boundary)
             elif self._phase == "contact":
                 self._set_phase("retract", boundary)
-            else:
+            elif self._phase == "retract":
                 self._completed_licks += 1
                 if self._completed_licks >= self._planned_licks:
-                    self._restore_neutral(now)
-                    return self._pose
-                self._set_phase("lick", boundary)
+                    self._set_phase("lower", boundary)
+                else:
+                    self._set_phase("lick", boundary)
+            else:
+                self._restore_neutral(now)
+                return self._pose
         return self._fail_safe(now)
 
     def _set_phase(self, phase: LickPhase, started_at: float) -> None:
         assert self._side is not None
         self._phase = phase
         self._phase_started_at = started_at
-        arm = 1.0
-        tongue = 1.0 if phase in ("lick", "contact") else 0.0
+        arm = 0.0 if phase == "raise" else 1.0
+        tongue = 1.0 if phase == "contact" else 0.0
         self._pose = LickPose(self._side, phase, arm, tongue)
+
+    def _update_pose(self, progress: float) -> None:
+        assert self._side is not None
+        progress = min(1.0, max(0.0, progress))
+        if self._phase == "raise":
+            arm, tongue = progress, 0.0
+        elif self._phase == "lick":
+            arm, tongue = 1.0, progress
+        elif self._phase == "contact":
+            arm, tongue = 1.0, 1.0
+        elif self._phase == "retract":
+            arm, tongue = 1.0, 1.0 - progress
+        else:
+            arm, tongue = 1.0 - progress, 0.0
+        self._pose = LickPose(self._side, self._phase, arm, tongue)
 
     def _restore_neutral(self, now: float | None = None) -> None:
         self._state = "waiting"

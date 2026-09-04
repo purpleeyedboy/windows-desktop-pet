@@ -11,6 +11,7 @@ from desktop_pet.idle_lick import (
     LICK_SECONDS,
     RAISE_SECONDS,
     RETRACT_SECONDS,
+    LOWER_SECONDS,
     IdleLickMotion,
     LickPose,
 )
@@ -83,6 +84,8 @@ def test_inclusive_lick_count_boundaries_complete_exactly(count: int) -> None:
         now += cycle
         motion.sample(now, (0.0, 0.0))
 
+    now += LOWER_SECONDS
+    motion.sample(now, (0.0, 0.0))
     assert motion.completed_licks == count
     assert motion.state == "waiting"
     assert motion.pose == LickPose()
@@ -160,3 +163,28 @@ def test_fixed_seed_replays_side_count_and_full_state_sequence() -> None:
     second = run()
     assert first == second
     assert any(item[1] in ("left", "right") for item in first)
+
+
+def test_phase_samples_animate_raise_tongue_and_final_lower_channels() -> None:
+    motion = IdleLickMotion(rng=BoundaryRng(3))
+    stable_at = qualify(motion)
+    now = stable_at + IDLE_INTERVAL_MIN_SECONDS
+    wait_until(motion, stable_at, now)
+
+    half_raise = motion.sample(now + RAISE_SECONDS / 2, (0.0, 0.0))
+    licking = motion.sample(now + RAISE_SECONDS + LICK_SECONDS / 2, (0.0, 0.0))
+
+    assert 0.0 < half_raise.arm < 1.0
+    assert half_raise.tongue == 0.0
+    assert licking.arm == 1.0
+    assert 0.0 < licking.tongue < 1.0
+
+
+def test_higher_priority_cancel_restores_neutral_immediately() -> None:
+    motion = IdleLickMotion(rng=BoundaryRng(20))
+    stable_at = qualify(motion)
+    now = stable_at + IDLE_INTERVAL_MIN_SECONDS
+    assert wait_until(motion, stable_at, now).phase == "raise"
+
+    assert motion.cancel(now + RAISE_SECONDS / 2) == LickPose()
+    assert motion.state == "waiting"

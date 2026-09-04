@@ -23,6 +23,7 @@ from .idle_head_tilt import (
     TiltMode,
 )
 from .idle_lick import IdleLickMotion, LickPose
+from .lick_compositor import compose_lick
 from .model import ACTIONS, ActionCycle
 
 
@@ -463,7 +464,12 @@ class RuntimeEyeSession:
             return SessionResult.REJECTED
 
         try:
-            self._idle_lick_pose = self._idle_lick_motion.interrupt(self._clock())
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            self._idle_lick_pose = cancel_lick(self._clock())
         except Exception:
             self._idle_lick_pose = LickPose()
 
@@ -521,7 +527,12 @@ class RuntimeEyeSession:
         if self._terminal:
             return
         try:
-            self._idle_lick_motion.interrupt(self._clock())
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            cancel_lick(self._clock())
         except Exception:
             pass
         self._idle_lick_pose = LickPose()
@@ -648,7 +659,11 @@ class RuntimeEyeSession:
                 frame = compose_blink(*pose, self._blink_closure)
             else:
                 frame = self._compositor.compose(*pose)
+            if self._idle_lick_pose != LickPose():
+                frame = compose_lick(frame, self._idle_lick_pose)
         except Exception:
+            if self._idle_lick_pose != LickPose():
+                self._cancel_idle_lick()
             if (
                 expected_state != "following"
                 and self._work_is_current(epoch, expected_state)
@@ -674,6 +689,18 @@ class RuntimeEyeSession:
         if expected_state == "stopped" and pose == (0.0, 0.0):
             self._center_frame = frame
         return True
+
+    def _cancel_idle_lick(self) -> None:
+        try:
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            cancel_lick(self._clock())
+        except Exception:
+            pass
+        self._idle_lick_pose = LickPose()
 
     def _begin_action(self, action: str, *, advance_cycle: bool) -> None:
         if self._state != "playing" or self._pending_action != action:
