@@ -41,6 +41,13 @@ class IFileOperationRecycler:
         self._closed = False
         self._needs_review = False
 
+    @property
+    def available(self) -> bool:
+        return not self._closed and not self._needs_review
+
+    def block_for_review(self) -> None:
+        self._needs_review = True
+
     def recycle(
         self,
         path: Path,

@@ -1,19 +1,22 @@
 {
   "version": "2.1.0",
-  "date": "2026-09-04",
+  "date": "2026-09-05",
   "git_short_hash": "c3b218d",
   "base_label": "V2.1-FEED-CORE",
   "features": {
     "transaction_journal": true,
     "ifileoperation_recycle": true,
-    "drop": "fake_adapter",
-    "hunger_reward": "idempotent_fake",
+    "drop": "native_ole_idroptarget_copy_only",
+    "hunger_reward": "persistent_idempotent_runtime",
     "eating_animation": "callback_adapter",
-    "candidate_demo": "safe_tempfile_simulation",
-    "real_file_operations_in_candidate": false
+    "candidate_demo": "real_desktop_pet_window",
+    "real_file_operations_in_candidate": true,
+    "real_user_confirmed_feed": true
   },
   "test_build": true,
   "debug_menu": false,
   "documentation_baseline": "BASE-001",
-  "release_state": "simulation test candidate; frozen core included; FEED-WIRING/DRAG/HUNGER production wiring pending"
+  "release_state": "high-risk candidate; automated tests not run in packaging workflow; pending user Windows acceptance",
+  "automated_test_gate": false,
+  "acceptance": "pending_user_windows_acceptance_high_risk"
 }

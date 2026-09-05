@@ -8,6 +8,8 @@ from tkinter import messagebox
 from .assets import load_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
+from .feed_core.wiring import FeedRuntime
+from .feed_core.windows_drop import NativeFileDropTarget
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -76,11 +78,28 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
         ctypes.windll.user32.MessageBoxW(None, message, "桌面宠物无法启动", 0x10)
 
 
+
+def install_feed_runtime(root: tk.Tk, pet_window: PetWindow):
+    if os.name != "nt":
+        return None
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        raise RuntimeError("LOCALAPPDATA is unavailable for feed transaction state")
+    runtime = FeedRuntime.create_windows(
+        root, pet_window, os.path.join(local_app_data, "DesktopPet", "feed-core")
+    )
+    hwnd = int(getattr(pet_window.renderer, "hwnd", root.winfo_id()))
+    target = NativeFileDropTarget(hwnd, runtime)
+    target.register()
+    return target
+
+
 def main() -> int:
     enable_per_monitor_dpi_awareness()
     mutex = SingleInstanceMutex(build_mutex_name())
     root: tk.Tk | None = None
     pet_window: PetWindow | None = None
+    feed_drop_target = None
     try:
         if not mutex.acquire():
             return 0
@@ -96,12 +115,18 @@ def main() -> int:
             cursor_provider=cursor_provider,
             head_follow=True,
         )
+        feed_drop_target = install_feed_runtime(root, pet_window)
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:
         show_fatal_error(str(error), root)
         return 1
     finally:
+        if feed_drop_target is not None:
+            try:
+                feed_drop_target.close()
+            except (OSError, RuntimeError):
+                pass
         if pet_window is not None:
             try:
                 pet_window.close()

@@ -77,9 +77,18 @@ class FileValidator:
             info = raw.lstat()
         except OSError as error:
             raise Rejection("对象不可访问") from error
-        if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
+        attributes = getattr(info, "st_file_attributes", 0)
+        if stat.S_ISLNK(info.st_mode) or attributes & 0x400:
             raise Rejection("拒绝链接或重解析点")
+        if attributes & (0x1000 | 0x40000 | 0x400000):
+            raise Rejection("拒绝云盘占位或离线文件")
+        if info.st_size < 0 or info.st_size > 1024 ** 3:
+            raise Rejection("文件大小必须在 0–1 GiB")
         path = raw.resolve()
+        if os.name == "nt":
+            import ctypes
+            if ctypes.windll.kernel32.GetDriveTypeW(path.anchor) != 3:
+                raise Rejection("只接受本地固定磁盘文件")
         if path == Path(path.anchor) or not stat.S_ISREG(info.st_mode) or not path.is_file():
             raise Rejection("只接受普通文件")
         if path == self.application_path:

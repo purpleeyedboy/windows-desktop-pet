@@ -10,7 +10,8 @@ REQUIRED_MODULES = (
     "desktop_pet.feed_core.journal",
     "desktop_pet.feed_core.coordinator",
     "desktop_pet.feed_core.adapters",
-    "desktop_pet.feed_core.simulation",
+    "desktop_pet.feed_core.wiring",
+    "desktop_pet.feed_core.windows_drop",
     "desktop_pet.feed_core.windows_recycle",
 )
 

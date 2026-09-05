@@ -603,6 +603,24 @@ class PetWindow:
     def pet_rect(self) -> Rect:
         return self._window_rect
 
+    def head_feed_contains(self, screen_x: int, screen_y: int) -> bool:
+        """Return whether a screen point is inside the upper head feeding zone."""
+        rect = self._window_rect
+        return (
+            rect.x <= screen_x < rect.right
+            and rect.y <= screen_y < rect.y + max(1, round(rect.height * 0.46))
+        )
+
+    def show_feed_feedback(self, text: str) -> None:
+        if self._closed:
+            return
+        self._present_phrase(str(text))
+
+    def play_feed_success(self) -> None:
+        if self._closed:
+            return
+        self.trigger_named_action("jump")
+
     def show_at_default_position(self) -> None:
         area = self.current_screen()
         x = area.right - self._window_rect.width - 36
