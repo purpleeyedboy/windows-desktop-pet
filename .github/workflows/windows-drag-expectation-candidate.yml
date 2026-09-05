@@ -20,18 +20,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install ".[dev]" -r requirements-assets.txt
-      - run: python -m pytest -q
-      - run: python tools/verify_drag_source_diff.py --baseline c3b218df9dd0cfc84d96231701e771f0382388e1
-      - name: Generate temporary drag expectation QA preview
-        shell: pwsh
-        run: python tools/build_drag_expectation_preview.py --output-dir "$env:RUNNER_TEMP\drag-expectation-qa"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: desktop-pet-v2-1-drag-expectation-qa
-          path: ${{ runner.temp }}/drag-expectation-qa/
-          retention-days: 7
-          if-no-files-found: error
+      - run: python -m pip install . "PyInstaller>=6,<7"
       - run: .\build_drag_expectation_candidate.ps1 -SkipTests
         shell: pwsh
       - name: Verify unique EXE, size, and publish SHA-256
@@ -42,6 +31,8 @@ jobs:
           if ($exes[0].Name -ne '桌面宠物_文件拖动期待反馈.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "Automated tests: NOT RUN" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Awaiting user Windows acceptance" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
           "SHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

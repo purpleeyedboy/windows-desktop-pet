@@ -12,5 +12,7 @@
   "documentation_baseline": "BASELINE_V2.1.md",
   "file_operations": "none",
   "hunger_changes": "none",
-  "visual_acceptance": "pending"
+  "visual_acceptance": "pending",
+  "automated_test_status": "not-run",
+  "candidate_status": "awaiting-user-windows-acceptance"
 }

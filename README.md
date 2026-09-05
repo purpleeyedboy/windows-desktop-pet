@@ -39,4 +39,6 @@ V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，�
 
 右键菜单中的“调试：拖动期待态”只播放同一瞬态效果，便于实机视觉验收，不模拟或执行文件操作。动画数值集中在 `DragVisualConfig`，在 Windows 真机确认前均标记为待视觉验收。
 
-QA 预览不纳入 Git。运行 `python tools/build_drag_expectation_preview.py --output-dir <临时目录>` 可确定性生成 `before-after.png` 与 SHA-256 `stats.json`；Windows Actions 会在 `$RUNNER_TEMP` 生成并上传独立 QA artifact。发布前使用 `python tools/verify_drag_source_diff.py --baseline c3b218df9dd0cfc84d96231701e771f0382388e1` 拒绝源码 diff 中的二进制项并确认既有 158 个素材逐字节未变。
+QA 预览不纳入 Git。需要本地辅助检查时，可运行 `python tools/build_drag_expectation_preview.py --output-dir <临时目录>` 确定性生成 `before-after.png` 与 SHA-256 `stats.json`；候选发布工作流不生成或上传 QA 预览。发布前由 `build_drag_expectation_candidate.ps1` 调用源码边界门禁，拒绝源码 diff 中的二进制项并确认既有 158 个素材逐字节未变。
+
+PR #11 的 Windows Actions 明确不运行 pytest，而是直接调用 `.\build_drag_expectation_candidate.ps1 -SkipTests`。该候选版标记为“未运行自动测试、等待用户 Windows 实机验收”；工作流只安装运行/打包依赖、执行必要资源与源码边界检查、运行 PyInstaller，并校验唯一 EXE、50 MiB 大小上限和 SHA-256 后上传 `桌面宠物_文件拖动期待反馈.exe`。

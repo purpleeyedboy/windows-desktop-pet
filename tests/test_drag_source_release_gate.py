@@ -56,15 +56,19 @@ def test_preview_is_generated_only_in_requested_temporary_directory(tmp_path):
     assert not (ROOT / "qa/drag-expectation/before-after.png").exists()
 
 
-def test_windows_candidate_generates_and_uploads_temporary_qa_artifact():
+def test_windows_candidate_keeps_source_gate_inside_build_without_qa_artifact():
     workflow = (
         ROOT / ".github/workflows/windows-drag-expectation-candidate.yml"
     ).read_text(encoding="utf-8")
 
-    assert "verify_drag_source_diff.py" in workflow
-    assert "build_drag_expectation_preview.py" in workflow
-    assert "$env:RUNNER_TEMP" in workflow
-    assert "desktop-pet-v2-1-drag-expectation-qa" in workflow
+    build = (ROOT / "build_drag_expectation_candidate.ps1").read_text(
+        encoding="utf-8-sig"
+    )
+    assert "verify_drag_source_diff.py" in build
+    assert "build_drag_expectation_preview.py" not in workflow
+    assert "$env:RUNNER_TEMP" not in workflow
+    assert "desktop-pet-v2-1-drag-expectation-qa" not in workflow
+    assert workflow.count("actions/upload-artifact@") == 1
     assert "qa/drag-expectation/before-after.png" not in workflow
     assert "fetch-depth: 0" in workflow
     assert "qa/drag-expectation/*.png" in (ROOT / ".gitignore").read_text(

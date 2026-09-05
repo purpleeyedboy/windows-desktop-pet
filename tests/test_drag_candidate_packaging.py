@@ -20,6 +20,8 @@ def test_drag_candidate_metadata_is_complete_and_scope_limited():
         "file_operations": "none",
         "hunger_changes": "none",
         "visual_acceptance": "pending",
+        "automated_test_status": "not-run",
+        "candidate_status": "awaiting-user-windows-acceptance",
     }
 
 
@@ -33,16 +35,30 @@ def test_drag_candidate_spec_is_onefile_with_exact_name_and_metadata():
     assert "qa" not in spec.lower()
 
 
-def test_drag_build_and_actions_enforce_tests_unique_exe_size_hash_and_upload():
+def test_drag_build_and_actions_skip_tests_but_enforce_candidate_artifact_gates():
     build_path = Path("build_drag_expectation_candidate.ps1")
     assert build_path.read_bytes().startswith(codecs.BOM_UTF8)
     build = build_path.read_text(encoding="utf-8-sig")
-    for required in ("-m pytest -q", NAME, "52428800", "Get-FileHash", "verify_drag_candidate_archive.py"):
+    for required in ("[switch]$SkipTests", NAME, "52428800", "Get-FileHash", "verify_drag_candidate_archive.py"):
         assert required in build
     workflow = Path(".github/workflows/windows-drag-expectation-candidate.yml").read_text(encoding="utf-8")
-    for required in ("windows-latest", "python -m pytest -q", NAME, "SHA-256", "upload-artifact"):
+    for required in ("windows-latest", r".\build_drag_expectation_candidate.ps1 -SkipTests", NAME, "SHA-256", "upload-artifact"):
         assert required in workflow
+    assert "pytest" not in workflow.lower()
+    assert "build_drag_expectation_preview.py" not in workflow
+    assert workflow.count("actions/upload-artifact@") == 1
+    assert 'python -m pip install . "PyInstaller>=6,<7"' in workflow
+    assert "requirements-assets.txt" not in workflow
+    assert '".[dev]"' not in workflow
     assert "codex/-v2.1" in workflow
+
+    version_info = Path("desktop_pet_drag_version_info.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "automated tests not run" in version_info
+    assert "awaiting user Windows acceptance" in version_info
+    assert "Automated tests: NOT RUN" in workflow
+    assert "Awaiting user Windows acceptance" in workflow
 
 
 def test_debug_menu_and_docs_name_the_feedback_only_candidate():

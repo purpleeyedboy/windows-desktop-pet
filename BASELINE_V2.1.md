@@ -32,9 +32,9 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 ### V2.1-DRAG 验证状态
 
 - V2.1-DRAG 聚焦自动测试：28 项通过、2 项 Windows 跳过；既有眼球运行时/闲置转头/头颈形变门禁：175 项通过。Python 编译、既有 158 个认可素材的 SHA-256 前后清单对比和 `git diff --check`：通过。
-- PR 源码门禁 `tools/verify_drag_source_diff.py` 要求相对 `c3b218d` 的完整 diff 为 0 个二进制项，并逐文件比较既有 158 个 `assets/` 文件；QA PNG 仅由脚本生成到测试临时目录或 Actions 的 `$RUNNER_TEMP`，不再纳入 Git。
+- PR 源码门禁 `tools/verify_drag_source_diff.py` 要求相对 `c3b218d` 的完整 diff 为 0 个二进制项，并逐文件比较既有 158 个 `assets/` 文件；QA PNG 不纳入 Git，候选发布工作流也不生成或上传 QA 预览。
 - 容器完整测试因缺少 PyInstaller/NumPy 在 3 个文件收集时报错；排除这些依赖文件后为 586 项通过、3 项跳过、12 项失败、42 项错误（737.66 秒），仍受无 DISPLAY、临时目录限制以及既有视觉金图与当前认可素材不一致影响。这些结果只记录，不将其写作通过，也不删除测试或修改金图。
-- Windows Actions：PR 后在 `windows-latest` 执行全套测试，构建并校验唯一 EXE、50 MiB 上限和 SHA-256，再上传独立 artifact；当前待运行。
+- PR #11 后续发布决策：旧基线自动测试不再阻塞候选 EXE，Windows Actions 跳过 pytest 并直接调用 `build_drag_expectation_candidate.ps1 -SkipTests`。保留源码边界、158 个素材不变、资源存在性及归档检查；随后仅执行 PyInstaller、唯一 EXE/大小/SHA-256 校验和 EXE artifact 上传。交付状态为“未运行自动测试、等待用户 Windows 实机验收”。
 - Windows 分层窗口 OLE 实机拖入、透明区域穿透及真实桌面视觉验收：**待用户验收**。Linux 预览不作为 Windows OLE/EXE 或人工视觉通过证据。
 - 转头角度不属于本增量门禁且未调整；旧视觉回归失败只记录，不删测试、不改金图。
 
