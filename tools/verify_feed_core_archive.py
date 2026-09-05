@@ -42,7 +42,7 @@ def main(argv=None) -> int:
     missing = missing_required_modules(archived_python_modules(executable))
     if missing:
         raise RuntimeError(f"candidate archive is missing feed_core modules: {missing}")
-    print(f"verified {len(REQUIRED_MODULES)} feed_core modules in {executable.name}")
+    print(f"verified {len(REQUIRED_MODULES)} feed_core modules")
     return 0
 
 

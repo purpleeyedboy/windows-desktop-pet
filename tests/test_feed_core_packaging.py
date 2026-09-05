@@ -21,8 +21,20 @@ def test_workflow_skips_pytest_and_verifies_unique_candidate():
     assert 'compileall' in workflow and 'verify_feed_core_archive.py' in workflow
     assert '桌面宠物_文件喂食与回收站事务.exe' in workflow
     assert 'SHA256' in workflow and 'upload-artifact' in workflow
+    assert '".[dev]"' not in workflow and 'requirements-assets.txt' not in workflow
+    assert 'PyInstaller>=6,<7' in workflow
 
 def test_archive_verifier_requires_runtime_wiring():
     from tools.verify_feed_core_archive import missing_required_modules
     required={f'desktop_pet.feed_core.{n}' for n in ('model','validation','journal','coordinator','adapters','wiring','windows_drop','windows_recycle')}
     assert missing_required_modules(required)==[]
+
+def test_archive_success_output_is_ascii_safe_on_cp1252(monkeypatch):
+    import io
+    import tools.verify_feed_core_archive as verifier
+    raw=io.BytesIO(); console=io.TextIOWrapper(raw,encoding='cp1252')
+    monkeypatch.setattr(verifier,'archived_python_modules',lambda _path:set(verifier.REQUIRED_MODULES))
+    monkeypatch.setattr(verifier.sys,'stdout',console)
+    assert verifier.main(['桌面宠物_文件喂食与回收站事务.exe'])==0
+    console.flush()
+    assert raw.getvalue().decode('cp1252').isascii()
