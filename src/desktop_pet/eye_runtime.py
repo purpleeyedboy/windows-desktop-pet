@@ -22,6 +22,8 @@ from .idle_head_tilt import (
     IdleTiltPose,
     TiltMode,
 )
+from .idle_lick import IdleLickMotion, LickPose
+from .lick_compositor import compose_lick
 from .model import ACTIONS, ActionCycle
 
 
@@ -86,6 +88,7 @@ class RuntimeEyeSession:
         head_follow: bool = False,
         blink_motion: NaturalBlinkMotion | None = None,
         idle_tilt_motion: IdleHeadTiltMotion | None = None,
+        idle_lick_motion: IdleLickMotion | None = None,
     ) -> None:
         self._compositor = compositor
         self._head_follow = bool(head_follow)
@@ -115,6 +118,8 @@ class RuntimeEyeSession:
             else IdleHeadTiltMotion() if self._head_follow else None
         )
         self._idle_tilt_pose = IdleTiltPose()
+        self._idle_lick_motion = idle_lick_motion or IdleLickMotion()
+        self._idle_lick_pose = LickPose()
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -176,6 +181,7 @@ class RuntimeEyeSession:
                 if (
                     self._blink_motion is not None
                     or self._idle_tilt_motion is not None
+                    or self._idle_lick_motion is not None
                 )
                 else None
             ),
@@ -196,6 +202,10 @@ class RuntimeEyeSession:
     @property
     def action_failure(self) -> tuple[str, ActionFailure] | None:
         return self._action_failure
+
+    @property
+    def idle_lick_pose(self) -> LickPose:
+        return self._idle_lick_pose
 
     def start(self) -> SessionResult:
         if self._state == "disabled":
@@ -362,10 +372,18 @@ class RuntimeEyeSession:
             return SessionResult.REJECTED
         if self._state == "disabled":
             return SessionResult.FALLBACK
-        if self._state != "following" or self._idle_tilt_motion is None:
+        if self._state != "following":
             return SessionResult.REJECTED
         try:
-            self._idle_tilt_motion.reset(self._clock())
+            now = self._clock()
+            self._idle_lick_pose = self._idle_lick_motion.interrupt(now)
+        except Exception:
+            self._idle_lick_pose = LickPose()
+            return SessionResult.REJECTED
+        if self._idle_tilt_motion is None:
+            return SessionResult.ACCEPTED
+        try:
+            self._idle_tilt_motion.reset(now)
         except Exception:
             self._idle_tilt_motion = None
             self._idle_tilt_pose = IdleTiltPose()
@@ -445,6 +463,16 @@ class RuntimeEyeSession:
         ):
             return SessionResult.REJECTED
 
+        try:
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            self._idle_lick_pose = cancel_lick(self._clock())
+        except Exception:
+            self._idle_lick_pose = LickPose()
+
         self._action_failure = None
         self._pending_action = action
         self._early_finish = False
@@ -498,6 +526,16 @@ class RuntimeEyeSession:
     def stop(self) -> None:
         if self._terminal:
             return
+        try:
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            cancel_lick(self._clock())
+        except Exception:
+            pass
+        self._idle_lick_pose = LickPose()
         self._terminal = True
         self._lifecycle_epoch += 1
         self._state = "stopped"
@@ -519,6 +557,18 @@ class RuntimeEyeSession:
         except Exception:
             return
         changed = False
+        try:
+            lick_pose = self._idle_lick_motion.sample(
+                now,
+                self._last_displayed_head_pose
+                or self._last_displayed_pose
+                or (0.0, 0.0),
+            )
+        except Exception:
+            lick_pose = LickPose()
+        if lick_pose != self._idle_lick_pose:
+            self._idle_lick_pose = lick_pose
+            changed = True
         if self._blink_motion is not None:
             try:
                 closure = self._blink_motion.sample(now)
@@ -609,7 +659,11 @@ class RuntimeEyeSession:
                 frame = compose_blink(*pose, self._blink_closure)
             else:
                 frame = self._compositor.compose(*pose)
+            if self._idle_lick_pose != LickPose():
+                frame = compose_lick(frame, self._idle_lick_pose)
         except Exception:
+            if self._idle_lick_pose != LickPose():
+                self._cancel_idle_lick()
             if (
                 expected_state != "following"
                 and self._work_is_current(epoch, expected_state)
@@ -635,6 +689,18 @@ class RuntimeEyeSession:
         if expected_state == "stopped" and pose == (0.0, 0.0):
             self._center_frame = frame
         return True
+
+    def _cancel_idle_lick(self) -> None:
+        try:
+            cancel_lick = getattr(
+                self._idle_lick_motion,
+                "cancel",
+                self._idle_lick_motion.interrupt,
+            )
+            cancel_lick(self._clock())
+        except Exception:
+            pass
+        self._idle_lick_pose = LickPose()
 
     def _begin_action(self, action: str, *, advance_cycle: bool) -> None:
         if self._state != "playing" or self._pending_action != action:

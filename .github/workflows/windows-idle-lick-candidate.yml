@@ -1,0 +1,38 @@
+name: Windows V2.1 idle lick candidate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-idle-lick:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - run: python -m pip install ".[dev]" -r requirements-assets.txt
+      - run: .\build_idle_lick_candidate.ps1 -SkipTests
+        shell: pwsh
+      - name: Verify unique EXE, size, and SHA-256
+        shell: pwsh
+        run: |
+          $MaxCandidateBytes = 52428800
+          $exes = @(Get-ChildItem -LiteralPath dist-idle-lick -Filter *.exe -File)
+          if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
+          if ($exes[0].Name -ne '桌面宠物_空闲随机舔手.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          if ($exes[0].Length -gt $MaxCandidateBytes) { throw "EXE exceeds $MaxCandidateBytes bytes." }
+          $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "UNTESTED - awaiting user Windows validation`nSize: $($exes[0].Length) bytes`nSHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-pet-v2-1-idle-lick-untested-candidate
+          path: dist-idle-lick/桌面宠物_空闲随机舔手.exe
+          retention-days: 7
+          if-no-files-found: error

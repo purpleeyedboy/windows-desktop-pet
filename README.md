@@ -4,6 +4,9 @@
 
 当前开发基线为 V2.1：保留已批准猫头、猫身、逐像素 Alpha、眼球跟随、眨眼、头颈连续形变与 minimum-jerk 转头缓动；随机左右倾斜的实际幅度为 18°–30°。50° 仅作为内部姿态/网格安全校验上限，不是实际随机动作范围。
 
+V2.1-LICK 独立候选在满足 V2.1 的两秒稳定目标窗口和 25–70 秒真实空闲间隔后，随机选择左侧或右侧并舔 3–20 次。状态机由现有 GUI tick 非阻塞采样；鼠标交互或点击动作会中断并恢复中性状态。随机源可注入以复现测试序列，生产运行使用系统随机源。
+抬手和舌头由运行时确定性 RGBA 绘制叠加到既有头、身、眼睛和 Alpha 合成结果上，不修改或新增二进制素材；左右、抬手、伸舌、接触、缩舌和放下阶段均会刷新透明窗口。
+
 ## 运行
 
 双击 `dist/桌面宠物-6帧猫耳颜文字版.exe` 即可运行，无需安装 Python。程序使用 Windows 逐像素 Alpha 显示平滑透明轮廓，默认无边框并始终置顶；重复双击不会创建第二只桌宠。
@@ -28,6 +31,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，输出 `dist-eye-follow-candidate\桌面宠物_最终素材与转头角度基线修正版.exe`。Linux 云容器中的测试和编译检查不能替代 Windows EXE 构建或真实桌面视觉验收。
+
+V2.1-LICK 使用 `build_idle_lick_candidate.ps1` 独立构建，输出 `dist-idle-lick\桌面宠物_空闲随机舔手.exe`，不会覆盖既有候选或交付 EXE。完整版本、日期、Git 短哈希、BASE-001、功能、测试/调试标志及文档基线会作为 `build-info.json` 写入单文件归档；详见 `V2.1_LICK_BUILD.md`。
+该 EXE 是未自动测试候选版；Windows Actions 不运行旧基线 pytest，只检查 PyInstaller 打包、唯一 EXE、大小和 SHA-256，最终功能与观感由用户本人在 Windows 实机验收。
 
 构建脚本会先验证 18 张透明动作帧（3 组动作、每组 6 帧），并核对每张归档关键帧的 SHA-256 不变；随后验证每动作 `180 中文 + 20 颜文字`、三套内置字体覆盖和 28px/40px 渲染边界，再用独立 Tcl/Tk 生命周期运行自动测试。PyInstaller 生成唯一的 `dist/桌面宠物-6帧猫耳颜文字版.exe` 后，构建脚本会使用 PyInstaller 自身的归档读取器逐字节核对 18 张关键帧、5 张气泡图、3 个字体、3 份许可、台词 JSON 和第三方说明。
 
