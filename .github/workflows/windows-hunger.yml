@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install ".[dev]" -r requirements-assets.txt
+      - run: python -m pip install . "PyInstaller>=6,<7"
       - run: .\build_hunger.ps1
         shell: pwsh
       - name: Verify unique EXE, size, and SHA-256
@@ -29,10 +29,11 @@ jobs:
           if ($exes[0].Name -ne '桌面宠物_饥饿值与饥饿动画.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "UNTESTED candidate; pending user Windows validation." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Size: $($exes[0].Length) bytes; SHA-256: $($hash.Hash)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-v2-1-hunger
+          name: desktop-pet-v2-1-hunger-UNTESTED-pending-user-validation
           path: dist-hunger/桌面宠物_饥饿值与饥饿动画.exe
           retention-days: 7
           if-no-files-found: error
