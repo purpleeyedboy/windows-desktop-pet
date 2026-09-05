@@ -1,0 +1,26 @@
+name: Windows FEED-CORE high-risk candidate
+on: {pull_request: {}, workflow_dispatch: {}}
+permissions: {contents: read}
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - run: python -m pip install "." "PyInstaller>=6,<7"
+      - name: Compile and resource existence checks (automated tests intentionally skipped)
+        run: python -m compileall -q src run_desktop_pet.py tools/verify_feed_core_archive.py
+      - run: .\build_feed_core.ps1
+        shell: pwsh
+      - name: Verify unique EXE size and SHA256
+        shell: pwsh
+        run: |
+          $exes=@(Get-ChildItem dist-feed-core -Filter *.exe -File)
+          if($exes.Count -ne 1){throw "Expected exactly one EXE; found $($exes.Count)"}
+          if($exes[0].Name -ne '桌面宠物_文件喂食与回收站事务.exe'){throw 'Unexpected EXE'}
+          $hash=Get-FileHash $exes[0].FullName -Algorithm SHA256
+          "UNTESTED HIGH-RISK CANDIDATE`nsize: $($exes[0].Length) bytes`nSHA256: $($hash.Hash)"|Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: {name: desktop-pet-v2.1-feed-core-high-risk-untested, path: 'dist-feed-core/桌面宠物_文件喂食与回收站事务.exe', if-no-files-found: error}
