@@ -26,6 +26,8 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .paw_compositor import PawCompositor
+from .paw_press import PawPressController, PawState, PointerInputAdapter
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -239,6 +241,8 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        pointer_adapter_factory: Callable[[int], PointerInputAdapter] | None = None,
+        paw_compositor: PawCompositor | None = None,
     ) -> None:
         if legacy_mode:
             if (
@@ -264,6 +268,10 @@ class PetWindow:
         self._press_pointer: tuple[int, int] | None = None
         self._press_window: tuple[int, int] | None = None
         self._closed = False
+        self._paw_controller: PawPressController | None = None
+        self._paw_compositor = paw_compositor
+        self._paw_after: object | None = None
+        self._paw_base_image: Image.Image | None = None
         self._legacy_fallback = bool(legacy_mode)
         self._rendering_available = True
         self._consecutive_renderer_failures = 0
@@ -299,6 +307,12 @@ class PetWindow:
             self.renderer = renderer_factory(root.winfo_id())
             self.renderer.set_topmost(True)
             self.bubble = BubbleWindow(root, renderer_factory=renderer_factory)
+            if pointer_adapter_factory is not None:
+                if paw_compositor is None:
+                    raise ValueError("pointer adapter requires paw compositor")
+                self._paw_controller = PawPressController(
+                    pointer_adapter_factory(root.winfo_id())
+                )
             self.animation = AnimationController(
                 {
                     action: len(action_frames)
@@ -365,6 +379,8 @@ class PetWindow:
                 command=lambda value=action: self.trigger_named_action(value),
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
+        if self._paw_controller is not None:
+            menu.add_command(label="测试：双前肢按压鼠标", command=self.trigger_paw_press)
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,
@@ -392,6 +408,7 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<FocusOut>", lambda _event: self.cancel_paw_press())
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -584,6 +601,7 @@ class PetWindow:
         if not self._rendering_available:
             return
         self._rendering_available = False
+        self.cancel_paw_press()
         if self.eye_session is not None:
             self.eye_session.stop()
         animation = getattr(self, "animation", None)
@@ -686,6 +704,51 @@ class PetWindow:
             return
         self.eye_session.request_blink()
 
+    def trigger_paw_press(self) -> None:
+        controller = self._paw_controller
+        if controller is None or self._closed or self.animation.busy:
+            return
+        self._paw_base_image = self._current_image
+        try:
+            if controller.start(time.monotonic()):
+                self._paw_tick()
+        except Exception:
+            self.cancel_paw_press()
+
+    def _paw_tick(self) -> None:
+        controller, base = self._paw_controller, self._paw_base_image
+        if controller is None or base is None or self._closed:
+            return
+        try:
+            controller.tick(time.monotonic())
+            if controller.state is PawState.IDLE:
+                self._apply_image(base, self._anchor())
+                self._paw_base_image = None
+                self._paw_after = None
+                return
+            offset = {PawState.PRESSED: 2, PawState.HOLDING: 3,
+                      PawState.PUSHING: 5}[controller.state]
+            image = self._paw_compositor.compose(
+                base, left_offset=(0, offset), right_offset=(0, offset)
+            )
+            self._apply_image(image, self._anchor())
+            self._paw_after = self.root.after(16, self._paw_tick)
+        except Exception:
+            self.cancel_paw_press()
+
+    def cancel_paw_press(self) -> None:
+        if self._paw_controller is not None:
+            self._paw_controller.cancel()
+        if self._paw_after is not None:
+            self._cancel_after(self._paw_after)
+            self._paw_after = None
+        base, self._paw_base_image = self._paw_base_image, None
+        if base is not None and not self._closed and self._rendering_available:
+            try:
+                self._apply_image(base, self._anchor())
+            except Exception:
+                pass
+
     def trigger_idle_tilt(self, mode: TiltMode) -> None:
         if mode not in TILT_MODES:
             raise ValueError("idle tilt mode is invalid")
@@ -699,6 +762,7 @@ class PetWindow:
         self.eye_session.request_idle_tilt(mode)
 
     def _trigger_action(self, action: str | None) -> None:
+        self.cancel_paw_press()
         if (
             self._closed
             or not self._rendering_available
@@ -862,6 +926,7 @@ class PetWindow:
     def _handle_action_callback_failure(self) -> None:
         if self._closed or not self._rendering_available:
             return
+        self.cancel_paw_press()
         if not self.animation.busy:
             self._active_animation_action = None
         if self.eye_session is not None:
@@ -900,6 +965,11 @@ class PetWindow:
     def close(self) -> None:
         if self._closed:
             return
+        if self._paw_controller is not None:
+            self._paw_controller.close()
+        if self._paw_after is not None:
+            self._cancel_after(self._paw_after)
+            self._paw_after = None
         self._closed = True
         if self.eye_session is not None:
             self.eye_session.stop()
@@ -911,6 +981,7 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
+        self.cancel_paw_press()
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
@@ -943,6 +1014,7 @@ class PetWindow:
         self._press_window = None
 
     def _on_context_menu(self, event: tk.Event) -> None:
+        self.cancel_paw_press()
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:

@@ -10,6 +10,7 @@ from .head_neck_deformation import ContinuousHeadNeckCompositor
 from .model import ACTIONS
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
+from .paw_compositor import PawCompositor, load_rle_masks
 
 
 EXPECTED_SIZE = (512, 768)
@@ -91,6 +92,11 @@ def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
         body_backplate=backplate,
         head_cutout=head_cutout,
     )
+
+
+def load_paw_compositor() -> PawCompositor:
+    root = asset_path("assets", "paws", "v1")
+    return PawCompositor(*load_rle_masks(root / "authoring.json"))
 
 
 def load_neutral_eye_source_probe(

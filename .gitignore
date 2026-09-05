@@ -6,3 +6,4 @@ __pycache__/
 build/
 dist/
 assets/generated/work/
+qa/v2.1-paws/*.png

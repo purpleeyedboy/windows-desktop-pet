@@ -5,9 +5,10 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_head_neck_compositor
+from .assets import load_frames, load_head_neck_compositor, load_paw_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
+from .win32_pointer import Win32PointerInputAdapter
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -95,6 +96,8 @@ def main() -> int:
             compositor=compositor,
             cursor_provider=cursor_provider,
             head_follow=True,
+            pointer_adapter_factory=lambda hwnd: Win32PointerInputAdapter(hwnd),
+            paw_compositor=load_paw_compositor(),
         )
         root.mainloop()
         return 0
