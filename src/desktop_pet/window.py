@@ -26,6 +26,8 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .hunger_animation import HungerAnimationFrame, HungerVisual
+from .hunger_effect import compose_hunger_effect
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -289,6 +291,9 @@ class PetWindow:
             1,
             self.display_height,
         )
+        self._hunger_runtime: object | None = None
+        self._hunger_frame: HungerAnimationFrame | None = None
+        self._last_hunger_presentation: HungerVisual | None = None
 
         try:
             root.title("桌面宠物")
@@ -454,6 +459,7 @@ class PetWindow:
             if requested_height is None
             else clamp_height(requested_height)
         )
+        presentation_image = self._compose_hunger_image(image)
         width = max(1, round(image.width * target_height / image.height))
         if anchor is None:
             x, y = self._window_rect.x, self._window_rect.y
@@ -479,7 +485,7 @@ class PetWindow:
                 x = anchor[0] - width // 2
                 y = anchor[1] - fitted_height
             proposed = Rect(x, y, width, fitted_height)
-        resized_image = image.convert("RGBA").resize(
+        resized_image = presentation_image.resize(
             (width, fitted_height), Image.Resampling.LANCZOS
         )
         window_rect = constrain_rect_to_area(proposed, area)
@@ -766,6 +772,9 @@ class PetWindow:
 
     def _animation_finished(self, action: str) -> None:
         self._active_animation_action = None
+        resume = getattr(self._hunger_runtime, "user_animation_finished", None)
+        if callable(resume):
+            resume()
         if self._closed or self._legacy_fallback or self.eye_session is None:
             return
         self.eye_session.animation_finished(action)
@@ -779,7 +788,54 @@ class PetWindow:
             raise
         if accepted is not True and not self.animation.busy:
             self._active_animation_action = None
+        elif accepted is True:
+            suspend = getattr(self._hunger_runtime, "user_animation_started", None)
+            if callable(suspend):
+                suspend()
         return accepted
+
+    def attach_hunger_runtime(self, runtime: object) -> None:
+        self._hunger_runtime = runtime
+
+    def add_debug_time_menu(self, advance: Callable[[int], None]) -> None:
+        """Called only by an explicitly marked test build."""
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="测试：时间 +1 小时",
+            command=lambda: advance(3_600),
+        )
+        self.menu.add_command(
+            label="测试：时间 +1 天",
+            command=lambda: advance(86_400),
+        )
+
+    def present_hunger(self, frame: HungerAnimationFrame) -> None:
+        """Render effects every phase; reserve the bubble for level transitions."""
+        if self._closed:
+            return
+        self._hunger_frame = frame
+        if self._presentation_snapshot is not None:
+            try:
+                self._apply_image(self._current_image, self._anchor())
+            except Exception:
+                return
+        if (
+            frame.visual is not HungerVisual.SUSPENDED
+            and frame.visual is not self._last_hunger_presentation
+        ):
+            self._last_hunger_presentation = frame.visual
+            text = {
+                HungerVisual.NORMAL_HUNGRY: "有点饿了…",
+                HungerVisual.SEVERE_HUNGRY: "肚子好饿……",
+                HungerVisual.EXTREME_HUNGRY: "真的非常饿了……",
+            }[frame.visual]
+            self._present_phrase(text)
+
+    def _compose_hunger_image(self, image: Image.Image) -> Image.Image:
+        frame = self._hunger_frame
+        if frame is None:
+            return image.convert("RGBA")
+        return compose_hunger_effect(image, frame, self._eye_interaction_boxes)
 
     def _cancel_action(self, action: str) -> bool:
         cancelled = self.animation.cancel_current(action)
@@ -901,6 +957,9 @@ class PetWindow:
         if self._closed:
             return
         self._closed = True
+        stop_hunger = getattr(self._hunger_runtime, "stop", None)
+        if callable(stop_hunger):
+            stop_hunger()
         if self.eye_session is not None:
             self.eye_session.stop()
         self.animation.stop()

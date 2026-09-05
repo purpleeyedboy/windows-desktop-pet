@@ -4,10 +4,19 @@ import ctypes
 import os
 import tkinter as tk
 from tkinter import messagebox
+from datetime import datetime, timezone
+import json
 
 from .assets import load_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
+from .hunger import HungerStore, MutableUtcClock, system_utc_seconds
+from .hunger_runtime import (
+    HungerRuntime,
+    default_hunger_path,
+    enable_debug_time_simulation,
+)
+from .paths import asset_path
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -76,6 +85,14 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
         ctypes.windll.user32.MessageBoxW(None, message, "桌面宠物无法启动", 0x10)
 
 
+def is_test_build() -> bool:
+    try:
+        metadata = json.loads(asset_path("build_metadata.json").read_text("utf-8-sig"))
+    except (OSError, ValueError, TypeError):
+        return False
+    return metadata.get("test_build") is True and metadata.get("debug_menu") is True
+
+
 def main() -> int:
     enable_per_monitor_dpi_awareness()
     mutex = SingleInstanceMutex(build_mutex_name())
@@ -96,6 +113,29 @@ def main() -> int:
             cursor_provider=cursor_provider,
             head_follow=True,
         )
+        attach_hunger = getattr(pet_window, "attach_hunger_runtime", None)
+        present_hunger = getattr(pet_window, "present_hunger", None)
+        if callable(attach_hunger) and callable(present_hunger):
+            debug_clock = (
+                MutableUtcClock(datetime.now(timezone.utc)) if is_test_build() else None
+            )
+            hunger_runtime = HungerRuntime(
+                store=HungerStore(default_hunger_path()),
+                utc_clock=debug_clock.utc_seconds if debug_clock else system_utc_seconds,
+                schedule=root.after,
+                cancel=root.after_cancel,
+                on_frame=present_hunger,
+            )
+            attach_hunger(hunger_runtime)
+            if debug_clock is not None:
+                add_debug_menu = getattr(pet_window, "add_debug_time_menu", None)
+                if callable(add_debug_menu):
+                    add_debug_menu(
+                        lambda seconds: enable_debug_time_simulation(
+                            test_build=True, clock=debug_clock, seconds=seconds
+                        )
+                    )
+            hunger_runtime.start()
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:
