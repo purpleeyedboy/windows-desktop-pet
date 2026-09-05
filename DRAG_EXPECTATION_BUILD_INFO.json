@@ -1,0 +1,18 @@
+{
+  "version": "2.1-drag.1",
+  "date": "2026-09-04",
+  "git_short_hash": "c3b218d",
+  "baseline": "BASE-001 / V2.1",
+  "enabled_features": [
+    "approved-v2.1-baseline",
+    "file-drag-expectation-feedback"
+  ],
+  "test_build": true,
+  "debug_menu": true,
+  "documentation_baseline": "BASELINE_V2.1.md",
+  "file_operations": "none",
+  "hunger_changes": "none",
+  "visual_acceptance": "pending",
+  "automated_test_status": "not-run",
+  "candidate_status": "awaiting-user-windows-acceptance"
+}

@@ -32,3 +32,13 @@ V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，�
 构建脚本会先验证 18 张透明动作帧（3 组动作、每组 6 帧），并核对每张归档关键帧的 SHA-256 不变；随后验证每动作 `180 中文 + 20 颜文字`、三套内置字体覆盖和 28px/40px 渲染边界，再用独立 Tcl/Tk 生命周期运行自动测试。PyInstaller 生成唯一的 `dist/桌面宠物-6帧猫耳颜文字版.exe` 后，构建脚本会使用 PyInstaller 自身的归档读取器逐字节核对 18 张关键帧、5 张气泡图、3 个字体、3 份许可、台词 JSON 和第三方说明。
 
 最终交付的三份 SIL Open Font License 1.1 分别位于 `交付\字体许可\ZCOOLKuaiLe-OFL-1.1.txt`、`交付\字体许可\NotoSans-OFL-1.1.txt` 和 `交付\字体许可\NotoSansMath-OFL-1.1.txt`；完整第三方来源与哈希说明见 `THIRD_PARTY_NOTICES.txt`。
+
+## V2.1 文件拖动期待反馈测试版
+
+独立候选版使用 `build_drag_expectation_candidate.ps1` 在 Windows 构建，唯一输出为 `dist-drag-expectation-candidate\桌面宠物_文件拖动期待反馈.exe`。它只在合法的 OLE 文件拖动进入猫咪有效像素感应区时返回 Copy 光标反馈并显示双眼放大/颤抖、粒子和头部高亮；Drop 始终返回 None。Copy 仅表示期待反馈，程序不复制、移动、删除、回收、打开、上传或修改文件，也不读取文件路径、不改变饥饿值。
+
+右键菜单中的“调试：拖动期待态”只播放同一瞬态效果，便于实机视觉验收，不模拟或执行文件操作。动画数值集中在 `DragVisualConfig`，在 Windows 真机确认前均标记为待视觉验收。
+
+QA 预览不纳入 Git。需要本地辅助检查时，可运行 `python tools/build_drag_expectation_preview.py --output-dir <临时目录>` 确定性生成 `before-after.png` 与 SHA-256 `stats.json`；候选发布工作流不生成或上传 QA 预览。源码边界工具仍可供开发者单独运行，但不再阻塞候选打包。
+
+PR #11 的 Windows Actions 明确不运行 pytest，而是直接调用 `.\build_drag_expectation_candidate.ps1 -SkipTests`。该候选版标记为“未运行自动测试、等待用户 Windows 实机验收”；候选路径不执行旧视觉、基线差异或归档内容门禁，只运行 PyInstaller，并校验唯一 EXE、精确文件名、50 MiB 大小上限和 SHA-256 后上传 `桌面宠物_文件拖动期待反馈.exe`。
