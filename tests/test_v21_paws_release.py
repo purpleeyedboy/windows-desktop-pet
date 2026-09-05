@@ -13,25 +13,29 @@ def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
     assert '"assets" / "paws"' in text
     assert "version_info_paws.txt" in text
     build = (ROOT / "build_paws.ps1").read_text(encoding="utf-8")
-    assert "--require-paws" in build
+    assert ".venv" not in build
+    assert "-m pytest" not in build
+    assert "-m PyInstaller" in build
 
 
 def test_version_resource_contains_required_traceability():
     text = (ROOT / "version_info_paws.txt").read_text(encoding="utf-8")
-    for value in ("2.1.1.0", "BASE-001", "双前肢按压鼠标", "测试版",
-                  "调试菜单", "BASELINE_V2.1.md", "2026-09-04", "c3b218d"):
+    for value in ("2.1.1.0", "BASE-001", "双前肢按压鼠标", "未自动测试候选版",
+                  "调试菜单", "BASELINE_V2.1.md", "2026-09-05", "18d921a"):
         assert value in text
 
 
-def test_windows_action_tests_builds_checks_unique_exe_hash_size_and_uploads():
+def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     text = (ROOT / ".github/workflows/windows-v21-paws.yml").read_text(encoding="utf-8")
-    assert text.index("python -m pytest") < text.index("build_paws.ps1")
+    assert "pytest" not in text
+    assert ".[dev]" not in text
+    assert "build_paws.ps1" in text
     assert 'if ($exes.Count -ne 1)' in text
     assert EXE in text
     assert "Length" in text and "Get-FileHash" in text
     assert "actions/upload-artifact@" in text
-    assert "generate_paws_preview.py" in text
-    assert "preview-path" in text
+    assert "untested-windows-candidate" in text
+    assert "pending user Windows acceptance" in text
 
 
 def test_release_diff_contains_no_binary_files_and_no_tracked_preview_pngs():
