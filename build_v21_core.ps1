@@ -8,6 +8,9 @@ $work = Join-Path $root "build-v21-core"
 $name = "桌面宠物_V2.1公共基础架构.exe"
 Push-Location $root
 try {
+    if ($SkipTests) {
+        Write-Warning "UNTESTED CANDIDATE — pending user Windows acceptance"
+    }
     if (-not $SkipTests) { & $python -m pytest -q; if ($LASTEXITCODE -ne 0) { throw "Tests failed" } }
     Remove-Item -LiteralPath $dist,$work -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $work | Out-Null

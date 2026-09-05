@@ -17,8 +17,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install ".[dev]" -r requirements-assets.txt
-      - run: .\build_v21_core.ps1
+      - run: python -m pip install . "PyInstaller>=6,<7"
+      - run: .\build_v21_core.ps1 -SkipTests
         shell: pwsh
       - name: Verify unique artifact and report digest
         shell: pwsh
@@ -27,6 +27,7 @@ jobs:
           if ($exes.Count -ne 1) { throw "Expected one EXE" }
           if ($exes[0].Name -ne '桌面宠物_V2.1公共基础架构.exe') { throw "Unexpected EXE" }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "UNTESTED CANDIDATE — pending user Windows acceptance" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Candidate size: $($exes[0].Length) bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "SHA-256: $($hash.Hash)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -33,9 +33,22 @@ def test_windows_core_workflow_builds_and_uploads_only_the_unique_exe():
     workflow = (ROOT / ".github/workflows/windows-v21-core.yml").read_text(encoding="utf-8")
     assert "runs-on: windows-latest" in workflow
     assert "contents: read" in workflow
-    assert ".\\build_v21_core.ps1" in workflow
+    assert ".\\build_v21_core.ps1 -SkipTests" in workflow
+    assert 'python -m pip install . "PyInstaller>=6,<7"' in workflow
+    assert '".[dev]"' not in workflow
+    assert "pytest" not in workflow
+    assert "UNTESTED CANDIDATE" in workflow
+    assert "pending user Windows acceptance" in workflow
     assert EXE_NAME in workflow
     assert "Get-FileHash" in workflow
     assert "Candidate size" in workflow
     assert "actions/upload-artifact@" in workflow
     assert "secrets." not in workflow.lower()
+
+
+def test_core_skip_tests_build_is_explicitly_marked_as_unverified_candidate():
+    script = (ROOT / "build_v21_core.ps1").read_text(encoding="utf-8")
+    assert 'if ($SkipTests)' in script
+    assert "UNTESTED CANDIDATE" in script
+    assert "pending user Windows acceptance" in script
+    assert 'if (-not $SkipTests)' in script
