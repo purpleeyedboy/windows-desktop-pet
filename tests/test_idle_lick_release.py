@@ -13,38 +13,42 @@ def test_idle_lick_candidate_spec_is_independent_one_file_with_version_metadata(
     assert 'excludes=["numpy", "cv2"]' in spec
 
 
-def test_build_records_complete_metadata_and_checks_unique_size_and_sha256() -> None:
+def test_build_marks_candidate_untested_and_checks_unique_size_and_sha256() -> None:
     script = (ROOT / "build_idle_lick_candidate.ps1").read_text(encoding="utf-8-sig")
     for value in (
         EXE_NAME,
         "2.1-LICK",
         "BASE-001",
         "idle-random-left-right-hand-lick",
-        "test_build=true",
+        "automated_tests=false",
+        "acceptance_status=awaiting-user-windows-validation",
         "debug_menu=false",
         "V2.1_LICK_BUILD.md",
         "git rev-parse --short HEAD",
         "Get-Date -AsUTC",
         "Get-FileHash",
         "MaxCandidateBytes",
-        r"tools\verify_eye_follow_candidate_archive.py",
     ):
         assert value in script
-    assert "& $Python -m pytest -q" in script
+    assert "pytest" not in script
+    assert "verify_eye_follow_candidate_archive" not in script
     assert "CandidateExes.Count -ne 1" in script
 
 
-def test_windows_actions_runs_tests_and_uploads_only_the_verified_candidate() -> None:
+def test_windows_actions_skips_tests_and_uploads_only_the_checked_candidate() -> None:
     workflow = (ROOT / ".github/workflows/windows-idle-lick-candidate.yml").read_text(
         encoding="utf-8"
     )
     assert "runs-on: windows-latest" in workflow
     assert "permissions:\n  contents: read" in workflow
-    assert "python -m pytest -q" in workflow
+    assert "pytest" not in workflow
+    assert ".\\build_idle_lick_candidate.ps1 -SkipTests" in workflow
     assert EXE_NAME in workflow
     assert "if ($exes.Count -ne 1)" in workflow
     assert "Get-FileHash" in workflow
     assert "MaxCandidateBytes" in workflow
     assert "actions/upload-artifact@" in workflow
+    assert "desktop-pet-v2-1-idle-lick-untested-candidate" in workflow
+    assert "UNTESTED - awaiting user Windows validation" in workflow
     assert "if-no-files-found: error" in workflow
     assert "secrets." not in workflow.lower()
