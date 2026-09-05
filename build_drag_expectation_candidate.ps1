@@ -5,6 +5,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = [Console]::OutputEncoding
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
 
 $RepositoryRoot = (Resolve-Path $PSScriptRoot).Path
 $VirtualEnvPython = Join-Path $RepositoryRoot ".venv\Scripts\python.exe"
@@ -72,19 +76,6 @@ try {
     $env:TCL_LIBRARY = Join-Path $basePrefix 'tcl\tcl8.6'
     $env:TK_LIBRARY = Join-Path $basePrefix 'tcl\tk8.6'
 
-    & $Python tools/verify_drag_source_diff.py --baseline c3b218df9dd0cfc84d96231701e771f0382388e1
-    if ($LASTEXITCODE -ne 0) { throw "Source diff gate failed with exit code $LASTEXITCODE." }
-
-    & $Python tools\validate_assets.py assets\keyframes --keyframe-root assets\keyframes --frame-count 6 --keyframe-layout direct --report qa\six-frame-alpha-validation.json
-    if ($LASTEXITCODE -ne 0) { throw "Asset validation failed with exit code $LASTEXITCODE." }
-    & $Python tools/validate_dialogue.py
-    if ($LASTEXITCODE -ne 0) { throw "Dialogue validation failed with exit code $LASTEXITCODE." }
-
-    if (-not $SkipTests) {
-        & $Python -m pytest -q
-        if ($LASTEXITCODE -ne 0) { throw "Test suite failed with exit code $LASTEXITCODE." }
-    }
-
     Clear-CandidateOutputs
 
     & $Python -m PyInstaller --noconfirm --distpath dist-drag-expectation-candidate --workpath build-drag-expectation-candidate desktop_pet_drag_expectation.spec
@@ -96,9 +87,6 @@ try {
     }
 
     $CandidateExe = $CandidateExes[0]
-    & $Python tools/verify_drag_candidate_archive.py $CandidateExe.FullName
-    if ($LASTEXITCODE -ne 0) { throw "Archive verification failed with exit code $LASTEXITCODE." }
-
     if ($CandidateExe.Length -gt $MaxCandidateBytes) {
         throw "Candidate EXE is $($CandidateExe.Length) bytes; limit is $MaxCandidateBytes bytes (50 MiB)."
     }

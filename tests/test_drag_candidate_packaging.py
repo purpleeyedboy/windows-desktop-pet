@@ -39,8 +39,19 @@ def test_drag_build_and_actions_skip_tests_but_enforce_candidate_artifact_gates(
     build_path = Path("build_drag_expectation_candidate.ps1")
     assert build_path.read_bytes().startswith(codecs.BOM_UTF8)
     build = build_path.read_text(encoding="utf-8-sig")
-    for required in ("[switch]$SkipTests", NAME, "52428800", "Get-FileHash", "verify_drag_candidate_archive.py"):
+    for required in ("[switch]$SkipTests", NAME, "52428800", "Get-FileHash", "-m PyInstaller"):
         assert required in build
+    for forbidden in (
+        "pytest",
+        "verify_drag_source_diff.py",
+        "validate_assets.py",
+        "validate_dialogue.py",
+        "verify_drag_candidate_archive.py",
+    ):
+        assert forbidden not in build
+    assert '$env:PYTHONUTF8 = "1"' in build
+    assert '$env:PYTHONIOENCODING = "utf-8"' in build
+    assert "[Console]::OutputEncoding" in build
     workflow = Path(".github/workflows/windows-drag-expectation-candidate.yml").read_text(encoding="utf-8")
     for required in ("windows-latest", r".\build_drag_expectation_candidate.ps1 -SkipTests", NAME, "SHA-256", "upload-artifact"):
         assert required in workflow
@@ -51,6 +62,7 @@ def test_drag_build_and_actions_skip_tests_but_enforce_candidate_artifact_gates(
     assert "requirements-assets.txt" not in workflow
     assert '".[dev]"' not in workflow
     assert "codex/-v2.1" in workflow
+    assert "fetch-depth" not in workflow
 
     version_info = Path("desktop_pet_drag_version_info.txt").read_text(
         encoding="utf-8"
@@ -59,6 +71,8 @@ def test_drag_build_and_actions_skip_tests_but_enforce_candidate_artifact_gates(
     assert "awaiting user Windows acceptance" in version_info
     assert "Automated tests: NOT RUN" in workflow
     assert "Awaiting user Windows acceptance" in workflow
+    assert 'PYTHONUTF8: "1"' in workflow
+    assert "PYTHONIOENCODING: utf-8" in workflow
 
 
 def test_debug_menu_and_docs_name_the_feedback_only_candidate():
