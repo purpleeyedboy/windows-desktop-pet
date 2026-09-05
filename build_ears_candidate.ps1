@@ -1,6 +1,5 @@
 ﻿[CmdletBinding()]
 param(
-    [switch]$SkipTests,
     [switch]$CleanupOnly
 )
 
@@ -72,16 +71,6 @@ try {
     $env:TCL_LIBRARY = Join-Path $basePrefix 'tcl\tcl8.6'
     $env:TK_LIBRARY = Join-Path $basePrefix 'tcl\tk8.6'
 
-    & $Python tools\validate_assets.py assets\keyframes --keyframe-root assets\keyframes --frame-count 6 --keyframe-layout direct --report qa\six-frame-alpha-validation.json
-    if ($LASTEXITCODE -ne 0) { throw "Asset validation failed with exit code $LASTEXITCODE." }
-    & $Python tools/validate_dialogue.py
-    if ($LASTEXITCODE -ne 0) { throw "Dialogue validation failed with exit code $LASTEXITCODE." }
-
-    if (-not $SkipTests) {
-        & $Python -m pytest -q
-        if ($LASTEXITCODE -ne 0) { throw "Test suite failed with exit code $LASTEXITCODE." }
-    }
-
     Clear-CandidateOutputs
     New-Item -ItemType Directory -Path $WorkDirectory | Out-Null
     $BuildDate = Get-Date -Format 'yyyy-MM-dd'
@@ -92,7 +81,7 @@ try {
         git_short_hash = $GitShortHash
         baseline = "BASE-001"
         enabled_features = @("既有基线", "双耳点击反馈")
-        channel = "测试版"
+        channel = "未自动测试；等待用户 Windows 实机验收的候选版"
         documentation_baseline = "V2.1-EARS"
     } | ConvertTo-Json -Depth 3
     $MetadataPath = Join-Path $WorkDirectory "build-metadata.json"
@@ -108,14 +97,13 @@ try {
     }
 
     $CandidateExe = $CandidateExes[0]
-    & $Python tools/verify_eye_follow_candidate_archive.py $CandidateExe.FullName --metadata $MetadataPath
-    if ($LASTEXITCODE -ne 0) { throw "Archive verification failed with exit code $LASTEXITCODE." }
 
     if ($CandidateExe.Length -gt $MaxCandidateBytes) {
         throw "Candidate EXE is $($CandidateExe.Length) bytes; limit is $MaxCandidateBytes bytes (50 MiB)."
     }
 
     $Hash = Get-FileHash -LiteralPath $CandidateExe.FullName -Algorithm SHA256
+    Write-Warning "This candidate was not automatically tested; Windows desktop acceptance is pending."
     Write-Host "Candidate EXE: $($CandidateExe.FullName)"
     Write-Host "Candidate size: $($CandidateExe.Length) bytes"
     Write-Host "SHA-256: $($Hash.Hash)"

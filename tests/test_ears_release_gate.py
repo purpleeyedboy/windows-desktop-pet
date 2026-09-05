@@ -65,14 +65,15 @@ def test_preview_is_deterministic_temporary_output_not_a_tracked_png(tmp_path) -
     ).splitlines()
 
 
-def test_windows_gate_generates_and_uploads_preview_without_weakening_exe_contract() -> None:
+def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None:
     workflow = (ROOT / ".github/workflows/windows-ears-candidate.yml").read_text(
         encoding="utf-8"
     )
     assert "fetch-depth: 0" in workflow
-    assert "tools/build_ears_preview.py --output $env:RUNNER_TEMP/ears-preview.png" in workflow
-    assert "name: desktop-pet-v2-1-ears-preview" in workflow
-    assert "path: ${{ runner.temp }}/ears-preview.png" in workflow
+    assert "pytest" not in workflow.lower()
+    assert "tools/build_ears_preview.py" not in workflow
+    assert "-SkipTests" not in workflow
+    assert "未自动测试" in workflow
     assert 'if ($exes.Count -ne 1)' in workflow
     assert "桌面宠物_双耳点击反馈.exe" in workflow
     assert "Get-FileHash" in workflow

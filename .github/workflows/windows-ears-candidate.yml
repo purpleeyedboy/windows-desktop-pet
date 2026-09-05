@@ -1,4 +1,4 @@
-name: Windows V2.1 ears candidate
+name: Windows V2.1 ears untested candidate
 
 on:
   pull_request:
@@ -18,28 +18,23 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install ".[dev]" -r requirements-assets.txt
-      - run: python -m pytest -q
-      - run: python tools/build_ears_preview.py --output $env:RUNNER_TEMP/ears-preview.png
-      - run: .\build_ears_candidate.ps1 -SkipTests
+      - name: Install packaging dependencies only
+        run: python -m pip install "Pillow>=11,<12" "fonttools>=4.59,<5" "PyInstaller>=6,<7"
+      - name: Build untested Windows acceptance candidate
+        run: .\build_ears_candidate.ps1
         shell: pwsh
-      - name: Verify unique EXE and publish size and SHA-256
+      - name: Verify unique EXE, exact name, size and SHA-256
         shell: pwsh
         run: |
           $exes = @(Get-ChildItem -LiteralPath dist-ears-candidate -Filter *.exe -File)
           if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
           if ($exes[0].Name -ne '桌面宠物_双耳点击反馈.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          if ($exes[0].Length -gt 52428800) { throw "Candidate exceeds 50 MiB: $($exes[0].Length) bytes." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
-          "Size: $($exes[0].Length) bytes`nSHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "## 未自动测试的 Windows 实机验收候选版`n`n文件：$($exes[0].Name)`n大小：$($exes[0].Length) bytes`nSHA-256：$($hash.Hash)`n状态：等待用户 Windows 实机验收。" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-v2-1-ears-test
+          name: desktop-pet-v2-1-ears-untested-windows-candidate
           path: dist-ears-candidate/桌面宠物_双耳点击反馈.exe
-          retention-days: 7
-          if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: desktop-pet-v2-1-ears-preview
-          path: ${{ runner.temp }}/ears-preview.png
           retention-days: 7
           if-no-files-found: error

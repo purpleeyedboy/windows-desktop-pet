@@ -13,7 +13,7 @@ SOURCE_FALLBACK = {
     "git_short_hash": "not packaged",
     "baseline": "BASE-001",
     "enabled_features": ["既有基线", "双耳点击反馈"],
-    "channel": "测试版",
+    "channel": "未自动测试；等待用户 Windows 实机验收的候选版",
     "documentation_baseline": "V2.1-EARS",
 }
 
