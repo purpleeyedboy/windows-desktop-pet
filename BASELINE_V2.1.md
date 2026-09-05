@@ -35,3 +35,11 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - DRAG 仅为不注册 DropTarget 的标准 Drop 事件 adapter；HUNGER 仅为幂等奖励 fake。生产接线留待 FEED-WIRING，因此该 EXE 如实标为测试候选。
 - 候选文件名：`桌面宠物_文件喂食与回收站事务.exe`。Windows Actions 负责测试、唯一 EXE、大小、SHA-256 和 artifact 门禁。
 - 既有认可素材、运动、转头角度、旧测试及金图均未修改；真实 Windows 构建、IFileOperation opt-in E2E 与用户桌面验收仍为待执行门禁。
+
+
+### PR #8 候选修正
+
+- 候选 EXE 现在直接导入并运行 `feed_core` 的临时目录模拟事务，界面醒目标注模拟模式；不注册 DropTarget、不提供文件选择，也不移动或删除任何真实文件。
+- PyInstaller 明确收集完整事务核心，构建后验证嵌入 PYZ 模块并运行冻结 EXE `--self-test`；Windows 门禁仍待 Actions 执行。
+- 确认前后及 STA 执行前复核稳定身份与关键元数据；等待有明确超时/取消，未知结果进入 NeedsReview。奖励仅接受含凭证且经验证的回收结果。
+- 本轮删除了真实回收站 E2E 测试入口；自动测试仅使用模拟器、内存替身和测试创建的临时目录。

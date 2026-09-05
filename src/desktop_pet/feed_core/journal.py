@@ -4,9 +4,10 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from .model import FeedState, FeedTransaction
+from .validation import FileValidator
 
 class TransactionJournal:
-    SCHEMA_VERSION=1
+    SCHEMA_VERSION=2
     def __init__(self, root):
         self.root=Path(root); self.root.mkdir(parents=True,exist_ok=True); self._lock=threading.RLock()
     def _path(self, txid): return self.root/f'{txid}.json'
@@ -17,12 +18,12 @@ class TransactionJournal:
             history.append({'at':datetime.now(timezone.utc).isoformat(),'state':tx.state.value,'event':event})
             data={'schema_version':self.SCHEMA_VERSION,'id':tx.id,'state':tx.state.value,
                   'target':{'name':tx.target_name,'fingerprint':tx.target_fingerprint},
-                  'recycle_credential':tx.recycle_credential,'reward_credential':tx.reward_credential,
+                  'recycle_credential':tx.recycle_credential,'recycle_evidence':tx.recycle_evidence,'reward_credential':tx.reward_credential,
                   'animation_interrupted':tx.animation_interrupted,'failure_code':tx.failure_code,'history':history}
             temp=path.with_suffix('.tmp'); temp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8'); os.replace(temp,path)
             return tx
     def create(self, path):
-        p=Path(path); st=p.stat(); fp=hashlib.sha256(f'{p.name}\0{st.st_dev}\0{st.st_ino}\0{st.st_size}\0{st.st_mtime_ns}'.encode()).hexdigest()
+        p=Path(path); fp=FileValidator._identity(p,p.lstat()).fingerprint
         return self._write(FeedTransaction(secrets.token_hex(16),FeedState.PENDING_CONFIRMATION,p.name,fp),'created')
     def transition(self, txid, state, **changes):
         with self._lock:
@@ -33,7 +34,7 @@ class TransactionJournal:
             d=json.loads(self._path(txid).read_text(encoding='utf-8'))
             if d.get('schema_version') != self.SCHEMA_VERSION: raise ValueError('unsupported journal schema')
             t=d['target']
-            return FeedTransaction(d['id'],FeedState(d['state']),t['name'],t['fingerprint'],d.get('recycle_credential'),d.get('reward_credential'),d.get('animation_interrupted',False),d.get('failure_code'))
+            return FeedTransaction(d['id'],FeedState(d['state']),t['name'],t['fingerprint'],d.get('recycle_credential'),d.get('recycle_evidence'),d.get('reward_credential'),d.get('animation_interrupted',False),d.get('failure_code'))
     def all(self):
         transactions=[]
         originals=[p for p in sorted(self.root.glob('*.json')) if not p.stem.startswith('review-')]
@@ -44,6 +45,6 @@ class TransactionJournal:
                 review_path=self._path(review_id)
                 if review_path.exists(): transactions.append(self.load(review_id))
                 else:
-                    tx=FeedTransaction(review_id,FeedState.NEEDS_REVIEW,'<unreadable-journal>',digest,f'audit-retained:{digest[:12]}',None,False,'invalid_or_unsupported_journal')
+                    tx=FeedTransaction(review_id,FeedState.NEEDS_REVIEW,'<unreadable-journal>',digest,f'audit-retained:{digest[:12]}','invalid-journal-retained',None,False,'invalid_or_unsupported_journal')
                     transactions.append(self._write(tx,'recovery-isolated'))
         return transactions

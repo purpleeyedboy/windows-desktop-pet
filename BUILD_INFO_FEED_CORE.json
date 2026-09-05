@@ -8,10 +8,12 @@
     "ifileoperation_recycle": true,
     "drop": "fake_adapter",
     "hunger_reward": "idempotent_fake",
-    "eating_animation": "callback_adapter"
+    "eating_animation": "callback_adapter",
+    "candidate_demo": "safe_tempfile_simulation",
+    "real_file_operations_in_candidate": false
   },
   "test_build": true,
   "debug_menu": false,
   "documentation_baseline": "BASE-001",
-  "release_state": "test candidate; FEED-WIRING/DRAG/HUNGER production wiring pending"
+  "release_state": "simulation test candidate; frozen core included; FEED-WIRING/DRAG/HUNGER production wiring pending"
 }

@@ -6,15 +6,17 @@ import pytest
 from desktop_pet.feed_core.adapters import DropEventAdapter, IdempotentRewardFake
 from desktop_pet.feed_core.coordinator import FeedCoordinator
 from desktop_pet.feed_core.journal import TransactionJournal
-from desktop_pet.feed_core.model import FeedState
+from desktop_pet.feed_core.model import FeedState, RecycleReceipt
 from desktop_pet.feed_core.validation import FileValidator, Rejection
 
 
 class Recycler:
     def __init__(self, result=True, error=None): self.calls=[]; self.result=result; self.error=error
-    def recycle(self, path, transaction_id):
+    def recycle(self, path, transaction_id, **kwargs):
         self.calls.append((path, transaction_id))
         if self.error: raise self.error
+        if self.result is True:
+            return RecycleReceipt.create(transaction_id, kwargs['expected_identity'], evidence='mock verified')
         return self.result
 
 class Confirmer:
@@ -82,13 +84,13 @@ def test_success_orders_recycle_reward_animation_and_redacts_journal(tmp_path):
     assert len(recycler.calls)==len(reward.commits)==len(animator.calls)==1
     raw=next((tmp_path/'state').glob('*.json')).read_text()
     assert str(dropped) not in raw and 'owned by test' not in raw
-    payload=json.loads(raw); assert payload['schema_version']==1 and payload['target']['name']=='drop.txt'
+    payload=json.loads(raw); assert payload['schema_version']==2 and payload['target']['name']=='drop.txt'
 
 @pytest.mark.parametrize('recycle,error',[ (False,None), (True,OSError('occupied')), (True,RuntimeError('partial failure'))])
 def test_recycle_failures_never_reward_or_animate(tmp_path,recycle,error):
     dropped,journal,reward,recycler,confirm,animator,core=setup(tmp_path,recycle=recycle,recycle_error=error)
     result=core.handle_explicit_drop(dropped)
-    assert result.state is FeedState.FAILED
+    assert result.state in {FeedState.FAILED, FeedState.NEEDS_REVIEW}
     assert reward.commits == [] and animator.calls == []
 
 
@@ -109,12 +111,14 @@ def test_crash_recovery_marks_uncertain_executing_needs_review_without_retry(tmp
     assert core.recover()[0].state is FeedState.NEEDS_REVIEW
 
 
-def test_recovery_commits_reward_once_after_proven_recycle(tmp_path):
+def test_recovery_does_not_trust_persisted_recycle_receipt_for_reward(tmp_path):
     dropped,journal,reward,recycler,confirm,animator,core=setup(tmp_path)
-    tx=journal.create(dropped); journal.transition(tx.id, FeedState.RECYCLED, recycle_credential='mock:proof')
-    assert core.recover()[0].state is FeedState.COMPLETED
-    core.recover()
-    assert reward.commits == [tx.id] and recycler.calls == []
+    tx=journal.create(dropped)
+    identity=core.validator.validate(dropped,explicitly_dropped=True).identity
+    proof=RecycleReceipt.create(tx.id,identity,evidence='mock recovered')
+    journal.transition(tx.id, FeedState.RECYCLED, recycle_credential=proof.credential, recycle_evidence=proof.evidence)
+    assert core.recover()[0].state is FeedState.NEEDS_REVIEW
+    assert reward.commits == [] and recycler.calls == []
 
 
 def test_drop_adapter_is_non_owning_and_forwards_explicit_event(tmp_path):

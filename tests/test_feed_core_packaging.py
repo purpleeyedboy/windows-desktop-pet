@@ -24,6 +24,36 @@ def test_spec_and_workflow_exact_unique_exe_contract():
     assert 'python -m pytest' in build and 'python -m pytest' in workflow
     assert 'size' in workflow.lower() and 'upload-artifact' in workflow
 
-def test_real_e2e_is_opt_in_and_temp_scoped():
-    text=Path('tests/test_feed_core_ifileoperation_e2e.py').read_text(encoding='utf-8')
-    assert 'DESKTOP_PET_RUN_RECYCLE_E2E' in text and 'TemporaryDirectory' in text
+def test_real_e2e_is_absent_and_cannot_be_enabled():
+    assert not Path('tests/test_feed_core_ifileoperation_e2e.py').exists()
+    assert 'DESKTOP_PET_RUN_RECYCLE_E2E' not in Path('.github/workflows/windows-feed-core.yml').read_text(encoding='utf-8')
+
+def test_candidate_entrypoint_imports_and_runs_safe_simulation():
+    source=Path('run_feed_core.py').read_text(encoding='utf-8')
+    assert 'desktop_pet.feed_core.simulation' in source
+    assert '--self-test' in source and 'SIMULATION' in source
+    assert 'askopenfilename' not in source and 'register_drop_target' not in source
+
+def test_frozen_build_explicitly_collects_and_verifies_feed_core():
+    spec=Path('desktop_pet_feed_core.spec').read_text(encoding='utf-8')
+    build=Path('build_feed_core.ps1').read_text(encoding='utf-8-sig')
+    workflow=Path('.github/workflows/windows-feed-core.yml').read_text(encoding='utf-8')
+    required=('model','validation','journal','coordinator','adapters','simulation','windows_recycle')
+    for module in required:
+        assert f'desktop_pet.feed_core.{module}' in spec
+    assert 'verify_feed_core_archive.py' in build and '--self-test' in build
+    assert 'open_embedded_archive' in Path('tools/verify_feed_core_archive.py').read_text(encoding='utf-8')
+    assert 'verify_feed_core_archive.py' in workflow and '--self-test' in workflow
+
+def test_archive_verifier_detects_missing_core_modules():
+    from tools.verify_feed_core_archive import missing_required_modules
+    present={f'desktop_pet.feed_core.{name}' for name in ('model','validation','journal','coordinator','adapters','simulation','windows_recycle')}
+    assert missing_required_modules(present)==[]
+    assert missing_required_modules(present-{'desktop_pet.feed_core.journal'})==['desktop_pet.feed_core.journal']
+
+def test_source_candidate_can_write_headless_simulation_report(tmp_path):
+    import run_feed_core
+    report=tmp_path/'report.json'
+    assert run_feed_core.main(['--self-test-output',str(report)])==0
+    payload=json.loads(report.read_text(encoding='utf-8'))
+    assert payload['mode']=='SIMULATION' and payload['source_still_exists'] is True

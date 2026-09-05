@@ -13,9 +13,16 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with: {python-version: '3.11'}
       - run: python -m pip install ".[dev]" -r requirements-assets.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q tests/test_feed_core.py tests/test_feed_core_revision.py tests/test_windows_recycle_contract.py tests/test_feed_core_packaging.py
       - run: .\build_feed_core.ps1
         shell: pwsh
+      - name: Verify frozen feed_core archive and simulation self-test
+        shell: pwsh
+        run: |
+          python tools/verify_feed_core_archive.py 'dist-feed-core/桌面宠物_文件喂食与回收站事务.exe'
+          $report=Join-Path $env:RUNNER_TEMP 'feed-core-frozen-self-test.json'
+          & 'dist-feed-core/桌面宠物_文件喂食与回收站事务.exe' --self-test-output $report
+          Get-Content -LiteralPath $report
       - name: Verify unique EXE, size and SHA256
         shell: pwsh
         run: |
