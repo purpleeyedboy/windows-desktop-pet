@@ -14,7 +14,9 @@ from PIL import Image
 
 from .animation import AnimationController
 from .bubble import BubbleWindow
+from .build_metadata import format_build_metadata
 from .dialogue import DialogueChooser, load_phrase_pools
+from .ear_interaction import EarHitMasks, EarMotionController, EarSide, deform_ear
 from .eye_follow import CursorProvider
 from .eye_runtime import (
     ActionFailure,
@@ -263,6 +265,8 @@ class PetWindow:
         self._resized_image = self._current_image
         self._press_pointer: tuple[int, int] | None = None
         self._press_window: tuple[int, int] | None = None
+        self._latest_composed_frame: Image.Image | None = None
+        self._ear_amount = 0.0
         self._closed = False
         self._legacy_fallback = bool(legacy_mode)
         self._rendering_available = True
@@ -308,6 +312,11 @@ class PetWindow:
                 self._show_animation_frame,
                 self._animation_finished,
                 cancel=self._cancel_after,
+            )
+            self._ear_motion = EarMotionController(
+                self._schedule_ear,
+                self._cancel_after,
+                self._display_ear_feedback,
             )
             self._topmost_var = tk.BooleanVar(root, value=True)
             self.menu = self._create_menu()
@@ -383,8 +392,16 @@ class PetWindow:
             command=lambda: self.set_always_on_top(self._topmost_var.get()),
         )
         menu.add_separator()
+        menu.add_command(label="调试信息", command=self.show_debug_info)
         menu.add_command(label="退出", command=self.close)
         return menu
+
+    def show_debug_info(self) -> None:
+        messagebox.showinfo(
+            "桌面宠物测试版调试信息",
+            format_build_metadata(),
+            parent=self.root,
+        )
 
     def _bind_events(self) -> None:
         self.root.bind("<ButtonPress-1>", self._on_left_press)
@@ -392,6 +409,8 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<FocusOut>", self._on_focus_lost)
+        self.root.bind("<Leave>", self._on_pointer_leave)
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -677,6 +696,7 @@ class PetWindow:
         self._trigger_action(action)
 
     def trigger_blink(self) -> None:
+        self._ear_motion.interrupt()
         if (
             self._closed
             or not self._rendering_available
@@ -687,6 +707,7 @@ class PetWindow:
         self.eye_session.request_blink()
 
     def trigger_idle_tilt(self, mode: TiltMode) -> None:
+        self._ear_motion.interrupt()
         if mode not in TILT_MODES:
             raise ValueError("idle tilt mode is invalid")
         if (
@@ -699,6 +720,7 @@ class PetWindow:
         self.eye_session.request_idle_tilt(mode)
 
     def _trigger_action(self, action: str | None) -> None:
+        self._ear_motion.interrupt()
         if (
             self._closed
             or not self._rendering_available
@@ -790,7 +812,15 @@ class PetWindow:
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
-        self._apply_image(frame, self._anchor())
+        self._latest_composed_frame = frame
+        displayed = frame
+        if self._ear_motion.active_side is not None and self._ear_amount > 0.0:
+            displayed = deform_ear(
+                frame,
+                self._ear_motion.active_side,
+                self._ear_amount,
+            )
+        self._apply_image(displayed, self._anchor())
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
         if self._constructing and not self._window_shown:
@@ -821,6 +851,36 @@ class PetWindow:
                 self._handle_action_callback_failure()
 
         return self.root.after(delay_ms, guarded_callback)
+
+    def _schedule_ear(
+        self, delay_ms: int, callback: Callable[[], None]
+    ) -> object:
+        def guarded_callback() -> None:
+            if self._closed:
+                return
+            callback()
+
+        return self.root.after(delay_ms, guarded_callback)
+
+    def _display_ear_feedback(self, sample: tuple[EarSide, float]) -> None:
+        side, amount = sample
+        self._ear_amount = amount
+        frame = self._latest_composed_frame
+        if frame is None or self._closed or not self._rendering_available:
+            return
+        displayed = frame if amount == 0.0 else deform_ear(frame, side, amount)
+        self._apply_image(displayed, self._anchor())
+
+    def _point_in_ear_region(self, point: tuple[int, int]) -> EarSide | None:
+        frame = self._latest_composed_frame
+        rect = self._window_rect
+        if frame is None or rect.width <= 0 or rect.height <= 0:
+            return None
+        masks = EarHitMasks.from_frame(frame)
+        return masks.hit_display(
+            (point[0] - rect.x, point[1] - rect.y),
+            (rect.width, rect.height),
+        )
 
     def _cancel_after(self, token: object) -> None:
         try:
@@ -900,6 +960,7 @@ class PetWindow:
     def close(self) -> None:
         if self._closed:
             return
+        self._ear_motion.stop()
         self._closed = True
         if self.eye_session is not None:
             self.eye_session.stop()
@@ -914,10 +975,22 @@ class PetWindow:
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
+        ear = self._point_in_ear_region((event.x_root, event.y_root))
+        if ear is not None:
+            self._press_pointer = None
+            self._press_window = None
+            self._ear_motion.press(ear)
+            return
+        self._ear_motion.interrupt()
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
 
     def _on_left_motion(self, event: tk.Event) -> None:
+        if self._ear_motion.active_side is not None:
+            hovered = self._point_in_ear_region((event.x_root, event.y_root))
+            if hovered != self._ear_motion.active_side:
+                self._ear_motion.pointer_left()
+            return
         if self._press_pointer is None or self._press_window is None:
             return
         delta_x = event.x_root - self._press_pointer[0]
@@ -934,11 +1007,26 @@ class PetWindow:
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
     def _on_left_release(self, event: tk.Event) -> None:
+        if self._ear_motion.active_side is not None:
+            side = self._ear_motion.active_side
+            if self._point_in_ear_region((event.x_root, event.y_root)) == side:
+                self._ear_motion.release(side)
+            else:
+                self._ear_motion.pointer_left()
+            return
         if self._press_pointer is not None:
             self.handle_left_release(
                 self._press_pointer,
                 (event.x_root, event.y_root),
             )
+        self._press_pointer = None
+        self._press_window = None
+
+    def _on_pointer_leave(self, _event: tk.Event | None) -> None:
+        self._ear_motion.pointer_left()
+
+    def _on_focus_lost(self, _event: tk.Event | None) -> None:
+        self._ear_motion.focus_lost()
         self._press_pointer = None
         self._press_window = None
 
