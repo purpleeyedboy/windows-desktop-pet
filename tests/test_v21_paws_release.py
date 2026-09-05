@@ -27,6 +27,7 @@ def test_version_resource_contains_required_traceability():
 
 def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     text = (ROOT / ".github/workflows/windows-v21-paws.yml").read_text(encoding="utf-8")
+    expected_name = (ROOT / "paws_exe_name.txt").read_text(encoding="utf-8").strip()
     assert "pytest" not in text
     assert ".[dev]" not in text
     assert "build_paws.ps1" in text
@@ -36,6 +37,13 @@ def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     assert "actions/upload-artifact@" in text
     assert "untested-windows-candidate" in text
     assert "pending user Windows acceptance" in text
+    assert expected_name == EXE
+    inline_powershell = text.split("run: |", 1)[1].split(
+        "- uses: actions/upload-artifact@", 1
+    )[0]
+    assert EXE not in inline_powershell
+    assert "Get-Content" in inline_powershell
+    assert "-Encoding UTF8" in inline_powershell
 
 
 def test_release_diff_contains_no_binary_files_and_no_tracked_preview_pngs():

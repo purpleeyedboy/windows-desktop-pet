@@ -28,7 +28,8 @@ jobs:
         run: |
           $exes = @(Get-ChildItem dist -Filter *.exe -File)
           if ($exes.Count -ne 1) { throw "Expected exactly one EXE" }
-          if ($exes[0].Name -ne '桌面宠物_双前肢按压鼠标.exe') { throw "Unexpected EXE" }
+          $expectedName = (Get-Content -LiteralPath 'paws_exe_name.txt' -Encoding UTF8 -Raw).Trim()
+          if ($exes[0].Name -cne $expectedName) { throw "Unexpected EXE name" }
           [PSCustomObject]@{
             Candidate = 'UNTESTED - pending user Windows acceptance'
             Name = $exes[0].Name
