@@ -2,15 +2,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE_NAME = "桌面宠物_空闲随机舔手.exe"
+EXE_NAME = "桌面宠物_空闲舔手返工候选.exe"
 
 
 def test_idle_lick_candidate_spec_is_independent_one_file_with_version_metadata() -> None:
     spec = (ROOT / "desktop_pet_idle_lick.spec").read_text(encoding="utf-8")
     assert "COLLECT(" not in spec
-    assert "name='桌面宠物_空闲随机舔手'" in spec
+    assert "name='桌面宠物_空闲舔手返工候选'" in spec
     assert "version=str(ROOT / 'version_info_idle_lick.txt')" in spec
     assert 'excludes=["numpy", "cv2"]' in spec
+    assert '"assets" / "groom" / "v2.1"' in spec
 
 
 def test_build_marks_candidate_untested_and_checks_unique_size_and_sha256() -> None:
@@ -25,6 +26,7 @@ def test_build_marks_candidate_untested_and_checks_unique_size_and_sha256() -> N
         "debug_menu=false",
         "V2.1_LICK_BUILD.md",
         "git rev-parse --short HEAD",
+        "foundation_git_short_hash",
         "Get-Date -AsUTC",
         "Get-FileHash",
         "MaxCandidateBytes",
@@ -33,6 +35,9 @@ def test_build_marks_candidate_untested_and_checks_unique_size_and_sha256() -> N
     assert "pytest" not in script
     assert "verify_eye_follow_candidate_archive" not in script
     assert "CandidateExes.Count -ne 1" in script
+    assert "activity_coordinator.py" in script
+    assert "assets\\groom\\v2.1\\manifest.json" in script
+    assert "Refusing to publish" in script
 
 
 def test_windows_actions_skips_tests_and_uploads_only_the_checked_candidate() -> None:

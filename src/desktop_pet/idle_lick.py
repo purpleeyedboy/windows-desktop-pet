@@ -3,25 +3,26 @@
 from __future__ import annotations
 
 import math
-import random
 from collections import deque
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
 
-STABILITY_WINDOW_SECONDS = 2.0
-STABILITY_RANGE_LIMIT = 0.02
-IDLE_INTERVAL_MIN_SECONDS = 25.0
-IDLE_INTERVAL_MAX_SECONDS = 70.0
+STABILITY_WINDOW_SECONDS = 60.0
+IDLE_INTERVAL_MIN_SECONDS = 90.0
+IDLE_INTERVAL_MAX_SECONDS = 300.0
 MAX_TICK_GAP_SECONDS = 1.0
 RAISE_SECONDS = 0.12
-LICK_SECONDS = 0.10
-CONTACT_SECONDS = 0.08
-RETRACT_SECONDS = 0.10
+LICK_SECONDS = 0.15
+CONTACT_SECONDS = 0.15
+RETRACT_SECONDS = 0.15
 LOWER_SECONDS = 0.12
 
 LickSide = Literal["left", "right"]
-LickPhase = Literal["neutral", "raise", "lick", "contact", "retract", "lower"]
+LickPhase = Literal[
+    "neutral", "raise", "lick", "extend", "upstroke", "downstroke",
+    "contact", "retract", "lower",
+]
 LickState = Literal["waiting", "active"]
 
 
@@ -55,8 +56,8 @@ class IdleLickMotion:
     deterministic in tests.
     """
 
-    def __init__(self, *, rng: LickRandom | None = None) -> None:
-        self._rng = rng or random.SystemRandom()
+    def __init__(self, *, rng: LickRandom) -> None:
+        self._rng = rng
         self._samples: deque[tuple[float, float, float]] = deque()
         self._last_now: float | None = None
         self._idle_qualified_at: float | None = None
@@ -90,6 +91,10 @@ class IdleLickMotion:
     def pose(self) -> LickPose:
         return self._pose
 
+    @property
+    def idle_qualified(self) -> bool:
+        return self._idle_qualified_at is not None
+
     def sample(
         self,
         now: float,
@@ -118,6 +123,7 @@ class IdleLickMotion:
             self._reset_idle_tracking()
             return self._pose
 
+        # Cursor passage and eye-follow targets are not explicit interaction.
         self._record_target(current, target_x, target_y)
         if not self._target_is_stable(current):
             self._idle_qualified_at = None
@@ -173,11 +179,10 @@ class IdleLickMotion:
             self._samples.popleft()
 
     def _target_is_stable(self, now: float) -> bool:
-        if not self._samples or now - self._samples[0][0] < STABILITY_WINDOW_SECONDS:
-            return False
-        xs = [sample[1] for sample in self._samples]
-        ys = [sample[2] for sample in self._samples]
-        return max(xs) - min(xs) < STABILITY_RANGE_LIMIT and max(ys) - min(ys) < STABILITY_RANGE_LIMIT
+        return bool(
+            self._samples
+            and now - self._samples[0][0] >= STABILITY_WINDOW_SECONDS
+        )
 
     def _start_round(self, now: float) -> None:
         side = self._rng.choice(("left", "right"))

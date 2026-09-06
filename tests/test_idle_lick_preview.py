@@ -1,23 +1,13 @@
 from __future__ import annotations
 
-import json
+import pytest
 
-from PIL import Image
-
+from desktop_pet.lick_compositor import GroomAssetsUnavailable
 from tools.build_idle_lick_preview import build_preview
 
 
-def test_preview_script_writes_only_requested_temporary_output(tmp_path) -> None:
-    source = tmp_path / "source.png"
-    Image.new("RGBA", (512, 768), (120, 90, 60, 255)).save(source)
-    output = tmp_path / "preview"
+def test_preview_refuses_to_generate_placeholder_art_without_reviewed_assets(tmp_path) -> None:
+    with pytest.raises(GroomAssetsUnavailable, match="missing grooming manifest"):
+        build_preview(tmp_path / "missing-assets", tmp_path / "preview")
 
-    report = build_preview(source, output)
-
-    assert sorted(path.name for path in output.iterdir()) == [
-        "idle-lick-contact-sheet.png",
-        "idle-lick-preview.json",
-    ]
-    assert report["frames"] == 10
-    assert report["sides"] == ["left", "right"]
-    assert json.loads((output / "idle-lick-preview.json").read_text())["frames"] == 10
+    assert not (tmp_path / "preview").exists()

@@ -12,9 +12,28 @@ from desktop_pet.idle_lick import (
     RAISE_SECONDS,
     RETRACT_SECONDS,
     LOWER_SECONDS,
+    STABILITY_WINDOW_SECONDS,
     IdleLickMotion,
     LickPose,
 )
+
+
+def test_v21_groom_uses_shared_idle_duration_and_long_random_wait() -> None:
+    from desktop_pet import idle_lick
+
+    assert idle_lick.STABILITY_WINDOW_SECONDS == 60.0
+    assert idle_lick.IDLE_INTERVAL_MIN_SECONDS == 90.0
+    assert idle_lick.IDLE_INTERVAL_MAX_SECONDS == 300.0
+    assert idle_lick.LICK_SECONDS + idle_lick.CONTACT_SECONDS + idle_lick.RETRACT_SECONDS == pytest.approx(0.45)
+
+
+def test_cursor_target_changes_do_not_reset_explicit_interaction_idle() -> None:
+    motion = IdleLickMotion(rng=BoundaryRng(3))
+    for second in range(61):
+        target = (-1.0, 1.0) if second % 2 else (1.0, -1.0)
+        motion.sample(float(second), target)
+
+    assert motion.idle_qualified is True
 
 
 class BoundaryRng:
@@ -39,9 +58,9 @@ class BoundaryRng:
 
 
 def qualify(motion: IdleLickMotion, start: float = 0.0) -> float:
-    for step in range(21):
+    for step in range(round(STABILITY_WINDOW_SECONDS * 10) + 1):
         motion.sample(start + step / 10, (0.1, -0.1))
-    return start + 2.0
+    return start + STABILITY_WINDOW_SECONDS
 
 
 def wait_until(motion: IdleLickMotion, start: float, finish: float) -> LickPose:
@@ -152,7 +171,7 @@ def test_fixed_seed_replays_side_count_and_full_state_sequence() -> None:
     def run() -> list[tuple[object, ...]]:
         motion = IdleLickMotion(rng=Random(7125))
         samples: list[tuple[object, ...]] = []
-        for step in range(4000):
+        for step in range(12000):
             pose = motion.sample(step / 30, (0.0, 0.0))
             samples.append(
                 (motion.state, motion.side, motion.planned_licks, motion.completed_licks, pose)

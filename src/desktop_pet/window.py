@@ -392,7 +392,6 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
-        self.root.bind("<FocusOut>", self._on_focus_out)
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -615,7 +614,6 @@ class PetWindow:
     def set_display_height(self, value: int) -> None:
         if self._closed or not self._rendering_available:
             return
-        self._interrupt_idle_motion()
         anchor = self._anchor()
         try:
             self._apply_image(
@@ -913,7 +911,9 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
-        self._interrupt_idle_motion()
+        interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
+        if callable(interrupt_idle):
+            interrupt_idle()
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
 
@@ -943,24 +943,11 @@ class PetWindow:
         self._press_window = None
 
     def _on_context_menu(self, event: tk.Event) -> None:
-        self._interrupt_idle_motion()
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:
             self.menu.grab_release()
 
     def _on_wheel(self, event: tk.Event) -> None:
-        self._interrupt_idle_motion()
         delta = 24 if event.delta > 0 else -24
         self.set_display_height(self.display_height + delta)
-
-    def _on_focus_out(self, _event: tk.Event) -> None:
-        self._interrupt_idle_motion()
-
-    def _interrupt_idle_motion(self) -> None:
-        interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
-        if callable(interrupt_idle):
-            try:
-                interrupt_idle()
-            except Exception:
-                pass

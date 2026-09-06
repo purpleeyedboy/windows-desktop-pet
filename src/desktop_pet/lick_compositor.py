@@ -1,121 +1,150 @@
-"""Deterministic programmatic RGBA overlay for visible hand licking."""
+"""Asset-driven grooming composition; contains no substitute geometry art."""
 
 from __future__ import annotations
 
-import math
+from dataclasses import dataclass
+import json
+from pathlib import Path
+from typing import Callable, Mapping
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from .idle_lick import LickPose
 
 
-_REFERENCE_SIZE = (512, 768)
-_FUR = (205, 167, 112, 255)
-_FUR_LIGHT = (239, 222, 188, 255)
-_FUR_SHADOW = (139, 101, 62, 220)
-_TONGUE = (229, 105, 123, 245)
-_TONGUE_SHADOW = (164, 61, 82, 230)
+Point = tuple[float, float]
+HeadAnchorMap = Callable[[Point], Point]
 
 
-def compose_lick(frame: Image.Image, pose: LickPose) -> Image.Image:
-    """Composite a raised paw and tongue without changing the source frame.
+class GroomAssetsUnavailable(RuntimeError):
+    """Raised instead of substituting geometric placeholder art."""
 
-    Neutral returns the literal source object so established center-frame and
-    Alpha identity contracts remain untouched.  Active poses are rendered at
-    double resolution and downsampled for deterministic anti-aliased edges.
-    """
 
-    if not isinstance(frame, Image.Image) or frame.mode != "RGBA":
-        raise TypeError("lick compositor requires an RGBA Pillow image")
-    if not isinstance(pose, LickPose):
-        raise TypeError("lick pose must be a LickPose")
+@dataclass(frozen=True)
+class GroomSideLayers:
+    """Validated original-texture layers supplied by the grooming asset pack."""
+
+    paw: Image.Image
+    paw_mask: Image.Image
+    vacancy_fill: Image.Image
+    mouth: Image.Image
+    tongue: Image.Image
+    paw_rest_anchor: Point
+    paw_contact_anchor: Point
+    mouth_anchor: Point
+
+
+@dataclass(frozen=True)
+class GroomAssetBundle:
+    canvas_size: tuple[int, int]
+    sides: Mapping[str, GroomSideLayers]
+
+    def __post_init__(self) -> None:
+        if set(self.sides) != {"left", "right"}:
+            raise ValueError("groom assets require cat-left and cat-right layers")
+        for side, layers in self.sides.items():
+            for name in ("paw", "vacancy_fill", "mouth", "tongue"):
+                image = getattr(layers, name)
+                if image.mode != "RGBA" or image.size != self.canvas_size:
+                    raise ValueError(f"{side} {name} must be canvas-sized RGBA")
+            if layers.paw_mask.mode != "L" or layers.paw_mask.size != self.canvas_size:
+                raise ValueError(f"{side} paw mask must be canvas-sized L")
+
+
+def compose_lick(
+    frame: Image.Image,
+    pose: LickPose,
+    assets: GroomAssetBundle,
+    map_head_anchor: HeadAnchorMap,
+) -> Image.Image:
+    """Move an original paw layer and align real mouth/tongue local layers."""
+
     if pose == LickPose():
         return frame
-    if pose.side not in ("left", "right") or pose.phase == "neutral":
-        raise ValueError("active lick pose requires a side and phase")
-    arm = _unit(pose.arm, "arm")
-    tongue = _unit(pose.tongue, "tongue")
-    if arm == 0.0 and tongue == 0.0:
-        return frame
+    if frame.mode != "RGBA" or frame.size != assets.canvas_size:
+        raise ValueError("groom frame does not match asset canvas")
+    if pose.side not in assets.sides:
+        raise ValueError("groom pose side is unavailable")
+    layers = assets.sides[pose.side]
+    arm = _unit(pose.arm)
+    tongue = _unit(pose.tongue)
+    result = Image.composite(layers.vacancy_fill, frame, layers.paw_mask)
 
-    scale = frame.height / _REFERENCE_SIZE[1]
-    padding_x = (frame.width - _REFERENCE_SIZE[0] * scale) / 2.0
-    supersample = 2
-    overlay = Image.new(
-        "RGBA", (frame.width * supersample, frame.height * supersample), (0, 0, 0, 0)
+    contact = map_head_anchor(layers.paw_contact_anchor)
+    paw_x = layers.paw_rest_anchor[0] + (
+        contact[0] - layers.paw_rest_anchor[0]
+    ) * arm
+    paw_y = layers.paw_rest_anchor[1] + (
+        contact[1] - layers.paw_rest_anchor[1]
+    ) * arm
+    moved_paw = _translate(
+        layers.paw,
+        paw_x - layers.paw_rest_anchor[0],
+        paw_y - layers.paw_rest_anchor[1],
     )
-    draw = ImageDraw.Draw(overlay)
+    result = Image.alpha_composite(result, moved_paw)
 
-    def point(x: float, y: float) -> tuple[int, int]:
-        return (
-            round((padding_x + x * scale) * supersample),
-            round(y * scale * supersample),
-        )
-
-    side_sign = -1.0 if pose.side == "left" else 1.0
-    shoulder_x = 172.0 if pose.side == "left" else 250.0
-    paw_rest_x = 165.0 if pose.side == "left" else 250.0
-    paw_target_x = 91.0 if pose.side == "left" else 139.0
-    paw_x = paw_rest_x + (paw_target_x - paw_rest_x) * arm
-    paw_y = 632.0 + (450.0 - 632.0) * arm
-    if pose.phase == "lick":
-        paw_y -= 5.0
-    elif pose.phase == "retract":
-        paw_y += 7.0
-
-    width = max(2, round(34 * scale * supersample))
-    shadow_width = width + max(2, round(5 * scale * supersample))
-    shoulder = point(shoulder_x, 570.0)
-    paw = point(paw_x, paw_y)
-    draw.line((shoulder, paw), fill=_FUR_SHADOW, width=shadow_width)
-    draw.line((shoulder, paw), fill=_FUR, width=width)
-    radius_x = 24.0
-    radius_y = 19.0
-    paw_box = (
-        *point(paw_x - radius_x, paw_y - radius_y),
-        *point(paw_x + radius_x, paw_y + radius_y),
+    mouth = _translate_to_anchor(
+        layers.mouth,
+        layers.mouth_anchor,
+        map_head_anchor(layers.mouth_anchor),
     )
-    draw.ellipse(paw_box, fill=_FUR, outline=_FUR_LIGHT, width=max(1, round(3 * scale * supersample)))
-    for claw_offset in (-9.0, 0.0, 9.0):
-        start = point(paw_x + claw_offset, paw_y - 2.0)
-        end = point(paw_x + claw_offset + side_sign * 2.0, paw_y + 8.0)
-        draw.line((start, end), fill=_FUR_SHADOW, width=max(1, round(scale * supersample)))
-
+    result = Image.alpha_composite(result, mouth)
     if tongue > 0.0:
-        mouth_x = 109.0
-        mouth_y = 397.0
-        tongue_length = 35.0 * tongue
-        tongue_width = 11.0 + 5.0 * tongue
-        tongue_end = point(
-            mouth_x + side_sign * tongue_length * 0.45,
-            mouth_y + tongue_length,
+        tongue_target = (
+            contact[0] + (map_head_anchor(layers.mouth_anchor)[0] - contact[0]) * (1.0 - tongue),
+            contact[1] + (map_head_anchor(layers.mouth_anchor)[1] - contact[1]) * (1.0 - tongue),
         )
-        draw.line(
-            (point(mouth_x, mouth_y), tongue_end),
-            fill=_TONGUE_SHADOW,
-            width=max(2, round((tongue_width + 3) * scale * supersample)),
+        tongue_layer = _translate_to_anchor(
+            layers.tongue,
+            layers.paw_contact_anchor,
+            tongue_target,
         )
-        draw.line(
-            (point(mouth_x, mouth_y), tongue_end),
-            fill=_TONGUE,
-            width=max(2, round(tongue_width * scale * supersample)),
-        )
-        radius = max(2, round(tongue_width * scale * supersample / 2))
-        draw.ellipse(
-            (tongue_end[0] - radius, tongue_end[1] - radius,
-             tongue_end[0] + radius, tongue_end[1] + radius),
-            fill=_TONGUE,
-        )
-
-    overlay = overlay.resize(frame.size, Image.Resampling.LANCZOS)
-    return Image.alpha_composite(frame, overlay)
+        result = Image.alpha_composite(result, tongue_layer)
+    return result
 
 
-def _unit(value: object, name: str) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError(f"lick {name} must be finite") from error
-    if not math.isfinite(result) or not 0.0 <= result <= 1.0:
-        raise ValueError(f"lick {name} must be within 0..1")
+def load_groom_assets(root: Path) -> GroomAssetBundle:
+    """Load the future reviewed local-layer pack according to its manifest."""
+
+    root = Path(root)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        raise GroomAssetsUnavailable(f"missing grooming manifest: {manifest_path}")
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    canvas = tuple(data["canvas_size"])
+    sides = {}
+    for side in ("left", "right"):
+        entry = data["sides"][side]
+        images = {}
+        for name in ("paw", "vacancy_fill", "mouth", "tongue"):
+            images[name] = Image.open(root / entry[name]).convert("RGBA")
+        mask = Image.open(root / entry["paw_mask"]).convert("L")
+        sides[side] = GroomSideLayers(
+            images["paw"], mask, images["vacancy_fill"], images["mouth"],
+            images["tongue"], tuple(entry["paw_rest_anchor"]),
+            tuple(entry["paw_contact_anchor"]), tuple(entry["mouth_anchor"]),
+        )
+    return GroomAssetBundle(canvas, sides)
+
+
+def _translate_to_anchor(
+    image: Image.Image, source: Point, target: Point
+) -> Image.Image:
+    return _translate(image, target[0] - source[0], target[1] - source[1])
+
+
+def _translate(image: Image.Image, dx: float, dy: float) -> Image.Image:
+    return image.transform(
+        image.size,
+        Image.Transform.AFFINE,
+        (1.0, 0.0, -dx, 0.0, 1.0, -dy),
+        Image.Resampling.BICUBIC,
+    )
+
+
+def _unit(value: float) -> float:
+    result = float(value)
+    if not 0.0 <= result <= 1.0:
+        raise ValueError("groom channel must be within 0..1")
     return result

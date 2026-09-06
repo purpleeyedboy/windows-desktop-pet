@@ -17,6 +17,7 @@ datas = [
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
+    (str(ROOT / "assets" / "groom" / "v2.1"), "assets/groom/v2.1"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
     (str(BUILD_INFO), "."),
 ]
@@ -33,7 +34,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name='桌面宠物_空闲随机舔手', debug=False,
+    name='桌面宠物_空闲舔手返工候选', debug=False,
     bootloader_ignore_signals=False, strip=False, upx=True,
     upx_exclude=[], runtime_tmpdir=None, console=False,
     disable_windowed_traceback=False, argv_emulation=False,
