@@ -12,6 +12,7 @@ SOURCE_FALLBACK = {
     "build_date": "source checkout",
     "git_short_hash": "not packaged",
     "baseline": "BASE-001",
+    "foundation_commit": "not integrated",
     "enabled_features": ["既有基线", "双耳点击反馈"],
     "channel": "未自动测试；等待用户 Windows 实机验收的候选版",
     "documentation_baseline": "V2.1-EARS",
@@ -37,8 +38,18 @@ def format_build_metadata() -> str:
             f"构建日期：{value['build_date']}",
             f"Git：{value['git_short_hash']}",
             f"基础标签：{value['baseline']}",
+            f"公共基础提交：{value['foundation_commit']}",
             f"启用功能：{features}",
             f"渠道：{value['channel']}",
             f"文档基线：{value['documentation_baseline']}",
         )
+    )
+
+
+def runtime_window_title() -> str:
+    value = load_build_metadata()
+    return (
+        "桌面宠物 | "
+        f"{value['product_version']} | {value['git_short_hash']} | "
+        f"基础 {value['foundation_commit']} | V2.1-EARS 测试"
     )

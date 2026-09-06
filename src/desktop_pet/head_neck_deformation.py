@@ -529,6 +529,7 @@ class ContinuousHeadNeckCompositor:
         )
         self._last_rotation_degrees = 0.0
         self._last_arc = 0.0
+        self._last_pose = HeadPose(0.0, 0.0)
         self._padded_body_backplate = (
             self._pad_layer(self._body_backplate)
             if self._body_backplate is not None
@@ -557,6 +558,29 @@ class ContinuousHeadNeckCompositor:
             left <= x < right and top <= y < bottom
             for left, top, right, bottom in self._base_eye_interaction_boxes
         )
+
+    def map_head_point(
+        self, point: tuple[float, float]
+    ) -> tuple[float, float]:
+        """Map an approved neutral landmark through the latest head pose."""
+        source_x = _finite_real(point[0], "point x")
+        source_y = _finite_real(point[1], "point y")
+        pose = self._last_pose
+        x, y = source_x, source_y
+        for _ in range(5):
+            offset_x, offset_y = _sampling_offset(x, y, pose)
+            x = source_x - offset_x
+            y = source_y - offset_y
+        x += self._layer_padding_x
+        if pose.rotation_degrees != 0.0:
+            pivot_x = _TILT_PIVOT[0] + self._layer_padding_x
+            pivot_y = _TILT_PIVOT[1]
+            dx, dy = x - pivot_x, y - pivot_y
+            angle = math.radians(pose.rotation_degrees)
+            cosine, sine = math.cos(angle), math.sin(angle)
+            x = pivot_x + cosine * dx + sine * dy
+            y = pivot_y - sine * dx + cosine * dy
+        return x, y
 
     def sampling_offset_at(
         self,
@@ -711,6 +735,7 @@ class ContinuousHeadNeckCompositor:
 
         self._last_rotation_degrees = pose.rotation_degrees
         self._last_arc = pose.arc
+        self._last_pose = pose
         if self._body_backplate is None:
             return deformed
         if pose.rotation_degrees == 0.0:

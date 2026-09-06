@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
-    [switch]$CleanupOnly
+    [switch]$CleanupOnly,
+    [string]$FoundationCommit = $env:V21_FOUNDATION_COMMIT
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +11,7 @@ $VirtualEnvPython = Join-Path $RepositoryRoot ".venv\Scripts\python.exe"
 $Python = if (Test-Path -LiteralPath $VirtualEnvPython) { $VirtualEnvPython } else { "python" }
 $DistDirectory = Join-Path $RepositoryRoot "dist-ears-candidate"
 $WorkDirectory = Join-Path $RepositoryRoot "build-ears-candidate"
-$CandidateName = "桌面宠物_双耳点击反馈.exe"
+$CandidateName = "桌面宠物_双耳点击反馈_REPAIR-20260906.exe"
 $MaxCandidateBytes = 52428800
 
 function Get-ValidatedChildPath([string]$ChildPath) {
@@ -65,6 +66,12 @@ if ($CleanupOnly) {
 
 Push-Location $RepositoryRoot
 try {
+    $env:PYTHONPATH = Join-Path $RepositoryRoot "src"
+    if ([string]::IsNullOrWhiteSpace($FoundationCommit)) {
+        throw "Unified PR5 foundation is not integrated; refusing to publish an acceptance candidate."
+    }
+    & $Python -c "from desktop_pet.activity_coordinator import ActivityCoordinator; from desktop_pet.input_router import InputRouter"
+    if ($LASTEXITCODE -ne 0) { throw "Unified PR5 foundation API is unavailable; refusing to package." }
     $basePrefix = & $Python -c "import sys; print(sys.base_prefix)"
     if ($LASTEXITCODE -ne 0) { throw "Failed to resolve Python base prefix; exit code $LASTEXITCODE." }
     $basePrefix = $basePrefix.Trim()
@@ -80,6 +87,7 @@ try {
         build_date = $BuildDate
         git_short_hash = $GitShortHash
         baseline = "BASE-001"
+        foundation_commit = $FoundationCommit
         enabled_features = @("既有基线", "双耳点击反馈")
         channel = "未自动测试；等待用户 Windows 实机验收的候选版"
         documentation_baseline = "V2.1-EARS"

@@ -58,7 +58,7 @@ def test_preview_is_deterministic_temporary_output_not_a_tracked_png(tmp_path) -
     build_preview(second)
 
     assert first.read_bytes() == second.read_bytes()
-    assert Image.open(first).size == (3072, 1536)
+    assert Image.open(first).size == (4608, 768)
     assert "qa/v21-ears-preview.png" not in _git("ls-files").splitlines()
     assert "/qa/v21-ears-preview.png" in (ROOT / ".gitignore").read_text(
         encoding="utf-8"
@@ -75,5 +75,5 @@ def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None
     assert "-SkipTests" not in workflow
     assert "未自动测试" in workflow
     assert 'if ($exes.Count -ne 1)' in workflow
-    assert "桌面宠物_双耳点击反馈.exe" in workflow
+    assert "桌面宠物_双耳点击反馈_REPAIR-20260906.exe" in workflow
     assert "Get-FileHash" in workflow

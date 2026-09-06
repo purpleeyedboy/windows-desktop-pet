@@ -6,7 +6,7 @@ VSVersionInfo(
     StringStruct('FileDescription', '桌面宠物 V2.1 双耳点击反馈（未自动测试候选版）'),
     StringStruct('FileVersion', '2.1.1.0'),
     StringStruct('InternalName', 'desktop_pet'),
-    StringStruct('OriginalFilename', '桌面宠物_双耳点击反馈.exe'),
+    StringStruct('OriginalFilename', '桌面宠物_双耳点击反馈_REPAIR-20260906.exe'),
     StringStruct('ProductName', '桌面宠物'),
     StringStruct('ProductVersion', '2.1.1.0')
   ])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])]

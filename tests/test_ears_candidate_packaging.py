@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE = "桌面宠物_双耳点击反馈.exe"
+EXE = "桌面宠物_双耳点击反馈_REPAIR-20260906.exe"
 
 
 def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> None:
@@ -28,6 +28,10 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "validate_dialogue.py" not in script
     assert "verify_eye_follow_candidate_archive.py" not in script
     assert "未自动测试" in script
+    assert "V21_FOUNDATION_COMMIT" in script
+    assert "activity_coordinator import ActivityCoordinator" in script
+    assert "input_router import InputRouter" in script
+    assert "refusing to publish an acceptance candidate" in script
     assert script.index("Clear-CandidateOutputs") < script.index("-m PyInstaller")
     assert "filevers=(2, 1, 1, 0)" in version
     assert EXE in version
@@ -48,4 +52,5 @@ def test_windows_ears_workflow_checks_only_expected_exe_size_hash_and_upload() -
     assert "actions/upload-artifact@" in workflow
     assert workflow.count("actions/upload-artifact@") == 1
     assert "未自动测试" in workflow
+    assert "V21_FOUNDATION_COMMIT" in workflow
     assert "secrets." not in workflow.lower()

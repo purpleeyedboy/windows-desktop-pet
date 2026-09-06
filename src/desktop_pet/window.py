@@ -10,13 +10,21 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Callable, Protocol, Sequence
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .animation import AnimationController
 from .bubble import BubbleWindow
-from .build_metadata import format_build_metadata
+from .build_metadata import format_build_metadata, runtime_window_title
 from .dialogue import DialogueChooser, load_phrase_pools
-from .ear_interaction import EarHitMasks, EarMotionController, EarSide, deform_ear
+from .ear_interaction import (
+    EarActionContext,
+    EAR_ASSETS,
+    EarFeatureAdapter,
+    EarHitMasks,
+    EarPose,
+    EarSide,
+    render_ear_pose,
+)
 from .eye_follow import CursorProvider
 from .eye_runtime import (
     ActionFailure,
@@ -43,6 +51,8 @@ TILT_MENU_ITEMS = (
 )
 CLICK_THRESHOLD = 8
 MONITOR_DEFAULTTONEAREST = 2
+SM_CXDRAG = 68
+SM_CYDRAG = 69
 
 
 class WinRect(ctypes.Structure):
@@ -193,6 +203,12 @@ class _CachedCenterCompositor:
             for left, top, right, bottom in self.eye_interaction_boxes
         )
 
+    def map_head_point(self, point: tuple[float, float]) -> tuple[float, float]:
+        mapper = getattr(self._compositor, "map_head_point", None)
+        if callable(mapper):
+            return mapper(point)
+        return point
+
 
 @dataclass(frozen=True)
 class _PresentationSnapshot:
@@ -226,6 +242,27 @@ def screen_work_area_for_rect(rect: Rect, fallback: Rect) -> Rect:
         ctypes.byref(native_rect), MONITOR_DEFAULTTONEAREST
     )
     return _monitor_work_area(user32, monitor, fallback)
+
+
+def system_drag_threshold(window_id: int) -> tuple[int, int]:
+    if os.name != "nt":
+        return CLICK_THRESHOLD, CLICK_THRESHOLD
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    dpi = 96
+    get_dpi = getattr(user32, "GetDpiForWindow", None)
+    if get_dpi is not None:
+        get_dpi.argtypes = [wintypes.HWND]
+        get_dpi.restype = wintypes.UINT
+        dpi = int(get_dpi(window_id)) or 96
+    get_metric = getattr(user32, "GetSystemMetricsForDpi", None)
+    if get_metric is None:
+        return CLICK_THRESHOLD, CLICK_THRESHOLD
+    get_metric.argtypes = [ctypes.c_int, wintypes.UINT]
+    get_metric.restype = ctypes.c_int
+    return (
+        max(1, int(get_metric(SM_CXDRAG, dpi))),
+        max(1, int(get_metric(SM_CYDRAG, dpi))),
+    )
 
 
 class PetWindow:
@@ -265,8 +302,14 @@ class PetWindow:
         self._resized_image = self._current_image
         self._press_pointer: tuple[int, int] | None = None
         self._press_window: tuple[int, int] | None = None
+        self._ear_press_candidate: EarSide | None = None
+        self._ear_press_dragged = False
         self._latest_composed_frame: Image.Image | None = None
-        self._ear_amount = 0.0
+        self._ear_pose = EarPose()
+        self._ear_context: EarActionContext | None = None
+        self._ear_action_sequence = 0
+        self._ear_point_mapper_callback = None
+        self._clock = clock
         self._closed = False
         self._legacy_fallback = bool(legacy_mode)
         self._rendering_available = True
@@ -295,7 +338,7 @@ class PetWindow:
         )
 
         try:
-            root.title("桌面宠物")
+            root.title(runtime_window_title())
             root.overrideredirect(True)
             root.configure(cursor="hand2")
             root.attributes("-topmost", True)
@@ -313,10 +356,12 @@ class PetWindow:
                 self._animation_finished,
                 cancel=self._cancel_after,
             )
-            self._ear_motion = EarMotionController(
+            self._ear_adapter = EarFeatureAdapter(
                 self._schedule_ear,
                 self._cancel_after,
+                clock,
                 self._display_ear_feedback,
+                self._ear_recovered,
             )
             self._topmost_var = tk.BooleanVar(root, value=True)
             self.menu = self._create_menu()
@@ -330,6 +375,7 @@ class PetWindow:
                 self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
                 self._eye_source_size = tuple(cached_compositor.source_size)
                 self._eye_hit_test = cached_compositor.hit_test_eye
+                self._ear_point_mapper_callback = cached_compositor.map_head_point
                 self.eye_session = RuntimeEyeSession(
                     compositor=cached_compositor,
                     cursor_provider=cursor_provider,
@@ -392,7 +438,12 @@ class PetWindow:
             command=lambda: self.set_always_on_top(self._topmost_var.get()),
         )
         menu.add_separator()
-        menu.add_command(label="调试信息", command=self.show_debug_info)
+        debug = tk.Menu(menu, tearoff=False)
+        debug.add_command(label="关于 / 运行状态", command=self.show_debug_info)
+        debug.add_command(label="立即触发：猫自身左耳", command=lambda: self._request_ear_action("left"))
+        debug.add_command(label="立即触发：猫自身右耳", command=lambda: self._request_ear_action("right"))
+        debug.add_command(label="显示耳区 / 锚点", command=self._show_ear_debug_overlay)
+        menu.add_cascade(label="调试", menu=debug)
         menu.add_command(label="退出", command=self.close)
         return menu
 
@@ -402,6 +453,21 @@ class PetWindow:
             format_build_metadata(),
             parent=self.root,
         )
+
+    def _show_ear_debug_overlay(self) -> None:
+        frame = self._latest_composed_frame
+        if frame is None or self._closed:
+            return
+        overlay = frame.copy()
+        draw = ImageDraw.Draw(overlay)
+        mapper = self._ear_point_mapper() or (lambda point: point)
+        for side, color in (("left", "#35ff72"), ("right", "#38b6ff")):
+            asset = EAR_ASSETS[side]
+            polygon = tuple(mapper(point) for point in asset.polygon)
+            draw.line(polygon + (polygon[0],), fill=color, width=2)
+            x, y = mapper(asset.root)
+            draw.ellipse((x - 3, y - 3, x + 3, y + 3), outline=color, width=2)
+        self._apply_image(overlay, self._anchor())
 
     def _bind_events(self) -> None:
         self.root.bind("<ButtonPress-1>", self._on_left_press)
@@ -696,7 +762,8 @@ class PetWindow:
         self._trigger_action(action)
 
     def trigger_blink(self) -> None:
-        self._ear_motion.interrupt()
+        if self._ear_adapter.active:
+            return
         if (
             self._closed
             or not self._rendering_available
@@ -707,7 +774,8 @@ class PetWindow:
         self.eye_session.request_blink()
 
     def trigger_idle_tilt(self, mode: TiltMode) -> None:
-        self._ear_motion.interrupt()
+        if self._ear_adapter.active:
+            return
         if mode not in TILT_MODES:
             raise ValueError("idle tilt mode is invalid")
         if (
@@ -720,7 +788,7 @@ class PetWindow:
         self.eye_session.request_idle_tilt(mode)
 
     def _trigger_action(self, action: str | None) -> None:
-        self._ear_motion.interrupt()
+        self._cancel_ear_for_interruption()
         if (
             self._closed
             or not self._rendering_available
@@ -814,11 +882,12 @@ class PetWindow:
             raise TypeError("eye compositor must return a Pillow image")
         self._latest_composed_frame = frame
         displayed = frame
-        if self._ear_motion.active_side is not None and self._ear_amount > 0.0:
-            displayed = deform_ear(
+        if self._ear_adapter.active and self._ear_context is not None:
+            displayed = render_ear_pose(
                 frame,
-                self._ear_motion.active_side,
-                self._ear_amount,
+                self._ear_context.action_id.rsplit(":", 1)[-1],
+                self._ear_pose,
+                map_head_point=self._ear_point_mapper(),
             )
         self._apply_image(displayed, self._anchor())
         if self._neutral_center_frame is None:
@@ -862,21 +931,54 @@ class PetWindow:
 
         return self.root.after(delay_ms, guarded_callback)
 
-    def _display_ear_feedback(self, sample: tuple[EarSide, float]) -> None:
-        side, amount = sample
-        self._ear_amount = amount
+    def _display_ear_feedback(self, side: EarSide, pose: EarPose) -> None:
+        self._ear_pose = pose
         frame = self._latest_composed_frame
         if frame is None or self._closed or not self._rendering_available:
             return
-        displayed = frame if amount == 0.0 else deform_ear(frame, side, amount)
+        displayed = render_ear_pose(
+            frame,
+            side,
+            pose,
+            map_head_point=self._ear_point_mapper(),
+        )
         self._apply_image(displayed, self._anchor())
+
+    def _ear_point_mapper(self):
+        return self._ear_point_mapper_callback
+
+    def _request_ear_action(self, side: EarSide) -> bool:
+        if self._closed or not self._rendering_available or self._ear_adapter.active:
+            return False
+        self._ear_action_sequence += 1
+        context = EarActionContext(
+            action_id=f"ear:{side}",
+            state_version=self._ear_action_sequence,
+            cancel_token=object(),
+        )
+        self._ear_context = context
+        accepted = self._ear_adapter.start_approved(side, context)
+        if accepted:
+            return True
+        self._ear_context = None
+        return accepted
+
+    def _cancel_ear_for_interruption(self) -> None:
+        if self._ear_context is not None:
+            self._ear_adapter.cancel_and_recover(self._ear_context)
+
+    def _ear_recovered(self, context: EarActionContext, safe: bool) -> None:
+        if context != self._ear_context or not safe:
+            return
+        self._ear_pose = EarPose()
+        self._ear_context = None
 
     def _point_in_ear_region(self, point: tuple[int, int]) -> EarSide | None:
         frame = self._latest_composed_frame
         rect = self._window_rect
         if frame is None or rect.width <= 0 or rect.height <= 0:
             return None
-        masks = EarHitMasks.from_frame(frame)
+        masks = EarHitMasks.from_frame(frame, self._ear_point_mapper())
         return masks.hit_display(
             (point[0] - rect.x, point[1] - rect.y),
             (rect.width, rect.height),
@@ -960,7 +1062,8 @@ class PetWindow:
     def close(self) -> None:
         if self._closed:
             return
-        self._ear_motion.stop()
+        if self._ear_context is not None:
+            self._ear_adapter.cancel_and_recover(self._ear_context)
         self._closed = True
         if self.eye_session is not None:
             self.eye_session.stop()
@@ -975,28 +1078,29 @@ class PetWindow:
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
+        if self._ear_adapter.active:
+            self._ear_press_candidate = None
+            return
         ear = self._point_in_ear_region((event.x_root, event.y_root))
         if ear is not None:
-            self._press_pointer = None
-            self._press_window = None
-            self._ear_motion.press(ear)
+            self._ear_press_candidate = ear
+            self._ear_press_dragged = False
+            self._press_pointer = (event.x_root, event.y_root)
+            self._press_window = (self._window_rect.x, self._window_rect.y)
             return
-        self._ear_motion.interrupt()
+        self._ear_press_candidate = None
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
 
     def _on_left_motion(self, event: tk.Event) -> None:
-        if self._ear_motion.active_side is not None:
-            hovered = self._point_in_ear_region((event.x_root, event.y_root))
-            if hovered != self._ear_motion.active_side:
-                self._ear_motion.pointer_left()
-            return
         if self._press_pointer is None or self._press_window is None:
             return
         delta_x = event.x_root - self._press_pointer[0]
         delta_y = event.y_root - self._press_pointer[1]
-        if abs(delta_x) + abs(delta_y) < CLICK_THRESHOLD:
+        drag_x, drag_y = system_drag_threshold(self.root.winfo_id())
+        if abs(delta_x) < drag_x and abs(delta_y) < drag_y:
             return
+        self._ear_press_dragged = self._ear_press_candidate is not None
         try:
             self._move_to(
                 self._press_window[0] + delta_x,
@@ -1007,12 +1111,21 @@ class PetWindow:
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
     def _on_left_release(self, event: tk.Event) -> None:
-        if self._ear_motion.active_side is not None:
-            side = self._ear_motion.active_side
-            if self._point_in_ear_region((event.x_root, event.y_root)) == side:
-                self._ear_motion.release(side)
-            else:
-                self._ear_motion.pointer_left()
+        candidate = self._ear_press_candidate
+        if candidate is not None:
+            exceeded = self._ear_press_dragged
+            if self._press_pointer is not None:
+                drag_x, drag_y = system_drag_threshold(self.root.winfo_id())
+                exceeded = exceeded or (
+                    abs(event.x_root - self._press_pointer[0]) >= drag_x
+                    or abs(event.y_root - self._press_pointer[1]) >= drag_y
+                )
+            same_ear = self._point_in_ear_region((event.x_root, event.y_root)) == candidate
+            if not exceeded and same_ear:
+                self._request_ear_action(candidate)
+            self._ear_press_candidate = None
+            self._press_pointer = None
+            self._press_window = None
             return
         if self._press_pointer is not None:
             self.handle_left_release(
@@ -1023,10 +1136,13 @@ class PetWindow:
         self._press_window = None
 
     def _on_pointer_leave(self, _event: tk.Event | None) -> None:
-        self._ear_motion.pointer_left()
+        if self._ear_press_candidate is not None and not self._ear_press_dragged:
+            self._ear_press_candidate = None
 
     def _on_focus_lost(self, _event: tk.Event | None) -> None:
-        self._ear_motion.focus_lost()
+        if self._ear_context is not None:
+            self._ear_adapter.cancel_and_recover(self._ear_context)
+        self._ear_press_candidate = None
         self._press_pointer = None
         self._press_window = None
 

@@ -11,6 +11,7 @@ from .window import PetWindow
 
 
 ERROR_ALREADY_EXISTS = 183
+SW_RESTORE = 9
 
 
 def build_mutex_name() -> str:
@@ -76,6 +77,38 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
         ctypes.windll.user32.MessageBoxW(None, message, "桌面宠物无法启动", 0x10)
 
 
+def notify_existing_instance() -> None:
+    """Activate the existing pet when possible and never fail silently."""
+    if os.name != "nt":
+        return
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    matches: list[tuple[int, str]] = []
+    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    @callback_type
+    def collect(hwnd, _parameter):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length:
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buffer, length + 1)
+            if buffer.value.startswith("桌面宠物"):
+                matches.append((int(hwnd), buffer.value))
+        return True
+
+    user32.EnumWindows(collect, None)
+    hwnd, running_version = matches[0] if matches else (0, "旧实例未报告版本")
+    if hwnd:
+        user32.ShowWindow(ctypes.c_void_p(hwnd), SW_RESTORE)
+        user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+    user32.MessageBoxW(
+        None,
+        f"已有桌面宠物实例正在运行：\n{running_version}\n\n"
+        "已尝试激活该实例；本次 V2.1-EARS 版本未启动。",
+        "桌面宠物版本提示",
+        0x40,
+    )
+
+
 def main() -> int:
     enable_per_monitor_dpi_awareness()
     mutex = SingleInstanceMutex(build_mutex_name())
@@ -83,6 +116,7 @@ def main() -> int:
     pet_window: PetWindow | None = None
     try:
         if not mutex.acquire():
+            notify_existing_instance()
             return 0
         root = tk.Tk()
         root.withdraw()
@@ -96,6 +130,7 @@ def main() -> int:
             cursor_provider=cursor_provider,
             head_follow=True,
         )
+        pet_window.show_debug_info()
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:

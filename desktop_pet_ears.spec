@@ -22,6 +22,7 @@ METADATA = Path(os.environ["DESKTOP_PET_BUILD_METADATA"])
 
 datas = [
     (str(METADATA), "."),
+    (str(ROOT / "src" / "desktop_pet" / "ear_asset_manifest.json"), "desktop_pet"),
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
@@ -50,7 +51,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_双耳点击反馈',
+    name='桌面宠物_双耳点击反馈_REPAIR-20260906',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -13,17 +13,23 @@ ROOT = Path(__file__).resolve().parents[1]
 if __package__ in {None, ""}:
     sys.path.insert(0, str(ROOT / "src"))
 
-from desktop_pet.ear_interaction import deform_ear  # noqa: E402
+from desktop_pet.ear_interaction import (  # noqa: E402
+    render_ear_pose,
+    sample_ear_pose,
+)
 
 
 def build_preview(output: Path) -> Path:
     source = Image.open(
         ROOT / "assets/rig/v1/source/canonical-idle.png"
     ).convert("RGBA")
-    frames = (
-        ("neutral", source),
-        ("left pressed", deform_ear(source, "left", 1.0)),
-        ("right pressed", deform_ear(source, "right", 1.0)),
+    moments = (0.0, 0.03, 0.06, 0.09, 0.12, 0.18, 0.30, 0.43, 0.55)
+    frames = tuple(
+        (
+            f"left {moment:.2f}s",
+            render_ear_pose(source, "left", sample_ear_pose("left", moment)),
+        )
+        for moment in moments
     )
     sheet = Image.new(
         "RGBA",
@@ -38,7 +44,7 @@ def build_preview(output: Path) -> Path:
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     sheet.resize(
-        (sheet.width * 2, sheet.height * 2),
+        (sheet.width, sheet.height),
         Image.Resampling.NEAREST,
     ).save(output, optimize=False)
     return output
