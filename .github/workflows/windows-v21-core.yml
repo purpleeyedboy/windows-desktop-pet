@@ -25,7 +25,7 @@ jobs:
         run: |
           $exes = @(Get-ChildItem -LiteralPath dist-v21-core -Filter *.exe -File)
           if ($exes.Count -ne 1) { throw "Expected one EXE" }
-          if ($exes[0].Name -ne '桌面宠物_V2.1公共基础架构.exe') { throw "Unexpected EXE" }
+          if ($exes[0].Name -ne '桌面宠物_公共基础接线与版本识别修复.exe') { throw "Unexpected EXE" }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
           "UNTESTED CANDIDATE — pending user Windows acceptance" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Candidate size: $($exes[0].Length) bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
@@ -33,6 +33,6 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: desktop-pet-v2-1-core
-          path: dist-v21-core/桌面宠物_V2.1公共基础架构.exe
+          path: dist-v21-core/桌面宠物_公共基础接线与版本识别修复.exe
           retention-days: 7
           if-no-files-found: error

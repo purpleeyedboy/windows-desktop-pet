@@ -8,6 +8,7 @@ class Scheduler(Protocol):
 
 FrameCallback = Callable[[str, int], None]
 FinishedCallback = Callable[[str], None]
+FinishedWithIdCallback = Callable[[str, str], None]
 CancelCallback = Callable[[object], None]
 
 
@@ -15,8 +16,9 @@ _SCHEDULING = object()
 
 
 class _PlayOutcome:
-    def __init__(self, generation: int) -> None:
+    def __init__(self, generation: int, playback_id: str | None) -> None:
         self.generation = generation
+        self.playback_id = playback_id
         self.completed = False
         self.phase = "in_flight"
 
@@ -30,6 +32,7 @@ class AnimationController:
         finished: FinishedCallback,
         interval_ms: int = 90,
         cancel: CancelCallback | None = None,
+        finished_with_id: FinishedWithIdCallback | None = None,
     ) -> None:
         self._frame_counts = dict(frame_counts)
         for action, count in self._frame_counts.items():
@@ -42,6 +45,7 @@ class AnimationController:
         self._finished = finished
         self._interval_ms = interval_ms
         self._cancel = cancel
+        self._finished_with_id = finished_with_id
         self._action: str | None = None
         self._index = 0
         self._generation = 0
@@ -55,7 +59,7 @@ class AnimationController:
     def busy(self) -> bool:
         return self._action is not None
 
-    def play(self, action: str) -> bool:
+    def play(self, action: str, *, playback_id: str | None = None) -> bool:
         if self._attempts:
             parent = self._attempts[-1]
             if not (
@@ -73,7 +77,7 @@ class AnimationController:
         generation = self._generation
         self._action = action
         self._index = 1
-        outcome = _PlayOutcome(generation)
+        outcome = _PlayOutcome(generation, playback_id)
         self._attempts.append(outcome)
         try:
             try:
@@ -208,7 +212,10 @@ class AnimationController:
         previous_phase = outcome.phase
         outcome.phase = "finished_handoff"
         try:
-            self._finished(action)
+            if outcome.playback_id is not None and self._finished_with_id is not None:
+                self._finished_with_id(action, outcome.playback_id)
+            else:
+                self._finished(action)
         except Exception:
             self._abort_descendant_after(handoff_generation)
             raise

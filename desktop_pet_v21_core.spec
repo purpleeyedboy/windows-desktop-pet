@@ -22,6 +22,7 @@ datas = [
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
+    (str(ROOT / "build-v21-core" / "build_identity.json"), "."),
 ]
 datas.extend((str(EYE_SOURCE / file_name), EYE_RUNTIME) for file_name in EYE_FILES)
 
@@ -52,7 +53,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_V2.1公共基础架构',
+    name='桌面宠物_公共基础接线与版本识别修复',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -66,4 +67,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version=str(ROOT / 'build-v21-core' / 'version_info.txt'),
+    manifest=str(ROOT / 'desktop_pet_v21_core.manifest'),
 )

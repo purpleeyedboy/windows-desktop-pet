@@ -3,15 +3,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE_NAME = "桌面宠物_V2.1公共基础架构.exe"
+EXE_NAME = "桌面宠物_公共基础接线与版本识别修复.exe"
 
 
 def test_core_spec_builds_one_exe_without_offline_tooling():
     spec = (ROOT / "desktop_pet_v21_core.spec").read_text(encoding="utf-8")
-    assert "name='桌面宠物_V2.1公共基础架构'" in spec
+    assert "name='桌面宠物_公共基础接线与版本识别修复'" in spec
     assert "COLLECT(" not in spec
     assert 'excludes=["numpy", "cv2"]' in spec
     assert "version=str(ROOT / 'build-v21-core' / 'version_info.txt')" in spec
+    assert "desktop_pet_v21_core.manifest" in spec
     for module in ("actions", "config", "persistence", "platform", "sources"):
         assert f'"desktop_pet.foundation.{module}"' in spec
 
@@ -21,8 +22,8 @@ def test_core_build_embeds_required_metadata_and_verifies_unique_hash():
     assert path.read_bytes().startswith(codecs.BOM_UTF8)
     script = path.read_text(encoding="utf-8")
     for required in (
-        "2.1.0", "V2.1-CORE", "common-foundation", "Test build: false",
-        "Debug menu: false", "BASE-001", "git rev-parse --short HEAD",
+        "2.1.0", "V2.1-CORE", "common-foundation", "Test build: true",
+        "Debug menu: true", "BASE-001", "git rev-parse --short HEAD",
         "Get-Date -AsUTC", EXE_NAME, "Get-FileHash", "SHA-256",
     ):
         assert required in script
