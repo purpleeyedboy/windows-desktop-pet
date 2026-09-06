@@ -5,14 +5,9 @@ import sys
 from pathlib import Path
 
 REQUIRED_MODULES = (
-    "desktop_pet.feed_core.model",
-    "desktop_pet.feed_core.validation",
-    "desktop_pet.feed_core.journal",
-    "desktop_pet.feed_core.coordinator",
-    "desktop_pet.feed_core.adapters",
+    "desktop_pet.feed_core.foundation_contract",
     "desktop_pet.feed_core.wiring",
     "desktop_pet.feed_core.windows_drop",
-    "desktop_pet.feed_core.windows_recycle",
 )
 
 

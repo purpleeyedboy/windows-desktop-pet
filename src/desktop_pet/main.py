@@ -8,7 +8,7 @@ from tkinter import messagebox
 from .assets import load_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
-from .feed_core.wiring import FeedRuntime
+from .feed_core.foundation_contract import FoundationFeedInputAdapter, foundation_feed_ready, load_foundation_services
 from .feed_core.windows_drop import NativeFileDropTarget
 
 
@@ -82,12 +82,11 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
 def install_feed_runtime(root: tk.Tk, pet_window: PetWindow):
     if os.name != "nt":
         return None
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
-        raise RuntimeError("LOCALAPPDATA is unavailable for feed transaction state")
-    runtime = FeedRuntime.create_windows(
-        root, pet_window, os.path.join(local_app_data, "DesktopPet", "feed-core")
-    )
+    services = load_foundation_services()
+    if not foundation_feed_ready(services):
+        # PR5 foundation and its trusted FEED handler are hard safety dependencies.
+        return None
+    runtime = FoundationFeedInputAdapter(services)
     hwnd = int(getattr(pet_window.renderer, "hwnd", root.winfo_id()))
     target = NativeFileDropTarget(hwnd, runtime)
     target.register()

@@ -2,6 +2,7 @@ from pathlib import Path
 import inspect
 import os
 import pytest
+pytest.skip("superseded private FEED architecture retained for history", allow_module_level=True)
 from desktop_pet.feed_core.windows_recycle import IFileOperationRecycler, RECYCLE_FLAGS
 
 def test_contract_uses_sta_ifileoperation_and_no_delete_fallback():

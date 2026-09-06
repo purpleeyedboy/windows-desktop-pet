@@ -1,22 +1,19 @@
 {
   "version": "2.1.0",
-  "date": "2026-09-05",
+  "date": "2026-09-06",
   "git_short_hash": "c3b218d",
   "base_label": "V2.1-FEED-CORE",
   "features": {
-    "transaction_journal": true,
-    "ifileoperation_recycle": true,
-    "drop": "native_ole_idroptarget_copy_only",
-    "hunger_reward": "persistent_idempotent_runtime",
-    "eating_animation": "callback_adapter",
-    "candidate_demo": "real_desktop_pet_window",
-    "real_file_operations_in_candidate": true,
-    "real_user_confirmed_feed": true
+    "foundation_feed_input_adapter": true,
+    "native_ole_copy_only_snapshot": true,
+    "shared_foundation_connected": false,
+    "trusted_recycle_progress_sink": false,
+    "real_user_confirmed_feed": false
   },
   "test_build": true,
   "debug_menu": false,
   "documentation_baseline": "BASE-001",
-  "release_state": "high-risk candidate; automated tests not run in packaging workflow; pending user Windows acceptance",
+  "release_state": "BLOCKED: PR5 foundation and trusted IFileOperationProgressSink handler not present; do not publish",
   "automated_test_gate": false,
-  "acceptance": "pending_user_windows_acceptance_high_risk"
+  "acceptance": "not_buildable_not_user_acceptable"
 }

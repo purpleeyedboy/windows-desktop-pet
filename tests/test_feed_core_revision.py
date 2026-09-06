@@ -3,6 +3,7 @@ import threading
 from pathlib import Path
 
 import pytest
+pytest.skip("superseded private FEED architecture retained for history", allow_module_level=True)
 
 from desktop_pet.feed_core.coordinator import FeedCoordinator
 from desktop_pet.feed_core.journal import TransactionJournal

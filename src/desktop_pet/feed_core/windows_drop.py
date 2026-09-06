@@ -90,10 +90,15 @@ class NativeFileDropTarget:
         try:
             paths=self._extract_paths(data)
             allowed=bool(effect[0] & DROP_EFFECT_COPY)
-            if allowed and len(paths) == 1 and self.runtime.drag_enter(paths,int(point.x),int(point.y))=='copy':
-                result=self.runtime.drop(paths,int(point.x),int(point.y))
-                effect[0]=DROP_EFFECT_COPY if result is not None and result.state.value=='Completed' else DROP_EFFECT_NONE
-            else:effect[0]=DROP_EFFECT_NONE
-        except Exception:effect[0]=DROP_EFFECT_NONE
-        finally:self.paths=[]
+            # Copy primitive values only.  Confirmation/validation/system work is
+            # submitted after this OLE callback through the shared InputRouter.
+            submitted=(
+                self.runtime.submit_drop(paths,int(point.x),int(point.y))
+                if allowed and len(paths) == 1 else False
+            )
+            effect[0]=DROP_EFFECT_COPY if submitted else DROP_EFFECT_NONE
+        except Exception:
+            effect[0]=DROP_EFFECT_NONE
+        finally:
+            self.paths=[]
         return S_OK

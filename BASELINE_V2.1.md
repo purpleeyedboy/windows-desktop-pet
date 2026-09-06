@@ -52,3 +52,11 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 松开后逐次显示文件名、大小和修改时间确认；仅实时验证 IFileOperation 成功后幂等增加饥饿值并显示反馈。极度饥饿不会禁用喂食或退出。
 - `桌面宠物_文件喂食与回收站事务.exe` 明确为未经过自动测试、等待用户 Windows 实机验收的高风险候选；Actions 刻意跳过 pytest，只执行编译、资源/归档、唯一 EXE、大小、SHA-256 与上传门禁。
 - Windows 构建、真实拖放/回收站行为和用户验收尚未在本 Linux 环境完成；不得将代码检查写成实机通过。
+
+
+## REPAIR-20260906-V21-FEED 状态
+
+- 已撤回“功能完成”结论，并删除私有 HungerMeter、事务协调器/日志、模拟器、阻塞确认及无 ProgressSink 的回收实现；不再用矩形头部命中或 jump 冒充喂食表现。
+- 已实现面向 PR5 公共基础的只读 Protocol adapter：OLE 回调只复制路径、坐标和共享 Clock 的 UTC 时间，并提交唯一 InputRouter；区域命中依赖 InteractionRegionService 的 Alpha 区域。
+- 当前仓库尚无 PR5 foundation API、PR11 期待反馈 adapter、共享 HungerService/StateStore/ActivityCoordinator，也没有可信 IFileOperationProgressSink 与独立嘴/舌素材动画。因此构建脚本主动失败，禁止发布可验收候选。
+- 公共基础统一并完成上述依赖后，才允许输出 `桌面宠物_文件喂食与回收站事务修复.exe`；Windows 实机验收仍待用户执行。

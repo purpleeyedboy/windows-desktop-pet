@@ -1,3 +1,5 @@
+import pytest
+pytest.skip("superseded private FEED architecture retained for history", allow_module_level=True)
 from pathlib import Path
 from desktop_pet.feed_core.wiring import FeedRuntime, HungerMeter
 from desktop_pet.feed_core.model import FeedState, RecycleReceipt
