@@ -1,12 +1,11 @@
-# V2.1-HUNGER 饥饿值与饥饿动画
+# REPAIR-20260906-V21-HUNGER
 
-- 版本：2.1.1 候选版；日期：2026-09-05。
-- 基础标签：`BASE-001`；文档基线：V2.1。
-- 启用功能：BASE-001 全部能力、整数饥饿值、UTC 离线恢复、透明窗口程序绘制的分级饥饿动作与泪滴、状态变化时的短时气泡、节流原子存储、幂等奖励窄接口。
-- 调试菜单/时间模拟：仅测试构建允许注入可变时钟；生产配置硬拒绝。
-- 明确排除：耳朵、前肢、舔手、拖放、文件喂食以及任何文件接收、删除、回收。
-- 构建时 `build_metadata.json` 写入 Git 短哈希，并明确记录 `automated_tests=false`、`windows_acceptance=pending_user_validation`。
-- Windows 构建完全跳过 pytest 与旧自动测试，只执行 PyInstaller 打包、唯一 EXE、精确文件名、50 MiB 大小上限、SHA-256 和 artifact 上传。
-- 本候选版**未经自动测试，等待用户 Windows 实机验收**；自动化结果不得冒充实机验收。
-
-状态文件使用版本 1 JSON，位于用户本地应用数据目录；测试全部使用 pytest 临时目录，不读取真实用户状态。
+- 版本：V2.1-HUNGER 返工测试版；日期：2026-09-06。
+- 饥饿单位：`0..100000`；`1000 = 1%`，从满值严格按真实 UTC 经过 120 分钟归零。
+- Health 边界：Normal `20000..100000`、Hungry `10000..19999`、SevereHungry `1000..9999`、CriticalHungry `0..999`，无额外滞回。
+- 表现：Hungry/SevereHungry 使用 0.35 秒张嘴、最长 1 秒保持、0.35 秒闭嘴的独立嘴内部与舌层；Severe 保持段和 Critical 使用夸张泪层。局部层每帧按当前头部姿态锚点重新合成，不修改确认素材。
+- 状态：唯一正式路径 `%LOCALAPPDATA%/DesktopPet/state.json`；旧 `hunger-v1.json` 只读迁移并保留原文件，不双写。奖励、OperationId 与新锚点同一原子提交。
+- 调试：一级“调试”菜单，直接二级包含 100/20/19.9/10/9.9/1/0.9/0%、时间 +30/+60/+120 分钟、重播和内部状态。调试时钟为真实 UTC 加进程内正偏移，不修改系统时间。
+- 公共基础依赖：要求 PR5 提供 `desktop_pet.foundation.create_foundation_services(root)`，其中共享 StateStore 暴露 `%LOCALAPPDATA%/DesktopPet/state.json`、`atomic_commits=true`、`load_hunger/commit_hunger`；ActivityCoordinator 暴露 `publish_health`、`begin(activity, priority, animation_id, state_version)`、`is_current`、`complete`、`cancel(token, recovery_anchor)`、`input_allowed`、`status_text`。本分支不实现第二套 ActivityCoordinator、事件队列、Clock 或 StateStore。
+- 当前状态：**未完成统一基础接入，禁止标为可验收成品**。候选构建保持仅打包路线；接入同一 PR5 foundation commit 后，才生成 `桌面宠物_修复饥饿衰减与张嘴流泪.exe` 供用户 Windows 实机验收。
+- Windows workflow 不运行 pytest/旧自动测试；云端证据仅限语法、导入、临时状态演练和临时预览，不冒充 Windows 验收。

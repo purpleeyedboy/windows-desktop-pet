@@ -529,6 +529,7 @@ class ContinuousHeadNeckCompositor:
         )
         self._last_rotation_degrees = 0.0
         self._last_arc = 0.0
+        self._last_pose = HeadPose(0.0, 0.0)
         self._padded_body_backplate = (
             self._pad_layer(self._body_backplate)
             if self._body_backplate is not None
@@ -711,6 +712,7 @@ class ContinuousHeadNeckCompositor:
 
         self._last_rotation_degrees = pose.rotation_degrees
         self._last_arc = pose.arc
+        self._last_pose = pose
         if self._body_backplate is None:
             return deformed
         if pose.rotation_degrees == 0.0:
@@ -755,3 +757,26 @@ class ContinuousHeadNeckCompositor:
         padded = Image.new("RGBA", self.source_size, (0, 0, 0, 0))
         padded.alpha_composite(image, (self._layer_padding_x, 0))
         return padded
+
+    def hunger_eye_boxes(self) -> tuple[tuple[int, int, int, int], ...]:
+        """Current-pose anchors for feature-local mouth and tear layers."""
+        pose = self._last_pose
+        angle = math.radians(pose.rotation_degrees)
+        cosine, sine = math.cos(angle), math.sin(angle)
+        result = []
+        for left, top, right, bottom in self._base_eye_interaction_boxes:
+            source_x, source_y = (left + right) / 2, (top + bottom) / 2
+            dx, dy = _sampling_offset(source_x, source_y, pose)
+            x, y = source_x - dx, source_y - dy
+            pivot_x, pivot_y = _TILT_PIVOT
+            offset_x, offset_y = x - pivot_x, y - pivot_y
+            rotated_x = pivot_x + cosine * offset_x + sine * offset_y
+            rotated_y = pivot_y - sine * offset_x + cosine * offset_y
+            half_width, half_height = (right - left) / 2, (bottom - top) / 2
+            result.append((
+                round(rotated_x - half_width) + self._layer_padding_x,
+                round(rotated_y - half_height),
+                round(rotated_x + half_width) + self._layer_padding_x,
+                round(rotated_y + half_height),
+            ))
+        return tuple(result)

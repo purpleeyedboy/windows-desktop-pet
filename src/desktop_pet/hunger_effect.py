@@ -1,73 +1,48 @@
-"""Deterministic, program-drawn hunger effects over approved runtime frames."""
-
+"""Program-drawn mouth interior, tongue and tear layers over approved frames."""
 from __future__ import annotations
-
-import math
 from collections.abc import Sequence
-
 from PIL import Image, ImageDraw
-
 from .hunger_animation import HungerAnimationFrame, HungerVisual
-
 
 EyeBox = tuple[int, int, int, int]
 
-
-def _scaled(value: int, numerator: int, denominator: int) -> int:
-    return value * numerator // denominator
-
-
-def compose_hunger_effect(
-    source: Image.Image,
-    frame: HungerAnimationFrame,
-    eye_boxes: Sequence[EyeBox],
-) -> Image.Image:
-    """Return a composed copy; never mutate or resample approved source pixels."""
+def compose_hunger_effect(source: Image.Image, frame: HungerAnimationFrame,
+                          eye_boxes: Sequence[EyeBox]) -> Image.Image:
+    """Compose independent local layers; approved source bytes remain untouched."""
     base = source.convert("RGBA")
-    if frame.visual is HungerVisual.SUSPENDED:
+    if frame.visual is HungerVisual.SUSPENDED or len(eye_boxes) < 2:
         return base.copy()
-
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay, "RGBA")
-    width, height = base.size
-    angle = 2.0 * math.pi * frame.phase_millis / max(1, frame.cycle_millis)
-    pulse = (1.0 + math.sin(angle)) / 2.0
-
-    # Small breathing/pang marks stay close to the body and do not alter the
-    # underlying approved image or its deformation topology.
-    center_x = width // 2
-    belly_y = _scaled(height, 7, 10)
-    spread = _scaled(width, 7 + round(3 * pulse), 100)
-    rise = _scaled(height, 2 + round(2 * pulse), 100)
-    alpha = {
-        HungerVisual.NORMAL_HUNGRY: 105,
-        HungerVisual.SEVERE_HUNGRY: 165,
-        HungerVisual.EXTREME_HUNGRY: 215,
-    }[frame.visual]
-    color = (89, 154, 210, alpha)
-    stroke = max(1, width // 170)
-    for direction in (-1, 1):
-        x = center_x + direction * spread
-        box = (x - spread // 2, belly_y - rise, x + spread // 2, belly_y + rise)
-        draw.arc(box, 195 if direction < 0 else 345, 345 if direction < 0 else 495, fill=color, width=stroke)
-
+    boxes = tuple(eye_boxes)[:2]
+    eye_centers = [((l + r) // 2, (t + b) // 2) for l, t, r, b in boxes]
+    eye_distance = max(12, abs(eye_centers[1][0] - eye_centers[0][0]))
+    face_x = sum(p[0] for p in eye_centers) // 2
+    eye_y = sum(p[1] for p in eye_centers) // 2
+    mouth_y = eye_y + eye_distance * 7 // 10
+    openness = max(0.0, min(1.0, frame.mouth_open))
+    if openness > 0:
+        mouth_w = max(8, eye_distance * 28 // 100)
+        mouth_h = max(2, round(eye_distance * .30 * openness))
+        # Interior covers the original closed-mouth pixels; tongue is a separate
+        # lower local layer, both recomputed from the current head pose frame.
+        draw.ellipse((face_x-mouth_w//2, mouth_y-mouth_h//3,
+                      face_x+mouth_w//2, mouth_y+mouth_h),
+                     fill=(45, 20, 19, 245))
+        tongue_h = max(1, mouth_h // 3)
+        draw.ellipse((face_x-mouth_w//3, mouth_y+mouth_h-tongue_h,
+                      face_x+mouth_w//3, mouth_y+mouth_h+1),
+                     fill=(196, 91, 103, 245))
     if frame.tears_visible:
-        fall = round((_scaled(height, 5, 100)) * pulse)
-        tear_width = max(3, _scaled(width, 2, 100))
-        tear_height = max(7, _scaled(height, 4, 100))
-        for left, _top, right, bottom in tuple(eye_boxes)[:2]:
+        fall = round((base.height * .025) * max(.2, frame.tear_intensity))
+        tear_w = max(2, base.width // 100)
+        tear_h = max(8, base.height // 25)
+        for left, _top, right, bottom in boxes:
             center = (left + right) // 2
-            top = bottom + max(1, height // 200) + fall
-            points = (
-                (center, top),
-                (center - tear_width, top + tear_height * 2 // 3),
-                (center, top + tear_height),
-                (center + tear_width, top + tear_height * 2 // 3),
-            )
-            draw.polygon(points, fill=(105, 190, 245, 220))
-            draw.ellipse(
-                (center - tear_width, top + tear_height // 2,
-                 center + tear_width, top + tear_height),
-                fill=(105, 190, 245, 220),
-            )
+            top = bottom + max(1, base.height // 250) + (frame.phase_millis // 50 % max(1, fall))
+            draw.polygon(((center, top), (center-tear_w, top+tear_h*2//3),
+                          (center, top+tear_h), (center+tear_w, top+tear_h*2//3)),
+                         fill=(105, 190, 245, round(230*frame.tear_intensity)))
+            draw.ellipse((center-tear_w, top+tear_h//2, center+tear_w, top+tear_h),
+                         fill=(105, 190, 245, round(230*frame.tear_intensity)))
     return Image.alpha_composite(base, overlay)

@@ -21,14 +21,15 @@ datas.extend((str(EYE_SOURCE / name), EYE_RUNTIME) for name in EYE_FILES)
 
 a = Analysis(
     [str(ROOT / "run_desktop_pet.py")], pathex=[str(ROOT / "src")],
-    binaries=[], datas=datas, hiddenimports=["PIL._tkinter_finder"],
+    binaries=[], datas=datas,
+    hiddenimports=["PIL._tkinter_finder", "desktop_pet.foundation"],
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=["numpy", "cv2"],
     noarchive=False, optimize=0,
 )
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name="桌面宠物_饥饿值与饥饿动画", version=str(ROOT / "version_info_hunger.txt"),
+    name="桌面宠物_修复饥饿衰减与张嘴流泪", version=str(ROOT / "version_info_hunger.txt"),
     debug=False, bootloader_ignore_signals=False, strip=False, upx=True,
     upx_exclude=[], runtime_tmpdir=None, console=False,
     disable_windowed_traceback=False, argv_emulation=False, target_arch=None,

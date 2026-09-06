@@ -193,6 +193,10 @@ class _CachedCenterCompositor:
             for left, top, right, bottom in self.eye_interaction_boxes
         )
 
+    def hunger_eye_boxes(self) -> tuple[tuple[int, int, int, int], ...]:
+        provider = getattr(self._compositor, "hunger_eye_boxes", None)
+        return tuple(provider()) if callable(provider) else self.eye_interaction_boxes
+
 
 @dataclass(frozen=True)
 class _PresentationSnapshot:
@@ -280,6 +284,7 @@ class PetWindow:
         self._eye_interaction_boxes: tuple[tuple[int, int, int, int], ...] = ()
         self._eye_source_size: tuple[int, int] = (0, 0)
         self._eye_hit_test: Callable[[tuple[float, float]], bool] | None = None
+        self._hunger_eye_box_provider: Callable[[], tuple[tuple[int, int, int, int], ...]] | None = None
         self._presentation_snapshot: _PresentationSnapshot | None = None
         self._startup_presentation_error: Exception | None = None
         self._constructing = True
@@ -292,6 +297,7 @@ class PetWindow:
             self.display_height,
         )
         self._hunger_runtime: object | None = None
+        self._activity_coordinator: object | None = None
         self._hunger_frame: HungerAnimationFrame | None = None
         self._last_hunger_presentation: HungerVisual | None = None
 
@@ -326,6 +332,7 @@ class PetWindow:
                 self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
                 self._eye_source_size = tuple(cached_compositor.source_size)
                 self._eye_hit_test = cached_compositor.hit_test_eye
+                self._hunger_eye_box_provider = cached_compositor.hunger_eye_boxes
                 self.eye_session = RuntimeEyeSession(
                     compositor=cached_compositor,
                     cursor_provider=cursor_provider,
@@ -690,7 +697,8 @@ class PetWindow:
             or self._legacy_fallback
         ):
             return
-        self.eye_session.request_blink()
+        if self._input_allowed("Blink"):
+            self.eye_session.request_blink()
 
     def trigger_idle_tilt(self, mode: TiltMode) -> None:
         if mode not in TILT_MODES:
@@ -702,7 +710,8 @@ class PetWindow:
             or self._legacy_fallback
         ):
             return
-        self.eye_session.request_idle_tilt(mode)
+        if self._input_allowed("Body"):
+            self.eye_session.request_idle_tilt(mode)
 
     def _trigger_action(self, action: str | None) -> None:
         if (
@@ -711,6 +720,8 @@ class PetWindow:
             or self._action_ownership_failed
             or self.animation.busy
         ):
+            return
+        if not self._input_allowed("Body"):
             return
         if self.eye_session is not None and not self._legacy_fallback:
             result = (
@@ -772,9 +783,8 @@ class PetWindow:
 
     def _animation_finished(self, action: str) -> None:
         self._active_animation_action = None
-        resume = getattr(self._hunger_runtime, "user_animation_finished", None)
-        if callable(resume):
-            resume()
+        if self._hunger_runtime is not None:
+            self._hunger_runtime.resume()
         if self._closed or self._legacy_fallback or self.eye_session is None:
             return
         self.eye_session.animation_finished(action)
@@ -789,24 +799,55 @@ class PetWindow:
         if accepted is not True and not self.animation.busy:
             self._active_animation_action = None
         elif accepted is True:
-            suspend = getattr(self._hunger_runtime, "user_animation_started", None)
-            if callable(suspend):
-                suspend()
+            if self._hunger_runtime is None:
+                raise RuntimeError("hunger runtime is not attached")
+            self._hunger_runtime.interrupt()
         return accepted
 
-    def attach_hunger_runtime(self, runtime: object) -> None:
+    def attach_hunger_runtime(self, runtime: object, activity: object) -> None:
         self._hunger_runtime = runtime
+        self._activity_coordinator = activity
 
-    def add_debug_time_menu(self, advance: Callable[[int], None]) -> None:
-        """Called only by an explicitly marked test build."""
-        self.menu.add_separator()
-        self.menu.add_command(
-            label="测试：时间 +1 小时",
-            command=lambda: advance(3_600),
+    def _input_allowed(self, operation: str) -> bool:
+        if self._activity_coordinator is None or self._hunger_runtime is None:
+            return False
+        health = self._hunger_runtime.service.snapshot().level
+        return bool(self._activity_coordinator.input_allowed(operation, health))
+
+    def add_hunger_menus(self, runtime: object, utc_clock: object, metadata: dict[str, object]) -> None:
+        """One Debug top-level item with a directly scrollable second level."""
+        if metadata["test_build"] is True:
+            debug = tk.Menu(self.menu, tearoff=False)
+            for label, units in (
+                ("饥饿值 100%", 100_000), ("饥饿值 20%", 20_000),
+                ("饥饿值 19.9%", 19_900), ("饥饿值 10%", 10_000),
+                ("饥饿值 9.9%", 9_900), ("饥饿值 1%", 1_000),
+                ("饥饿值 0.9%", 900), ("饥饿值 0%", 0),
+            ):
+                debug.add_command(label=label, command=lambda value=units: runtime.set_debug_units(value))
+            debug.add_separator()
+            for label, seconds in (("时间 +30 分钟", 1_800), ("时间 +60 分钟", 3_600), ("时间 +120 分钟", 7_200)):
+                debug.add_command(label=label, command=lambda value=seconds: utc_clock.advance(value))
+            debug.add_command(label="重播当前饥饿动画", command=runtime.replay)
+            debug.add_command(
+                label="显示内部运行状态",
+                command=lambda: messagebox.showinfo("V2.1-HUNGER 运行状态", runtime.status_text(), parent=self.root),
+            )
+            self.menu.add_cascade(label="调试", menu=debug)
+        identity = (
+            f"V{metadata['version']}  Git {metadata['git_short_hash']}\n"
+            f"Foundation {metadata['foundation_commit']}  Baseline {metadata['baseline_commit']}\n"
+            f"Features: {', '.join(metadata['enabled_features'])}\nTEST BUILD={metadata['test_build']}"
         )
         self.menu.add_command(
-            label="测试：时间 +1 天",
-            command=lambda: advance(86_400),
+            label="关于/运行版本",
+            command=lambda: messagebox.showinfo("桌面宠物版本", identity, parent=self.root),
+        )
+
+    def show_build_identity(self, metadata: dict[str, object]) -> None:
+        self.root.title(f"桌面宠物 V{metadata['version']} {metadata['git_short_hash']}")
+        self._present_phrase(
+            f"V{metadata['version']} 修复饥饿测试版 · {metadata['git_short_hash']}"
         )
 
     def present_hunger(self, frame: HungerAnimationFrame) -> None:
@@ -819,23 +860,18 @@ class PetWindow:
                 self._apply_image(self._current_image, self._anchor())
             except Exception:
                 return
-        if (
-            frame.visual is not HungerVisual.SUSPENDED
-            and frame.visual is not self._last_hunger_presentation
-        ):
-            self._last_hunger_presentation = frame.visual
-            text = {
-                HungerVisual.NORMAL_HUNGRY: "有点饿了…",
-                HungerVisual.SEVERE_HUNGRY: "肚子好饿……",
-                HungerVisual.EXTREME_HUNGRY: "真的非常饿了……",
-            }[frame.visual]
-            self._present_phrase(text)
+        self._last_hunger_presentation = frame.visual
 
     def _compose_hunger_image(self, image: Image.Image) -> Image.Image:
         frame = self._hunger_frame
         if frame is None:
             return image.convert("RGBA")
-        return compose_hunger_effect(image, frame, self._eye_interaction_boxes)
+        boxes = (
+            self._hunger_eye_box_provider()
+            if self._hunger_eye_box_provider is not None
+            else self._eye_interaction_boxes
+        )
+        return compose_hunger_effect(image, frame, boxes)
 
     def _cancel_action(self, action: str) -> bool:
         cancelled = self.animation.cancel_current(action)
@@ -970,6 +1006,7 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
+        self._hunger_runtime.interrupt()
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
@@ -978,6 +1015,8 @@ class PetWindow:
 
     def _on_left_motion(self, event: tk.Event) -> None:
         if self._press_pointer is None or self._press_window is None:
+            return
+        if not self._input_allowed("Body"):
             return
         delta_x = event.x_root - self._press_pointer[0]
         delta_y = event.y_root - self._press_pointer[1]
@@ -1000,12 +1039,15 @@ class PetWindow:
             )
         self._press_pointer = None
         self._press_window = None
+        self._hunger_runtime.resume()
 
     def _on_context_menu(self, event: tk.Event) -> None:
+        self._hunger_runtime.interrupt()
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:
             self.menu.grab_release()
+            self._hunger_runtime.resume()
 
     def _on_wheel(self, event: tk.Event) -> None:
         delta = 24 if event.delta > 0 else -24
