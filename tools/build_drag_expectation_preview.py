@@ -31,7 +31,7 @@ def build_preview(output_dir: Path) -> tuple[Path, Path]:
         min(base.width, max(box[2] for box in boxes) + 28),
         min(base.height, max(box[3] for box in boxes) + 40),
     )
-    decorated = decorate_drag_expectation(base, 1, DragVisualConfig(eye_boxes=boxes, head_box=head_box))
+    decorated = decorate_drag_expectation(base, 3, DragVisualConfig(eye_boxes=boxes, head_box=head_box))
     canvas = Image.new("RGBA", (base.width * 2, base.height), (32, 36, 44, 255))
     canvas.alpha_composite(base, (0, 0))
     canvas.alpha_composite(decorated, (base.width, 0))
@@ -45,7 +45,7 @@ def build_preview(output_dir: Path) -> tuple[Path, Path]:
                 "sha256": hashlib.sha256(preview.read_bytes()).hexdigest(),
                 "size": list(canvas.size),
                 "mode": canvas.mode,
-                "phase": 1,
+                "phase": 3,
                 "visual_acceptance": "pending",
             },
             indent=2,

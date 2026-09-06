@@ -7,6 +7,8 @@ from desktop_pet.ole_drop_target import (
     DropTargetRegistration,
     OleDropTarget,
     query_hdrop,
+    extract_single_local_hdrop,
+    FoundationOleDropTarget,
 )
 
 
@@ -122,3 +124,42 @@ def test_failed_revoke_keeps_registration_owned_for_retry():
     assert owner.registered is True
     owner.revoke()
     assert registrar.revoked == [42, 42]
+
+
+def test_extract_single_local_hdrop_copies_one_absolute_path_and_rejects_others(tmp_path):
+    class Payload:
+        def __init__(self, paths): self.paths = paths
+        def get_hdrop_paths(self): return self.paths
+
+    candidate = extract_single_local_hdrop(Payload((r"C:\tmp\cat.txt",)))
+    assert candidate.path == r"C:\tmp\cat.txt"
+    assert candidate.count == 1
+    assert extract_single_local_hdrop(Payload((r"C:\one", r"C:\two"))) is None
+    assert extract_single_local_hdrop(Payload(("relative.txt",))) is None
+    assert extract_single_local_hdrop(Payload((r"\rooted.txt",))) is None
+    assert extract_single_local_hdrop(Payload((r"?:\tmp\cat.txt",))) is None
+    assert extract_single_local_hdrop(Payload((r"\\?\C:\tmp\cat.txt",))) is None
+    assert extract_single_local_hdrop(Payload((r"\\.\C:\tmp\cat.txt",))) is None
+    assert extract_single_local_hdrop(Payload((r"\\server\share\cat.txt",))) is None
+    assert extract_single_local_hdrop(Payload((str(tmp_path),))) is None
+
+
+def test_foundation_target_passes_copied_values_and_never_retains_data_object():
+    class Payload:
+        def get_hdrop_paths(self): return (r"C:\tmp\cat.txt",)
+    class Adapter:
+        def __init__(self): self.calls = []
+        def enter(self, candidate, point, effects): self.calls.append(("enter", candidate, point, effects)); return 1
+        def over(self, point, effects): self.calls.append(("over", point, effects)); return 1
+        def leave(self, reason="leave"): self.calls.append(("leave", reason))
+        def drop(self, candidate, point, effects): self.calls.append(("drop", candidate, point, effects)); return 0
+    adapter = Adapter()
+    target = FoundationOleDropTarget(adapter)
+    payload = Payload()
+
+    assert target.drag_enter(payload, (1, 2), 1) == 1
+    assert target.drag_over((2, 3), 1) == 1
+    assert target.drop(payload, (3, 4), 1) == 0
+    assert adapter.calls[0][1].path == r"C:\tmp\cat.txt"
+    assert adapter.calls[-1][1].path == r"C:\tmp\cat.txt"
+    assert all(payload is not value for call in adapter.calls for value in call)

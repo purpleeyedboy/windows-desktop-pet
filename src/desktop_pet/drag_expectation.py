@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 DROPEFFECT_NONE = 0
@@ -17,9 +17,9 @@ class DragVisualConfig:
     """Candidate values are centralized until real-desktop visual acceptance."""
 
     # V2.1 does not prescribe these values: all remain pending visual acceptance.
-    tick_ms: int = 45
-    eye_scale: float = 1.16
-    tremble_pixels: int = 1
+    tick_ms: int = 50
+    eye_scale: float = 1.20
+    tremble_ratio: float = 0.015
     highlight_opacity: int = 44
     particle_radius: int = 3
     eye_boxes: tuple[tuple[int, int, int, int], ...] = ()
@@ -125,32 +125,42 @@ def decorate_drag_expectation(
     phase: int,
     config: DragVisualConfig,
 ) -> Image.Image:
-    """Decorate a copy while preserving the approved frame's Alpha byte-for-byte."""
+    """Add local transient layers without mutating the approved source image."""
 
     base = image.convert("RGBA")
-    alpha = base.getchannel("A")
     result = base.copy()
-    direction = -1 if phase % 2 else 1
-    for box in config.eye_boxes:
+    transition = min(1.0, max(0.0, phase / 3.0))
+    for eye_index, box in enumerate(config.eye_boxes):
         crop = base.crop(box)
-        width = max(1, round(crop.width * config.eye_scale))
-        height = max(1, round(crop.height * config.eye_scale))
+        scale = 1.0 + (config.eye_scale - 1.0) * transition
+        width = max(1, round(crop.width * scale))
+        height = max(1, round(crop.height * scale))
         enlarged = crop.resize((width, height), Image.Resampling.LANCZOS)
-        x = (box[0] + box[2] - width) // 2 + direction * config.tremble_pixels
+        eye_mask = Image.new("L", (width, height), 0)
+        ImageDraw.Draw(eye_mask).ellipse(
+            (1, 1, max(1, width - 2), max(1, height - 2)),
+            fill=255,
+        )
+        eye_mask = eye_mask.filter(ImageFilter.GaussianBlur(max(1.0, width * 0.08)))
+        direction = -1 if (phase + eye_index) % 2 else 1
+        tremble = max(1, round(crop.width * config.tremble_ratio))
+        x = (box[0] + box[2] - width) // 2 + direction * tremble
         y = (box[1] + box[3] - height) // 2
-        result.paste(enlarged, (x, y), enlarged)
+        result.paste(enlarged, (x, y), ImageChops.multiply(enlarged.getchannel("A"), eye_mask))
 
     overlay = Image.new("RGBA", base.size)
     draw = ImageDraw.Draw(overlay)
     if config.head_box is not None:
-        draw.rounded_rectangle(
-            config.head_box,
-            radius=max(2, (config.head_box[2] - config.head_box[0]) // 8),
-            fill=(255, 224, 92, config.highlight_opacity),
-            outline=(255, 247, 185, min(255, config.highlight_opacity * 3)),
-            width=2,
-        )
         left, top, right, bottom = config.head_box
+        head_alpha = base.getchannel("A").crop(config.head_box)
+        contour = ImageChops.subtract(
+            head_alpha.filter(ImageFilter.MaxFilter(3)),
+            head_alpha.filter(ImageFilter.MinFilter(3)),
+        )
+        contour_layer = Image.new(
+            "RGBA", contour.size, (255, 235, 120, config.highlight_opacity * 3)
+        )
+        overlay.paste(contour_layer, (left, top), contour)
         positions = (
             (left + (phase * 7) % max(1, right - left), top + 5),
             (right - 6, top + (phase * 5) % max(1, bottom - top)),
@@ -160,6 +170,4 @@ def decorate_drag_expectation(
             r = config.particle_radius
             draw.ellipse((x - r, y - r, x + r, y + r), fill=(255, 244, 150, 220))
     result = Image.alpha_composite(result, overlay)
-    result = ImageEnhance.Color(result).enhance(1.03)
-    result.putalpha(alpha)
     return result

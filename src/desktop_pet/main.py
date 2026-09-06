@@ -8,6 +8,7 @@ from tkinter import messagebox
 from .assets import load_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
+from .release_identity import runtime_identity
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -83,6 +84,14 @@ def main() -> int:
     pet_window: PetWindow | None = None
     try:
         if not mutex.acquire():
+            if os.name == "nt":
+                ctypes.windll.user32.MessageBoxW(
+                    None,
+                    "已有桌面宠物实例正在运行；本次新版本未启动。\n\n"
+                    + runtime_identity(),
+                    "桌面宠物版本提示",
+                    0x40,
+                )
             return 0
         root = tk.Tk()
         root.withdraw()

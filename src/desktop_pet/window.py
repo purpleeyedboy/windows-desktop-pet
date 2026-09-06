@@ -31,7 +31,12 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
-from .ole_drop_target import DropTargetRegistration, OleDropTarget
+from .release_identity import runtime_identity
+from .ole_drop_target import (
+    DropTargetRegistration,
+    FoundationDragHandler,
+    FoundationOleDropTarget,
+)
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -245,6 +250,7 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        drag_foundation_adapter: FoundationDragHandler | None = None,
     ) -> None:
         if legacy_mode:
             if (
@@ -365,11 +371,8 @@ class PetWindow:
                 restore=self._restore_drag_expectation,
                 config=self._drag_visual_config(),
             )
-            if os.name == "nt":
-                target = OleDropTarget(
-                    self.drag_expectation,
-                    self._in_drop_sensing_region,
-                )
+            if os.name == "nt" and drag_foundation_adapter is not None:
+                target = FoundationOleDropTarget(drag_foundation_adapter)
                 self._drop_registration = DropTargetRegistration(
                     int(getattr(self.renderer, "hwnd", root.winfo_id())),
                     target,
@@ -391,10 +394,6 @@ class PetWindow:
                 command=lambda value=action: self.trigger_named_action(value),
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
-        menu.add_command(
-            label="调试：拖动期待态",
-            command=self._debug_drag_expectation,
-        )
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,
@@ -412,6 +411,23 @@ class PetWindow:
             variable=self._topmost_var,
             command=lambda: self.set_always_on_top(self._topmost_var.get()),
         )
+        menu.add_separator()
+        menu.add_command(
+            label="运行状态",
+            command=lambda: messagebox.showinfo(
+                "桌面宠物运行状态", runtime_identity(), parent=self.root
+            ),
+        )
+        debug_menu = tk.Menu(menu, tearoff=False)
+        debug_menu.add_command(
+            label="开始拖动期待演示",
+            command=self._debug_drag_expectation,
+        )
+        debug_menu.add_command(
+            label="结束拖动期待演示",
+            command=lambda: self.drag_expectation.cancel(),
+        )
+        menu.add_cascade(label="调试", menu=debug_menu)
         menu.add_separator()
         menu.add_command(label="退出", command=self.close)
         return menu

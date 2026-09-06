@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import ntpath
 import os
 import uuid
 from ctypes import wintypes
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Protocol
 
 from .drag_expectation import DROPEFFECT_COPY, DROPEFFECT_NONE
+from .drag_foundation_adapter import DragCandidate
 
 
 CF_HDROP = 15
@@ -45,6 +47,33 @@ def query_hdrop(data_object: object) -> bool:
         return bool(query(FormatRequest()))
     except Exception:
         return False
+
+
+def extract_single_local_hdrop(data_object: object) -> DragCandidate | None:
+    """Copy one local absolute path from CF_HDROP; never retain IDataObject state."""
+
+    getter = getattr(data_object, "get_hdrop_paths", None)
+    if not callable(getter):
+        return None
+    try:
+        paths = tuple(str(path) for path in getter())
+    except Exception:
+        return None
+    if len(paths) != 1:
+        return None
+    path = paths[0]
+    drive, tail = ntpath.splitdrive(path)
+    if (
+        len(drive) != 2
+        or drive[0] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        or drive[1] != ":"
+        or not tail.startswith(("\\", "/"))
+        or path.startswith(("\\\\", "//", "\\?\\", "\\.\\"))
+    ):
+        return None
+    if os.path.isdir(path):
+        return None
+    return DragCandidate(path=path, count=1)
 
 
 class OleDropTarget:
@@ -113,6 +142,46 @@ class OleDropTarget:
             pass
 
 
+class FoundationDragHandler(Protocol):
+    def enter(self, candidate: DragCandidate, point: tuple[int, int], effects: int) -> int: ...
+    def over(self, point: tuple[int, int], effects: int) -> int: ...
+    def leave(self, reason: str = "leave") -> None: ...
+    def drop(self, candidate: DragCandidate, point: tuple[int, int], effects: int) -> int: ...
+
+
+class FoundationOleDropTarget:
+    """OLE boundary that passes copied values—not IDataObject—to shared services."""
+
+    def __init__(self, adapter: FoundationDragHandler) -> None:
+        self.adapter = adapter
+
+    def drag_enter(self, data_object: object, point: tuple[int, int], effects: int) -> int:
+        candidate = extract_single_local_hdrop(data_object)
+        if candidate is None:
+            self.adapter.leave("invalid-object")
+            return DROPEFFECT_NONE
+        return self.adapter.enter(candidate, point, effects)
+
+    def drag_over(self, point: tuple[int, int], effects: int) -> int:
+        return self.adapter.over(point, effects)
+
+    def drag_leave(self) -> None:
+        self.adapter.leave("leave")
+
+    def drop(self, data_object: object, point: tuple[int, int], effects: int) -> int:
+        candidate = extract_single_local_hdrop(data_object)
+        if candidate is None:
+            self.adapter.leave("invalid-drop")
+            return DROPEFFECT_NONE
+        return self.adapter.drop(candidate, point, effects)
+
+    def _safe_exception(self) -> None:
+        try:
+            self.adapter.leave("ole-exception")
+        except Exception:
+            pass
+
+
 class DropTargetRegistration:
     """Exactly-once lifetime owner; injectable for tests."""
 
@@ -145,6 +214,27 @@ class _FORMATETC(ctypes.Structure):
     ]
 
 
+class _STGMEDIUM_VALUE(ctypes.Union):
+    _fields_ = [
+        ("hBitmap", wintypes.HBITMAP),
+        ("hMetaFilePict", ctypes.c_void_p),
+        ("hEnhMetaFile", ctypes.c_void_p),
+        ("hGlobal", wintypes.HGLOBAL),
+        ("lpszFileName", wintypes.LPWSTR),
+        ("pstm", ctypes.c_void_p),
+        ("pstg", ctypes.c_void_p),
+    ]
+
+
+class _STGMEDIUM(ctypes.Structure):
+    _anonymous_ = ("value",)
+    _fields_ = [
+        ("tymed", wintypes.DWORD),
+        ("value", _STGMEDIUM_VALUE),
+        ("pUnkForRelease", ctypes.c_void_p),
+    ]
+
+
 class _POINTL(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
@@ -166,6 +256,45 @@ class _IDataObjectProxy:
         )
         fmt = _FORMATETC(request.cf_format, None, DVASPECT_CONTENT, -1, request.tymed)
         return query(self.pointer, ctypes.byref(fmt)) == S_OK
+
+    def get_hdrop_paths(self) -> tuple[str, ...]:
+        vtable = ctypes.cast(
+            self.pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        ).contents
+        get_data = _CALLBACK(
+            _HRESULT,
+            ctypes.c_void_p,
+            ctypes.POINTER(_FORMATETC),
+            ctypes.POINTER(_STGMEDIUM),
+        )(vtable[3])
+        fmt = _FORMATETC(CF_HDROP, None, DVASPECT_CONTENT, -1, TYMED_HGLOBAL)
+        medium = _STGMEDIUM()
+        result = get_data(self.pointer, ctypes.byref(fmt), ctypes.byref(medium))
+        if result != S_OK:
+            return ()
+        ole32 = ctypes.OleDLL("ole32", use_last_error=True)
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        release = ole32.ReleaseStgMedium
+        release.argtypes = [ctypes.POINTER(_STGMEDIUM)]
+        release.restype = None
+        drag_query = shell32.DragQueryFileW
+        drag_query.argtypes = [wintypes.HANDLE, wintypes.UINT, wintypes.LPWSTR, wintypes.UINT]
+        drag_query.restype = wintypes.UINT
+        try:
+            if medium.tymed != TYMED_HGLOBAL or not medium.hGlobal:
+                return ()
+            count = int(drag_query(medium.hGlobal, 0xFFFFFFFF, None, 0))
+            paths: list[str] = []
+            for index in range(count):
+                length = int(drag_query(medium.hGlobal, index, None, 0))
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                copied = int(drag_query(medium.hGlobal, index, buffer, len(buffer)))
+                if copied != length:
+                    return ()
+                paths.append(buffer.value)
+            return tuple(paths)
+        finally:
+            release(ctypes.byref(medium))
 
 
 class _DropTargetVTable(ctypes.Structure):
@@ -281,8 +410,8 @@ class WindowsDropTargetRegistrar:
         self._initialized = False
 
     def register(self, hwnd: int, target: object) -> None:
-        if not isinstance(target, OleDropTarget):
-            raise TypeError("target must be OleDropTarget")
+        if not isinstance(target, (OleDropTarget, FoundationOleDropTarget)):
+            raise TypeError("target must implement the desktop-pet OLE drop target")
         result = self._ole32.OleInitialize(None)
         if result not in (S_OK, S_FALSE):
             raise OSError(result, "OleInitialize failed")

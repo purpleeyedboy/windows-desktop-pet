@@ -1,9 +1,6 @@
 name: Windows drag expectation candidate
 
 on:
-  pull_request:
-    branches:
-      - codex/-v2.1
   workflow_dispatch:
 
 permissions:
@@ -31,15 +28,16 @@ jobs:
         run: |
           $exes = @(Get-ChildItem -LiteralPath dist-drag-expectation-candidate -Filter *.exe -File)
           if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
-          if ($exes[0].Name -ne '桌面宠物_文件拖动期待反馈.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          if ($exes[0].Name -ne '桌面宠物_文件拖动期待反馈修复.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
-          "Automated tests: NOT RUN" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
-          "Awaiting user Windows acceptance" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Automated tests: NOT RUN; Windows acceptance NOT RUN" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Foundation integration: NOT COMPLETE" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Not an acceptance candidate" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
           "SHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: desktop-pet-v2-1-drag-expectation
-          path: dist-drag-expectation-candidate/桌面宠物_文件拖动期待反馈.exe
+          path: dist-drag-expectation-candidate/桌面宠物_文件拖动期待反馈修复.exe
           retention-days: 7
           if-no-files-found: error

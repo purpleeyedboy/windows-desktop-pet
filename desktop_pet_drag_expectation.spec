@@ -1,8 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 
 
 ROOT = Path(SPECPATH).resolve()
+BUILD_INFO = Path(os.environ.get("DESKTOP_PET_BUILD_INFO", ROOT / "DRAG_EXPECTATION_BUILD_INFO.json"))
+VERSION_INFO = Path(os.environ.get("DESKTOP_PET_VERSION_INFO", ROOT / "desktop_pet_drag_version_info.txt"))
 EYE_SOURCE = ROOT / "assets/rig/v1/source/eye-neutral-v1"
 EYE_RUNTIME = "assets/rig/v1/runtime/eye-neutral-v1"
 EYE_FILES = (
@@ -17,7 +20,7 @@ EYE_FILES = (
 )
 
 datas = [
-    (str(ROOT / "DRAG_EXPECTATION_BUILD_INFO.json"), "."),
+    (str(BUILD_INFO), "."),
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
@@ -46,7 +49,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_文件拖动期待反馈',
+    name='桌面宠物_文件拖动期待反馈修复',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -59,5 +62,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=str(ROOT / 'desktop_pet_drag_version_info.txt'),
+    version=str(VERSION_INFO),
 )

@@ -21,21 +21,22 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 
 ## V2.1-DRAG 独立增量
 
-- 候选文件名：`桌面宠物_文件拖动期待反馈.exe`；基础标签仍为 `BASE-001 / V2.1`。
-- 启用功能仅为既有认可基线与“文件拖动期待反馈”；这是测试版，包含“调试：拖动期待态”菜单，文档基线为本文件。
-- 本模块是唯一 OLE `IDropTarget` owner。它只用 `QueryGetData(CF_HDROP/TYMED_HGLOBAL)` 判断格式，不调用 `GetData`、不取得路径；合法文件在有效 Alpha 感应区返回 Copy，其他情况返回 None，Drop 始终返回 None。
+- 候选文件名：`桌面宠物_文件拖动期待反馈修复.exe`；基础标签仍为 `BASE-001 / V2.1`。
+- 当前仅启用既有认可基线；文件拖动期待反馈列为 `incomplete_features`。一级“调试”子菜单含开始/结束演示，文档基线为本文件。
+- OLE 边界现调用 `GetData(CF_HDROP/TYMED_HGLOBAL)`，复制单个本地盘绝对路径和数量后立即 `ReleaseStgMedium`；多对象、目录、相对/网络/设备路径均拒绝，不把 `IDataObject` 留给异步代码。
 - Copy 仅是光标反馈。程序不复制、移动、删除、回收、打开、上传、读取或修改文件，也不改变饥饿值；未实现耳朵、前肢、舔手、饥饿或文件喂食。
-- DragEnter 期待态由运行时临时合成的双眼放大/颤抖、粒子和头部高亮组成；不写入或修改认可素材，输出 Alpha 与输入逐字节一致。数值集中在 `DragVisualConfig`，均待 Windows 真机视觉验收。
-- DragLeave、Drop、快速取消、窗口失焦、关闭及异常走同一个幂等恢复闭环，并撤销定时器和 OLE 注册。
-- 构建元数据见 `DRAG_EXPECTATION_BUILD_INFO.json`：版本 `2.1-drag.1`、日期 `2026-09-04`、继承 Git 短哈希 `c3b218d`、测试版/调试菜单标记、启用功能和文档基线均显式记录。
+- 临时 compositor 使用 0.15 秒目标 120% 的局部眼区、按眼宽 1.5% 颤抖、真实 Alpha 轮廓高亮和独立 Alpha 粒子；不写入认可素材。独立眼层和共享 Coordinator Recovery 尚待 PR5 接线及实机视觉复核。
+- 版本化 adapter 已防止取消/换对象后的异步结果复活；完整中断恢复、最新 Health/泪眼恢复和实际注销链仍待公共基础接线验证。
+- 构建元数据版本为 `2.1-drag-repair-dev.1`，日期 `2026-09-06`；打包时注入实际 Git 短哈希，foundation 标记为 `NOT_INTEGRATED`。
 
 ### V2.1-DRAG 验证状态
 
 - V2.1-DRAG 聚焦自动测试：28 项通过、2 项 Windows 跳过；既有眼球运行时/闲置转头/头颈形变门禁：175 项通过。Python 编译、既有 158 个认可素材的 SHA-256 前后清单对比和 `git diff --check`：通过。
 - 开发者可独立运行 `tools/verify_drag_source_diff.py` 检查相对 `c3b218d` 的源码 diff 与既有 158 个 `assets/` 文件；运行 #33963393479 证明该工具在 Windows cp1252/浅克隆环境不可靠，因此它不再属于候选打包门禁。QA PNG 不纳入 Git，候选发布工作流也不生成或上传 QA 预览。
 - 容器完整测试因缺少 PyInstaller/NumPy 在 3 个文件收集时报错；排除这些依赖文件后为 586 项通过、3 项跳过、12 项失败、42 项错误（737.66 秒），仍受无 DISPLAY、临时目录限制以及既有视觉金图与当前认可素材不一致影响。这些结果只记录，不将其写作通过，也不删除测试或修改金图。
-- PR #11 后续发布决策：旧基线自动测试和旧视觉、基线差异、素材计数及归档内容检查均不再阻塞候选 EXE。Windows Actions 直接调用 `build_drag_expectation_candidate.ps1 -SkipTests`，候选路径只执行 PyInstaller、唯一 EXE、精确文件名、大小、SHA-256 和 EXE artifact 上传。交付状态为“未运行自动测试、等待用户 Windows 实机验收”。
-- Windows 分层窗口 OLE 实机拖入、透明区域穿透及真实桌面视觉验收：**待用户验收**。Linux 预览不作为 Windows OLE/EXE 或人工视觉通过证据。
+- Windows workflow 保留手动打包路线，但当前 artifact 明示 `Foundation integration: NOT COMPLETE` 与 `Not an acceptance candidate`。
+- Windows 分层窗口 OLE 实机拖入、透明区域穿透及真实桌面视觉验收：**尚不可开始**。Linux 预览不作为 Windows OLE/EXE 或人工视觉通过证据。
+- REPAIR-20260906 已撤回“功能完成”结论：当前仓库没有 PR5 foundation API/基础提交。PR #11 已添加共享服务 Protocol、版本化 adapter、实际 `CF_HDROP` 单路径提取与 `STGMEDIUM` 释放，并禁止未注入 adapter 时注册旧 format-only 目标；`main` 注入、共享异步文件策略、协调器 Recovery/泪眼联动及 Windows 证据仍未完成，所以修复版仅为 foundation-blocked 开发构建。
 - 转头角度不属于本增量门禁且未调整；旧视觉回归失败只记录，不删测试、不改金图。
 
 ## 验证与状态

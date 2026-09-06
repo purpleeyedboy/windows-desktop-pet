@@ -15,7 +15,8 @@ $VirtualEnvPython = Join-Path $RepositoryRoot ".venv\Scripts\python.exe"
 $Python = if (Test-Path -LiteralPath $VirtualEnvPython) { $VirtualEnvPython } else { "python" }
 $DistDirectory = Join-Path $RepositoryRoot "dist-drag-expectation-candidate"
 $WorkDirectory = Join-Path $RepositoryRoot "build-drag-expectation-candidate"
-$CandidateName = "桌面宠物_文件拖动期待反馈.exe"
+$MetadataDirectory = Join-Path $RepositoryRoot "build-drag-expectation-candidate-metadata"
+$CandidateName = "桌面宠物_文件拖动期待反馈修复.exe"
 $MaxCandidateBytes = 52428800
 
 function Get-ValidatedChildPath([string]$ChildPath) {
@@ -58,7 +59,8 @@ function Remove-CandidateOutput([string]$Path) {
 function Clear-CandidateOutputs() {
     $CleanDistDirectory = Get-ValidatedChildPath "dist-drag-expectation-candidate"
     $CleanWorkDirectory = Get-ValidatedChildPath "build-drag-expectation-candidate"
-    foreach ($directory in @($CleanDistDirectory, $CleanWorkDirectory)) {
+    $CleanMetadataDirectory = Get-ValidatedChildPath "build-drag-expectation-candidate-metadata"
+    foreach ($directory in @($CleanDistDirectory, $CleanWorkDirectory, $CleanMetadataDirectory)) {
         Remove-CandidateOutput $directory
     }
 }
@@ -77,6 +79,32 @@ try {
     $env:TK_LIBRARY = Join-Path $basePrefix 'tcl\tk8.6'
 
     Clear-CandidateOutputs
+
+    New-Item -ItemType Directory -Path $MetadataDirectory | Out-Null
+    $GitShortHash = (& git rev-parse --short HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or [String]::IsNullOrWhiteSpace($GitShortHash)) {
+        throw "Failed to resolve the candidate Git commit."
+    }
+    $BuildInfoPath = Join-Path $MetadataDirectory "DRAG_EXPECTATION_BUILD_INFO.json"
+    $BuildInfo = Get-Content -LiteralPath (Join-Path $RepositoryRoot "DRAG_EXPECTATION_BUILD_INFO.json") -Raw | ConvertFrom-Json
+    $BuildInfo.git_short_hash = $GitShortHash
+    [IO.File]::WriteAllText(
+        $BuildInfoPath,
+        (($BuildInfo | ConvertTo-Json -Depth 8) + "`n"),
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+    $VersionInfoPath = Join-Path $MetadataDirectory "desktop_pet_drag_version_info.txt"
+    $VersionInfo = (Get-Content -LiteralPath (Join-Path $RepositoryRoot "desktop_pet_drag_version_info.txt") -Raw).Replace(
+        "build commit required",
+        $GitShortHash
+    )
+    [IO.File]::WriteAllText(
+        $VersionInfoPath,
+        $VersionInfo,
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+    $env:DESKTOP_PET_BUILD_INFO = $BuildInfoPath
+    $env:DESKTOP_PET_VERSION_INFO = $VersionInfoPath
 
     & $Python -m PyInstaller --noconfirm --distpath dist-drag-expectation-candidate --workpath build-drag-expectation-candidate desktop_pet_drag_expectation.spec
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE." }
@@ -97,5 +125,6 @@ try {
     Write-Host "SHA-256: $($Hash.Hash)"
 }
 finally {
+    Remove-CandidateOutput $MetadataDirectory
     Pop-Location
 }

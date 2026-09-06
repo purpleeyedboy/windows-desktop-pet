@@ -157,7 +157,7 @@ def test_cancel_failure_still_restores_and_leaves_controller_inactive():
     assert restores == [True]
 
 
-def test_decorator_preserves_size_and_exact_alpha_while_changing_both_eyes_and_head():
+def test_decorator_preserves_cat_support_but_particles_can_extend_alpha():
     image = Image.new("RGBA", (80, 80), (80, 90, 100, 0))
     for y in range(10, 70):
         for x in range(10, 70):
@@ -166,6 +166,7 @@ def test_decorator_preserves_size_and_exact_alpha_while_changing_both_eyes_and_h
         for y in range(box[1], box[3]):
             for x in range(box[0], box[2]):
                 image.putpixel((x, y), (245, 245, 245, 255))
+        image.putpixel(((box[0] + box[2]) // 2, (box[1] + box[3]) // 2), (0, 0, 0, 255))
     config = DragVisualConfig(
         eye_boxes=((20, 30, 34, 42), (46, 30, 60, 42)),
         head_box=(12, 8, 68, 50),
@@ -174,8 +175,13 @@ def test_decorator_preserves_size_and_exact_alpha_while_changing_both_eyes_and_h
     decorated = decorate_drag_expectation(image, 1, config)
 
     assert decorated.size == image.size
-    assert decorated.getchannel("A").tobytes() == image.getchannel("A").tobytes()
+    original_alpha = image.getchannel("A")
+    decorated_alpha = decorated.getchannel("A")
+    assert ImageChops.subtract(original_alpha, decorated_alpha).getbbox() is None
+    assert ImageChops.subtract(decorated_alpha, original_alpha).getbbox() is not None
     assert ImageChops.difference(decorated, image).getbbox(alpha_only=False)
     for box in config.eye_boxes:
         assert ImageChops.difference(decorated.crop(box), image.crop(box)).getbbox(alpha_only=False)
-    assert decorated.getpixel((40, 12)) != image.getpixel((40, 12))
+    assert ImageChops.difference(
+        decorated.crop(config.head_box), image.crop(config.head_box)
+    ).getbbox(alpha_only=False)

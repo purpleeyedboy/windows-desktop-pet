@@ -35,10 +35,12 @@ V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，�
 
 ## V2.1 文件拖动期待反馈测试版
 
-独立候选版使用 `build_drag_expectation_candidate.ps1` 在 Windows 构建，唯一输出为 `dist-drag-expectation-candidate\桌面宠物_文件拖动期待反馈.exe`。它只在合法的 OLE 文件拖动进入猫咪有效像素感应区时返回 Copy 光标反馈并显示双眼放大/颤抖、粒子和头部高亮；Drop 始终返回 None。Copy 仅表示期待反馈，程序不复制、移动、删除、回收、打开、上传或修改文件，也不读取文件路径、不改变饥饿值。
+返工开发版使用 `build_drag_expectation_candidate.ps1` 在 Windows 构建，输出 `dist-drag-expectation-candidate\桌面宠物_文件拖动期待反馈修复.exe`。OLE 层会复制单个 `CF_HDROP` 本地绝对路径并释放 `STGMEDIUM`；多对象、目录、相对路径和网络路径被拒绝。Drop 只形成不可变预览事件，不执行复制、移动、删除、回收、打开、上传或修改文件。
 
-右键菜单中的“调试：拖动期待态”只播放同一瞬态效果，便于实机视觉验收，不模拟或执行文件操作。动画数值集中在 `DragVisualConfig`，在 Windows 真机确认前均标记为待视觉验收。
+右键菜单的一级“调试”子菜单提供开始/结束拖动期待演示；它不模拟或执行文件操作。动画数值集中在 `DragVisualConfig`，在 Windows 真机确认前均标记为待视觉验收。
 
 QA 预览不纳入 Git。需要本地辅助检查时，可运行 `python tools/build_drag_expectation_preview.py --output-dir <临时目录>` 确定性生成 `before-after.png` 与 SHA-256 `stats.json`；候选发布工作流不生成或上传 QA 预览。源码边界工具仍可供开发者单独运行，但不再阻塞候选打包。
 
-PR #11 的 Windows Actions 明确不运行 pytest，而是直接调用 `.\build_drag_expectation_candidate.ps1 -SkipTests`。该候选版标记为“未运行自动测试、等待用户 Windows 实机验收”；候选路径不执行旧视觉、基线差异或归档内容门禁，只运行 PyInstaller，并校验唯一 EXE、精确文件名、50 MiB 大小上限和 SHA-256 后上传 `桌面宠物_文件拖动期待反馈.exe`。
+PR #11 的 Windows workflow 是手动开发构建路线：不运行旧 pytest，直接调用 `.\build_drag_expectation_candidate.ps1 -SkipTests`，只运行 PyInstaller 并校验唯一 EXE、精确文件名、50 MiB 和 SHA-256。Actions 与内嵌元数据均明示 foundation 未接入、不是验收候选。
+
+**当前不可验收：** 当前分支尚无 PR5 的公共 foundation API/基础提交。PR #11 已提供只依赖 `InteractionRegionService`、`InputRouter`、`ActivityCoordinator`、`HungerService`、`ClockService` 和 `FileValidationService` 的 `DragFoundationAdapter`；`PetWindow` 只在注入完整 adapter 时注册 OLE。在总控带入同一 foundation 提交并从 `main` 注入服务前，打包产物是 foundation-blocked 开发构建，不是可验收成品。
