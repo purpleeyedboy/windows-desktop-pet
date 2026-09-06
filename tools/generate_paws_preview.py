@@ -18,8 +18,8 @@ def generate_preview(output: Path) -> None:
     compositor = load_paw_compositor()
     frames = (
         source,
-        compositor.compose(source, left_offset=(0, 2), right_offset=(0, 2)),
-        compositor.compose(source, left_offset=(0, 5), right_offset=(0, 5)),
+        compositor.compose(source, left_offset=(0, -6)),
+        compositor.compose(source, left_offset=(0, 5)),
         source,
     )
     preview = Image.new("RGBA", (source.width * len(frames), source.height))

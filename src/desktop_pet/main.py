@@ -5,10 +5,16 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_head_neck_compositor, load_paw_compositor
+from .assets import (
+    load_frames,
+    load_head_neck_compositor,
+    load_paw_compositor,
+    load_paw_motion_config,
+)
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
-from .win32_pointer import Win32PointerInputAdapter
+from .release_status import release_status_text
+from .win32_pointer import Win32ButtonState, Win32CursorMovementService
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -84,6 +90,14 @@ def main() -> int:
     pet_window: PetWindow | None = None
     try:
         if not mutex.acquire():
+            if os.name == "nt":
+                ctypes.windll.user32.MessageBoxW(
+                    None,
+                    "已有桌面宠物实例正在运行；本次版本未启动。\n\n"
+                    + release_status_text(),
+                    "桌面宠物版本冲突",
+                    0x40,
+                )
             return 0
         root = tk.Tk()
         root.withdraw()
@@ -96,9 +110,13 @@ def main() -> int:
             compositor=compositor,
             cursor_provider=cursor_provider,
             head_follow=True,
-            pointer_adapter_factory=lambda hwnd: Win32PointerInputAdapter(hwnd),
+            cursor_service_factory=lambda _hwnd: Win32CursorMovementService(),
+            button_state_factory=lambda _hwnd: Win32ButtonState(),
             paw_compositor=load_paw_compositor(),
+            paw_motion_config=load_paw_motion_config(),
         )
+        if os.name == "nt":
+            pet_window.show_release_status()
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:

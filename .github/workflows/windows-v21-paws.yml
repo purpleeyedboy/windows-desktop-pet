@@ -38,6 +38,6 @@ jobs:
           } | Format-List
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v2.1-paws-untested-windows-candidate
-          path: dist/桌面宠物_双前肢按压鼠标.exe
+          name: v2.1-paws-integration-blocked-repair-candidate
+          path: dist/桌面宠物_双前肢按压鼠标_20260906修复候选.exe
           if-no-files-found: error

@@ -27,7 +27,17 @@ from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 from .paw_compositor import PawCompositor
-from .paw_press import PawPressController, PawState, PointerInputAdapter
+from .paw_press import (
+    CursorMovementService,
+    LocalPawActivityAdapter,
+    PawActivityService,
+    PawPressController,
+    PawMotionConfig,
+    PawPose,
+    PawSide,
+    PawState,
+)
+from .release_status import release_status_text
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -241,8 +251,11 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
-        pointer_adapter_factory: Callable[[int], PointerInputAdapter] | None = None,
+        cursor_service_factory: Callable[[int], CursorMovementService] | None = None,
+        button_state_factory: Callable[[int], object] | None = None,
+        paw_activity_service: PawActivityService | None = None,
         paw_compositor: PawCompositor | None = None,
+        paw_motion_config: PawMotionConfig = PawMotionConfig(),
     ) -> None:
         if legacy_mode:
             if (
@@ -257,6 +270,7 @@ class PetWindow:
             )
 
         self.root = root
+        self._clock = clock
         self.frames = frames
         self.display_height = 280
         self.always_on_top = True
@@ -272,6 +286,14 @@ class PetWindow:
         self._paw_compositor = paw_compositor
         self._paw_after: object | None = None
         self._paw_base_image: Image.Image | None = None
+        self._paw_pose = PawPose(PawState.IDLE)
+        self._paw_candidate: PawSide | None = None
+        self._paw_candidate_exceeded = False
+        self._paw_click_consumed = False
+        self._window_dragging = False
+        self._ole_drag_active = False
+        self._paw_activity = paw_activity_service or LocalPawActivityAdapter()
+        self._button_state = None
         self._legacy_fallback = bool(legacy_mode)
         self._rendering_available = True
         self._consecutive_renderer_failures = 0
@@ -307,11 +329,18 @@ class PetWindow:
             self.renderer = renderer_factory(root.winfo_id())
             self.renderer.set_topmost(True)
             self.bubble = BubbleWindow(root, renderer_factory=renderer_factory)
-            if pointer_adapter_factory is not None:
+            if cursor_service_factory is not None:
                 if paw_compositor is None:
-                    raise ValueError("pointer adapter requires paw compositor")
+                    raise ValueError("cursor service requires paw compositor")
+                if button_state_factory is None:
+                    raise ValueError("cursor service requires input-router adapter")
+                self._button_state = button_state_factory(root.winfo_id())
                 self._paw_controller = PawPressController(
-                    pointer_adapter_factory(root.winfo_id())
+                    cursor_service_factory(root.winfo_id()),
+                    self,
+                    approval_validator=self._paw_activity.validate_paw,
+                    on_complete=self._paw_activity.complete_paw,
+                    config=paw_motion_config,
                 )
             self.animation = AnimationController(
                 {
@@ -380,7 +409,14 @@ class PetWindow:
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
         if self._paw_controller is not None:
-            menu.add_command(label="测试：双前肢按压鼠标", command=self.trigger_paw_press)
+            debug = tk.Menu(self.root, tearoff=False)
+            debug.add_command(
+                label="左前肢按压", command=lambda: self.trigger_paw_press(PawSide.LEFT)
+            )
+            debug.add_command(
+                label="右前肢按压", command=lambda: self.trigger_paw_press(PawSide.RIGHT)
+            )
+            menu.add_cascade(label="调试", menu=debug)
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,
@@ -399,8 +435,12 @@ class PetWindow:
             command=lambda: self.set_always_on_top(self._topmost_var.get()),
         )
         menu.add_separator()
+        menu.add_command(label="关于/运行状态", command=self.show_release_status)
         menu.add_command(label="退出", command=self.close)
         return menu
+
+    def show_release_status(self) -> None:
+        messagebox.showinfo("桌面宠物运行状态", release_status_text(), parent=self.root)
 
     def _bind_events(self) -> None:
         self.root.bind("<ButtonPress-1>", self._on_left_press)
@@ -704,15 +744,38 @@ class PetWindow:
             return
         self.eye_session.request_blink()
 
-    def trigger_paw_press(self) -> None:
+    # PawInputGate adapter. Foundation InputRouter/ActivityCoordinator can
+    # replace these reads without changing the feature controller.
+    def any_button_down(self) -> bool:
+        return bool(self._button_state and self._button_state.any_button_down())
+
+    def pointer_interaction_blocked(self) -> bool:
+        return self._window_dragging or self._ole_drag_active
+
+    def paw_activity_allowed(self) -> bool:
+        return (
+            not self._closed
+            and self._rendering_available
+            and not self.animation.busy
+            and not self.pointer_interaction_blocked()
+        )
+
+    def trigger_paw_press(self, side: PawSide) -> None:
         controller = self._paw_controller
-        if controller is None or self._closed or self.animation.busy:
+        if (controller is None or not self.paw_activity_allowed()
+                or not self._paw_activity.paw_allowed()):
+            return
+        approval = self._paw_activity.request_paw(side)
+        if approval is None:
             return
         self._paw_base_image = self._current_image
         try:
-            if controller.start(time.monotonic()):
+            if controller.start(side, approval, self._clock()):
                 self._paw_tick()
+            else:
+                self._paw_activity.complete_paw(approval)
         except Exception:
+            self._paw_activity.complete_paw(approval)
             self.cancel_paw_press()
 
     def _paw_tick(self) -> None:
@@ -720,16 +783,18 @@ class PetWindow:
         if controller is None or base is None or self._closed:
             return
         try:
-            controller.tick(time.monotonic())
-            if controller.state is PawState.IDLE:
+            pose = controller.sample(self._clock())
+            self._paw_pose = pose
+            if pose.state is PawState.IDLE:
                 self._apply_image(base, self._anchor())
                 self._paw_base_image = None
+                self._paw_pose = PawPose(PawState.IDLE)
                 self._paw_after = None
                 return
-            offset = {PawState.PRESSED: 2, PawState.HOLDING: 3,
-                      PawState.PUSHING: 5}[controller.state]
             image = self._paw_compositor.compose(
-                base, left_offset=(0, offset), right_offset=(0, offset)
+                base,
+                left_offset=(0, round(pose.left_y)),
+                right_offset=(0, round(pose.right_y)),
             )
             self._apply_image(image, self._anchor())
             self._paw_after = self.root.after(16, self._paw_tick)
@@ -743,6 +808,7 @@ class PetWindow:
             self._cancel_after(self._paw_after)
             self._paw_after = None
         base, self._paw_base_image = self._paw_base_image, None
+        self._paw_pose = PawPose(PawState.IDLE)
         if base is not None and not self._closed and self._rendering_available:
             try:
                 self._apply_image(base, self._anchor())
@@ -854,7 +920,15 @@ class PetWindow:
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
-        self._apply_image(frame, self._anchor())
+        displayed = frame
+        if self._paw_base_image is not None and self._paw_compositor is not None:
+            self._paw_base_image = frame
+            displayed = self._paw_compositor.compose(
+                frame,
+                left_offset=(0, round(self._paw_pose.left_y)),
+                right_offset=(0, round(self._paw_pose.right_y)),
+            )
+        self._apply_image(displayed, self._anchor())
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
         if self._constructing and not self._window_shown:
@@ -981,20 +1055,36 @@ class PetWindow:
             pass
 
     def _on_left_press(self, event: tk.Event) -> None:
-        self.cancel_paw_press()
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
+        self._window_dragging = False
+        self._paw_candidate_exceeded = False
+        pressed_paw = self._paw_side_at(self._press_pointer)
+        self._paw_click_consumed = pressed_paw is not None
+        self._paw_candidate = (
+            pressed_paw
+            if self._paw_controller is not None
+            and self._paw_controller.state is PawState.IDLE
+            else None
+        )
 
     def _on_left_motion(self, event: tk.Event) -> None:
         if self._press_pointer is None or self._press_window is None:
             return
         delta_x = event.x_root - self._press_pointer[0]
         delta_y = event.y_root - self._press_pointer[1]
-        if abs(delta_x) + abs(delta_y) < CLICK_THRESHOLD:
+        threshold_x, threshold_y = (CLICK_THRESHOLD, CLICK_THRESHOLD)
+        drag_threshold = getattr(self._button_state, "drag_threshold", None)
+        if callable(drag_threshold):
+            threshold_x, threshold_y = drag_threshold()
+        exceeded = abs(delta_x) >= threshold_x or abs(delta_y) >= threshold_y
+        if not exceeded:
             return
+        self._paw_candidate_exceeded = True
+        self._window_dragging = True
         try:
             self._move_to(
                 self._press_window[0] + delta_x,
@@ -1005,13 +1095,38 @@ class PetWindow:
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
     def _on_left_release(self, event: tk.Event) -> None:
-        if self._press_pointer is not None:
+        candidate = self._paw_candidate
+        should_start_paw = (
+            candidate is not None
+            and not self._paw_candidate_exceeded
+            and self._paw_side_at((event.x_root, event.y_root)) is candidate
+            and not self.any_button_down()
+            and not self._ole_drag_active
+        )
+        if (self._press_pointer is not None and candidate is None
+                and not self._paw_click_consumed):
             self.handle_left_release(
                 self._press_pointer,
                 (event.x_root, event.y_root),
             )
         self._press_pointer = None
         self._press_window = None
+        self._paw_candidate = None
+        self._paw_candidate_exceeded = False
+        self._paw_click_consumed = False
+        self._window_dragging = False
+        if should_start_paw:
+            self.trigger_paw_press(candidate)
+
+    def _paw_side_at(self, point: tuple[int, int]) -> PawSide | None:
+        compositor = self._paw_compositor
+        if compositor is None:
+            return None
+        if compositor.hit_test("left", point, self._window_rect):
+            return PawSide.LEFT
+        if compositor.hit_test("right", point, self._window_rect):
+            return PawSide.RIGHT
+        return None
 
     def _on_context_menu(self, event: tk.Event) -> None:
         self.cancel_paw_press()

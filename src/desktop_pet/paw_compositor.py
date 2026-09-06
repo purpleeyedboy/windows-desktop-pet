@@ -71,11 +71,18 @@ class PawCompositor:
                 right_offset=(0, 0)) -> Image.Image:
         result = source.convert("RGBA").copy()
         for paw, offset in (("left", left_offset), ("right", right_offset)):
+            if tuple(offset) == (0, 0):
+                continue
             mask = self.masks[paw]
             if mask.size != result.size:
                 mask = mask.resize(result.size, Image.Resampling.NEAREST)
             layer = Image.new("RGBA", result.size)
-            layer.paste(result, mask=mask)
+            layer.paste(source, mask=mask)
+            # Extend the adjacent upper-leg texture into the vacated pixels;
+            # this removes the old paw instead of leaving a doubled ghost.
+            backfill = Image.new("RGBA", result.size)
+            backfill.alpha_composite(source.convert("RGBA"), dest=(0, 8))
+            result.paste(backfill, mask=mask)
             moved = Image.new("RGBA", result.size)
             moved.alpha_composite(layer, dest=(int(offset[0]), int(offset[1])))
             result.alpha_composite(moved)

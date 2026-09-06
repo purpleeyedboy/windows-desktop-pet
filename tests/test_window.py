@@ -16,6 +16,8 @@ from desktop_pet.eye_follow import CursorPoint
 from desktop_pet.eye_runtime import ActionFailure
 from desktop_pet.model import ACTIONS, Rect
 from desktop_pet.window import PetWindow, SIZE_PRESETS, format_position
+from desktop_pet.paw_compositor import PawCompositor
+from desktop_pet.paw_press import PawSide, PawState
 from tests.fakes import FakeRenderer
 
 
@@ -204,6 +206,9 @@ class HeadlessMenu:
     def add_checkbutton(self, *, label, variable, command):
         self.commands[label] = command
 
+    def add_cascade(self, *, label, menu):
+        self.commands[label] = menu
+
     def tk_popup(self, _x, _y):
         pass
 
@@ -369,6 +374,52 @@ def make_headless_window(monkeypatch, *, compositor=None, cursor=None):
 def test_format_position_supports_negative_monitor_coordinates():
     assert format_position(-1920, 20) == "-1920+20"
     assert format_position(50, -100) == "+50-100"
+
+
+def test_real_window_press_release_on_same_alpha_paw_reaches_feature_request():
+    window = object.__new__(PetWindow)
+    left = Image.new("L", (8, 8)); left.putpixel((6, 6), 255)
+    right = Image.new("L", (8, 8)); right.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(left, right)
+    window._window_rect = Rect(-100, 50, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: False, drag_threshold=lambda: (8, 8)
+    )
+    window.eye_session = None
+    window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    requested = []
+    window.trigger_paw_press = requested.append
+
+    press = SimpleNamespace(x_root=-35, y_root=115)
+    window._on_left_press(press)
+    window._on_left_release(press)
+
+    assert requested == [PawSide.LEFT]
+
+
+def test_paw_drag_threshold_moves_window_and_never_backfills_press_request():
+    window = object.__new__(PetWindow)
+    mask = Image.new("L", (8, 8)); mask.putpixel((6, 6), 255)
+    window._paw_compositor = PawCompositor(mask, Image.new("L", (8, 8)))
+    window._window_rect = Rect(0, 0, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: False, drag_threshold=lambda: (4, 4)
+    )
+    window.eye_session = None; window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    window._move_to = lambda *_args: None
+    window.bubble = SimpleNamespace(reposition=lambda *_args: None)
+    window.current_screen = lambda: Rect(0, 0, 100, 100)
+    requested = []; window.trigger_paw_press = requested.append
+
+    window._on_left_press(SimpleNamespace(x_root=65, y_root=65))
+    window._on_left_motion(SimpleNamespace(x_root=70, y_root=65))
+    window._on_left_release(SimpleNamespace(x_root=70, y_root=65))
+
+    assert requested == []
 
 
 def test_constrain_rect_to_area_keeps_the_whole_pet_visible():

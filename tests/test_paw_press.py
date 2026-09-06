@@ -1,107 +1,115 @@
 from dataclasses import dataclass
 
-import pytest
-
 from desktop_pet.paw_press import (
-    PawPressController,
-    PawState,
-    PointerBounds,
+    ActivityApproval, PawPressController, PawSide, PawState, PointerBounds,
     PointerPoint,
 )
 
 
 @dataclass
-class FakePointer:
+class FakeCursor:
     point: PointerPoint = PointerPoint(-100, 20)
-    bounds: PointerBounds = PointerBounds(-1920, 0, 3840, 1080)
+    pointer_height: int = 32
     clip: PointerBounds | None = PointerBounds(-500, 10, 900, 700)
+    monitor: PointerBounds = PointerBounds(-1920, 0, 1920, 1080)
 
-    def __post_init__(self):
-        self.events = []
-        self.buttons = set()
-
-    def cursor_position(self): return self.point
-    def virtual_bounds(self): return self.bounds
+    def __post_init__(self): self.moves = []
+    def position(self): return self.point
+    def set_position(self, point): self.moves.append(point); self.point = point
+    def pointer_nominal_height(self): return self.pointer_height
+    def monitor_bounds_for(self, _point): return self.monitor
     def current_clip(self): return self.clip
-    def button_down(self, name): return name in self.buttons
-    def capture(self): self.events.append("capture")
-    def release_capture(self): self.events.append("release_capture")
-    def set_clip(self, value): self.events.append(("clip", value)); self.clip = value
-    def move(self, point): self.events.append(("move", point)); self.point = point
-    def press_left(self): self.events.append("press"); self.buttons.add("left")
-    def release_left(self): self.events.append("release"); self.buttons.discard("left")
 
 
-def test_full_press_hold_push_release_restores_original_clip():
-    adapter = FakePointer()
-    original = adapter.clip
-    controller = PawPressController(adapter, hold_seconds=.1, push_pixels=40)
-    assert controller.start(0.0) is True
-    assert controller.state is PawState.PRESSED
-    assert adapter.events[:3] == ["capture", ("clip", original), "press"]
-    controller.tick(.05)
-    assert controller.state is PawState.HOLDING
-    controller.tick(.11)
-    assert ("move", PointerPoint(-100, 60)) in adapter.events
-    controller.tick(.22)
-    assert controller.state is PawState.IDLE
-    assert adapter.events[-3:] == ["release", ("clip", original), "release_capture"]
+class FakeGate:
+    def __init__(self): self.buttons = False; self.blocked = False; self.allowed = True
+    def any_button_down(self): return self.buttons
+    def pointer_interaction_blocked(self): return self.blocked
+    def paw_activity_allowed(self): return self.allowed
 
 
-def test_bounds_intersection_handles_negative_monitors_and_edges():
-    a = PointerBounds(-1920, -200, 3840, 1280)
-    b = PointerBounds(-500, 10, 900, 700)
-    assert a.intersection(b) == b
-    assert b.clamp(PointerPoint(999, -5)) == PointerPoint(399, 10)
+def approval(version=4, token='token'):
+    return ActivityApproval('paw-17', version, token)
 
 
-@pytest.mark.parametrize("takeover", ["move", "right", "release"])
-def test_user_takeover_immediately_cancels(takeover):
-    adapter = FakePointer()
-    controller = PawPressController(adapter)
-    controller.start(0)
-    if takeover == "move": adapter.point = PointerPoint(-80, 20)
-    elif takeover == "right": adapter.buttons.add("right")
-    else: adapter.buttons.discard("left")
-    controller.tick(.01)
-    assert controller.state is PawState.IDLE
-    assert adapter.events[-1] == "release_capture"
+def valid(identity): return identity == approval()
 
 
-def test_cancel_and_close_are_idempotent_even_when_release_raises():
-    adapter = FakePointer()
-    controller = PawPressController(adapter)
-    controller.start(0)
-    def broken_release():
-        adapter.events.append("release-error")
-        raise RuntimeError("boom")
-    adapter.release_left = broken_release
-    controller.cancel()
-    controller.close()
-    assert controller.state is PawState.CLOSED
-    assert ("clip", PointerBounds(-500, 10, 900, 700)) in adapter.events
-    assert "release_capture" in adapter.events
+def test_timing_moves_only_selected_paw_and_cools_down():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    assert c.start(PawSide.LEFT, approval(), 0.0)
+    assert c.sample(0.06).left_y < 0 and c.sample(0.06).right_y == 0
+    assert c.sample(0.16).state is PawState.PAUSE
+    assert c.sample(0.28).state is PawState.PRESS
+    assert c.sample(0.48).state is PawState.RECOVER
+    assert c.sample(0.60).left_y == 0
+    assert not c.start(PawSide.RIGHT, approval(), 1.0)
+    assert c.sample(1.21).state is PawState.IDLE
 
 
-def test_start_exception_rolls_back_every_resource():
-    adapter = FakePointer()
-    def broken_press(): raise RuntimeError("boom")
-    adapter.press_left = broken_press
-    controller = PawPressController(adapter)
-    with pytest.raises(RuntimeError): controller.start(0)
-    assert controller.state is PawState.IDLE
-    assert adapter.events[-2:] == [("clip", PointerBounds(-500, 10, 900, 700)), "release_capture"]
+def test_cursor_total_is_14_not_per_frame_and_x_never_changes():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.RIGHT, approval(), 0)
+    c.sample(.19); c.sample(.20); c.sample(.24); c.sample(.28); c.sample(.359)
+    assert cursor.moves
+    assert all(p.x == -100 for p in cursor.moves)
+    assert cursor.moves[-1].y == 34
+    assert max(p.y for p in cursor.moves) - 20 == 14
 
 
-def test_one_hundred_interactions_restore_clip_capture_and_button_every_time():
-    adapter = FakePointer()
-    original = adapter.clip
-    controller = PawPressController(adapter, hold_seconds=.01)
-    for index in range(100):
-        assert controller.start(float(index))
-        controller.tick(float(index) + .05)
-        assert controller.state is PawState.IDLE
-        assert adapter.clip == original
-        assert adapter.buttons == set()
-    assert adapter.events.count("capture") == 100
-    assert adapter.events.count("release_capture") == 100
+def test_pointer_height_scales_once_and_clamps_total_distance():
+    for height, expected in ((16, 8), (64, 28), (0, 14)):
+        cursor, gate = FakeCursor(pointer_height=height), FakeGate()
+        c = PawPressController(cursor, gate, approval_validator=valid)
+        c.start(PawSide.LEFT, approval(), 0); c.sample(.20); c.sample(.359)
+        assert cursor.point.y == 20 + expected
+
+
+def test_user_motion_during_lift_cancels_only_cursor_not_animation():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.LEFT, approval(), 0)
+    cursor.point = PointerPoint(-94, 20)
+    assert c.sample(.10).state is PawState.LIFT
+    c.sample(.20); c.sample(.30)
+    assert cursor.moves == []
+    assert c.sample(.30).left_y != 0
+
+
+def test_user_motion_or_button_during_press_never_pulls_cursor_back():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.LEFT, approval(), 0); c.sample(.20); c.sample(.25)
+    moved = len(cursor.moves)
+    cursor.point = PointerPoint(cursor.point.x + 5, cursor.point.y)
+    c.sample(.27); c.sample(.35)
+    assert len(cursor.moves) == moved
+    assert c.sample(.35).state is PawState.PRESS
+
+
+def test_boundaries_negative_coordinates_clip_and_zero_remaining():
+    cursor = FakeCursor(point=PointerPoint(-2, 697))
+    gate = FakeGate(); c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.RIGHT, approval(), 0); c.sample(.20); c.sample(.359)
+    assert cursor.point == PointerPoint(-2, 709)
+    count = len(cursor.moves); c.sample(.359)
+    assert len(cursor.moves) == count
+
+
+def test_stale_approval_or_permission_cancels_and_restores_pose():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=lambda _: False)
+    c.start(PawSide.LEFT, approval(), 0)
+    assert c.sample(.01).state is PawState.IDLE
+    assert c.sample(.01).left_y == c.sample(.01).right_y == 0
+
+
+def test_cursor_failure_is_not_retried_and_animation_continues():
+    cursor, gate = FakeCursor(), FakeGate()
+    def fail(_point): raise OSError('injected')
+    cursor.set_position = fail
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.LEFT, approval(), 0); c.sample(.20); c.sample(.25); c.sample(.30)
+    assert c.sample(.30).state is PawState.PRESS

@@ -1,4 +1,4 @@
-"""Windows physical-pointer adapter. Never instantiate this adapter in tests."""
+"""Read/set-only Windows cursor service and read-only physical button state."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from ctypes import wintypes
 
 from .paw_press import PointerBounds, PointerPoint
 
-SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN = 76, 77
-SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN = 78, 79
-MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
-VK_LBUTTON, VK_RBUTTON = 0x01, 0x02
+SM_CYCURSOR = 14
+SM_CXDRAG, SM_CYDRAG = 68, 69
+VK_MOUSE_BUTTONS = (0x01, 0x02, 0x04, 0x05, 0x06)
+MONITOR_DEFAULTTONEAREST = 2
 
 
 class POINT(ctypes.Structure):
@@ -23,25 +23,41 @@ class RECT(ctypes.Structure):
                 ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
 
 
-class Win32PointerInputAdapter:
-    """All coordinates are physical virtual-desktop pixels, including negatives."""
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", RECT),
+                ("rcWork", RECT), ("dwFlags", wintypes.DWORD)]
 
-    def __init__(self, hwnd: int, user32=None) -> None:
+
+class Win32CursorMovementService:
+    """Foundation-compatible service; it can only read or set cursor position."""
+
+    def __init__(self, user32=None) -> None:
         if os.name != "nt" and user32 is None:
-            raise OSError("Win32 pointer control requires Windows")
-        self.hwnd = hwnd
+            raise OSError("Win32 cursor service requires Windows")
         self.user32 = user32 or ctypes.WinDLL("user32", use_last_error=True)
 
-    def cursor_position(self) -> PointerPoint:
+    def position(self) -> PointerPoint:
         point = POINT()
         if not self.user32.GetCursorPos(ctypes.byref(point)):
             raise OSError("GetCursorPos failed")
         return PointerPoint(point.x, point.y)
 
-    def virtual_bounds(self) -> PointerBounds:
-        metric = self.user32.GetSystemMetrics
-        return PointerBounds(metric(SM_XVIRTUALSCREEN), metric(SM_YVIRTUALSCREEN),
-                             metric(SM_CXVIRTUALSCREEN), metric(SM_CYVIRTUALSCREEN))
+    def set_position(self, point: PointerPoint) -> None:
+        if not self.user32.SetCursorPos(point.x, point.y):
+            raise OSError("SetCursorPos failed")
+
+    def pointer_nominal_height(self) -> int:
+        return int(self.user32.GetSystemMetrics(SM_CYCURSOR))
+
+    def monitor_bounds_for(self, point: PointerPoint) -> PointerBounds:
+        native_point = POINT(point.x, point.y)
+        monitor = self.user32.MonitorFromPoint(native_point, MONITOR_DEFAULTTONEAREST)
+        info = MONITORINFO(); info.cbSize = ctypes.sizeof(MONITORINFO)
+        if not monitor or not self.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            raise OSError("monitor bounds unavailable")
+        rect = info.rcMonitor
+        return PointerBounds(rect.left, rect.top, rect.right - rect.left,
+                             rect.bottom - rect.top)
 
     def current_clip(self) -> PointerBounds:
         rect = RECT()
@@ -50,29 +66,21 @@ class Win32PointerInputAdapter:
         return PointerBounds(rect.left, rect.top, rect.right - rect.left,
                              rect.bottom - rect.top)
 
-    def button_down(self, name: str) -> bool:
-        key = VK_LBUTTON if name == "left" else VK_RBUTTON
-        return bool(self.user32.GetAsyncKeyState(key) & 0x8000)
 
-    def capture(self) -> None:
-        self.user32.SetCapture(self.hwnd)
+class Win32ButtonState:
+    """Read-only InputRouter adapter; it never synthesizes an input event."""
 
-    def release_capture(self) -> None:
-        self.user32.ReleaseCapture()
+    def __init__(self, user32=None) -> None:
+        if os.name != "nt" and user32 is None:
+            raise OSError("Win32 button state requires Windows")
+        self.user32 = user32 or ctypes.WinDLL("user32", use_last_error=True)
 
-    def set_clip(self, bounds: PointerBounds | None) -> None:
-        native = None if bounds is None else RECT(bounds.x, bounds.y,
-            bounds.right, bounds.bottom)
-        argument = None if native is None else ctypes.byref(native)
-        if not self.user32.ClipCursor(argument):
-            raise OSError("ClipCursor failed")
+    def any_button_down(self) -> bool:
+        return any(self.user32.GetAsyncKeyState(key) & 0x8000
+                   for key in VK_MOUSE_BUTTONS)
 
-    def move(self, point: PointerPoint) -> None:
-        if not self.user32.SetCursorPos(point.x, point.y):
-            raise OSError("SetCursorPos failed")
-
-    def press_left(self) -> None:
-        self.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-
-    def release_left(self) -> None:
-        self.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+    def drag_threshold(self) -> tuple[int, int]:
+        return (
+            max(1, int(self.user32.GetSystemMetrics(SM_CXDRAG))),
+            max(1, int(self.user32.GetSystemMetrics(SM_CYDRAG))),
+        )

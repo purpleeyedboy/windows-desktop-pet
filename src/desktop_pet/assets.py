@@ -1,4 +1,5 @@
 import hashlib
+import json
 from io import BytesIO
 from pathlib import Path
 import sys
@@ -11,6 +12,7 @@ from .model import ACTIONS
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
 from .paw_compositor import PawCompositor, load_rle_masks
+from .paw_press import PawMotionConfig
 
 
 EXPECTED_SIZE = (512, 768)
@@ -97,6 +99,15 @@ def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
 def load_paw_compositor() -> PawCompositor:
     root = asset_path("assets", "paws", "v1")
     return PawCompositor(*load_rle_masks(root / "authoring.json"))
+
+
+def load_paw_motion_config() -> PawMotionConfig:
+    path = asset_path("assets", "paws", "v1", "authoring.json")
+    definition = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return PawMotionConfig(**definition["motion"])
+    except (KeyError, TypeError) as error:
+        raise ValueError("invalid paw motion configuration") from error
 
 
 def load_neutral_eye_source_probe(

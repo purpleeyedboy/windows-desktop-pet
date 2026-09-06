@@ -3,12 +3,12 @@ from pathlib import Path
 from tools.v21_paws_gate import inspect_release_diff, verify_baseline_assets
 
 ROOT = Path(__file__).parents[1]
-EXE = "桌面宠物_双前肢按压鼠标.exe"
+EXE = "桌面宠物_双前肢按压鼠标_20260906修复候选.exe"
 
 
 def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
     text = (ROOT / "desktop_pet_paws.spec").read_text(encoding="utf-8")
-    assert 'name="桌面宠物_双前肢按压鼠标"' in text
+    assert f'name="{Path(EXE).stem}"' in text
     assert "COLLECT(" not in text
     assert '"assets" / "paws"' in text
     assert "version_info_paws.txt" in text
@@ -20,8 +20,8 @@ def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
 
 def test_version_resource_contains_required_traceability():
     text = (ROOT / "version_info_paws.txt").read_text(encoding="utf-8")
-    for value in ("2.1.1.0", "BASE-001", "双前肢按压鼠标", "未自动测试候选版",
-                  "调试菜单", "BASELINE_V2.1.md", "2026-09-05", "18d921a"):
+    for value in ("2.1.1.0", "BASE-001", "单侧前肢按压与有限光标推动", "修复候选版",
+                  "调试菜单", "BASELINE_V2.1.md", "2026-09-06", "pending-PR5"):
         assert value in text
 
 
@@ -35,7 +35,7 @@ def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     assert EXE in text
     assert "Length" in text and "Get-FileHash" in text
     assert "actions/upload-artifact@" in text
-    assert "untested-windows-candidate" in text
+    assert "integration-blocked-repair-candidate" in text
     assert "pending user Windows acceptance" in text
     assert expected_name == EXE
     inline_powershell = text.split("run: |", 1)[1].split(

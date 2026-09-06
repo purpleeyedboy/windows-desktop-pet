@@ -37,7 +37,23 @@ def test_each_paw_moves_independently_and_outside_pixels_are_unchanged():
     result = compositor.compose(source, left_offset=(0, 2), right_offset=(0, 1))
     assert result.getpixel((1, 3)) == (255, 0, 0, 255)
     assert result.getpixel((6, 2)) == (0, 0, 255, 255)
+    assert result.getpixel((1, 1))[3] == 0
+    assert result.getpixel((6, 1))[3] == 0
     assert result.getpixel((4, 4)) == source.getpixel((4, 4))
+
+
+def test_single_selected_paw_does_not_move_or_duplicate_the_other_paw():
+    source = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
+    source.putpixel((1, 1), (255, 0, 0, 255))
+    source.putpixel((6, 1), (0, 0, 255, 255))
+    compositor = PawCompositor(mask([(1, 1)]), mask([(6, 1)]))
+
+    result = compositor.compose(source, left_offset=(0, 2))
+
+    assert result.getpixel((1, 1))[3] == 0
+    assert result.getpixel((1, 3)) == (255, 0, 0, 255)
+    assert result.getpixel((6, 1)) == (0, 0, 255, 255)
+    assert result.getpixel((6, 3))[3] == 0
 
 
 def test_runtime_masks_are_reconstructed_from_reviewable_rle_text():
