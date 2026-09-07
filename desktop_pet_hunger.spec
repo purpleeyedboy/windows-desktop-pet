@@ -22,7 +22,7 @@ datas.extend((str(EYE_SOURCE / name), EYE_RUNTIME) for name in EYE_FILES)
 a = Analysis(
     [str(ROOT / "run_desktop_pet.py")], pathex=[str(ROOT / "src")],
     binaries=[], datas=datas,
-    hiddenimports=["PIL._tkinter_finder", "desktop_pet.foundation"],
+    hiddenimports=["PIL._tkinter_finder", "desktop_pet.foundation.services"],
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=["numpy", "cv2"],
     noarchive=False, optimize=0,
 )

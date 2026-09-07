@@ -1,6 +1,7 @@
 """Adapter boundary required from PR5; this feature never owns shared activity state."""
 from __future__ import annotations
 import importlib
+from dataclasses import dataclass
 from typing import Protocol
 from .hunger import HungerLevel, HungerStatePort
 
@@ -27,17 +28,37 @@ class FoundationServicesPort(Protocol):
     state_store: HungerStatePort
     foundation_commit: str
 
-def load_foundation_services(root: object) -> FoundationServicesPort:
-    """Load the one PR5 coordinator. Missing foundation is a visible startup error."""
+
+@dataclass(frozen=True)
+class _FoundationView:
+    activity: object
+    utc_clock: object
+    state_store: object
+    foundation_commit: str
+
+def load_application_services() -> FoundationServicesPort:
+    """Load PR5's documented public factory; never construct parallel services."""
     try:
-        module = importlib.import_module("desktop_pet.foundation")
-        factory = getattr(module, "create_foundation_services")
-        services = factory(root)
+        module = importlib.import_module("desktop_pet.foundation.services")
+        application_type = getattr(module, "ApplicationServices")
+        factory = getattr(module, "create_application_services")
+        services = factory()
     except (ImportError, AttributeError, TypeError) as error:
         raise RuntimeError(
             "V2.1-HUNGER requires PR5 foundation API: "
-            "desktop_pet.foundation.create_foundation_services(root)"
+            "desktop_pet.foundation.services.create_application_services()"
         ) from error
+    if not isinstance(services, application_type):
+        raise RuntimeError("PR5 create_application_services returned the wrong type")
+    # Field names below are isolated in this one adapter so they can be matched
+    # exactly when the fetched PR5 source is available; feature modules never
+    # import foundation internals directly.
+    services = _FoundationView(
+        activity=services.activity_coordinator,
+        utc_clock=services.clock,
+        state_store=services.state_store,
+        foundation_commit=str(services.foundation_commit),
+    )
     required = ("publish_health", "begin", "is_current", "complete", "cancel", "input_allowed", "status_text")
     for name in required:
         if not callable(getattr(services.activity, name, None)):

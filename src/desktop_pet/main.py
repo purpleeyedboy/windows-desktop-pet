@@ -14,7 +14,7 @@ from .hunger_runtime import (
     HungerRuntime,
 )
 from .paths import asset_path
-from .foundation_contract import load_foundation_services
+from .foundation_contract import load_application_services
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -125,7 +125,7 @@ def main() -> int:
             cursor_provider=cursor_provider,
             head_follow=True,
         )
-        foundation = load_foundation_services(root)
+        foundation = load_application_services()
         if metadata["foundation_commit"] != foundation.foundation_commit:
             raise RuntimeError("Build metadata and loaded PR5 foundation commit do not match")
         activity = foundation.activity

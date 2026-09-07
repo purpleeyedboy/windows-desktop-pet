@@ -24,7 +24,7 @@ try {
     windows_acceptance = "blocked_pending_pr5_then_user_validation"
   }
   $Metadata | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath build_metadata.json -Encoding UTF8
-  if ($Metadata.foundation_commit -eq "PENDING_PR5" -or -not (Test-Path -LiteralPath (Join-Path $Root "src\desktop_pet\foundation.py"))) {
+  if ($Metadata.foundation_commit -eq "PENDING_PR5" -or -not (Test-Path -LiteralPath (Join-Path $Root "src\desktop_pet\foundation\services.py"))) {
     throw "BLOCKED: merge the approved PR5 foundation commit and record the same hash before packaging"
   }
   foreach ($path in @($Dist, $Work)) {
