@@ -37,6 +37,7 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows workflow 保留手动打包路线，但当前 artifact 明示 `Foundation integration: NOT COMPLETE` 与 `Not an acceptance candidate`。
 - Windows 分层窗口 OLE 实机拖入、透明区域穿透及真实桌面视觉验收：**尚不可开始**。Linux 预览不作为 Windows OLE/EXE 或人工视觉通过证据。
 - REPAIR-20260906 已撤回“功能完成”结论：当前仓库没有 PR5 foundation API/基础提交。PR #11 已添加共享服务 Protocol、版本化 adapter、实际 `CF_HDROP` 单路径提取与 `STGMEDIUM` 释放，并禁止未注入 adapter 时注册旧 format-only 目标；`main` 注入、共享异步文件策略、协调器 Recovery/泪眼联动及 Windows 证据仍未完成，所以修复版仅为 foundation-blocked 开发构建。
+- INTEGRATE-20260906 第二轮：请求的 PR5 提交 `1a02fe9680f28dda07add8b96c78445e0b3c0f59` 不在本地对象库；Git fetch、raw 和 codeload 均被代理 403 拒绝，web retrieval 返回 401。未读取 `docs/v21-runtime-api.md`，因此没有将猜测接口冒充实际 `create_application_services` / `ApplicationServices` 接线；详见 `qa/drag-expectation/pr5-fetch-blocked-20260906.md`。
 - 转头角度不属于本增量门禁且未调整；旧视觉回归失败只记录，不删测试、不改金图。
 
 ## 验证与状态
