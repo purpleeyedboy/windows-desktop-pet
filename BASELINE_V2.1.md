@@ -60,3 +60,10 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 已实现面向 PR5 公共基础的只读 Protocol adapter：OLE 回调只复制路径、坐标和共享 Clock 的 UTC 时间，并提交唯一 InputRouter；区域命中依赖 InteractionRegionService 的 Alpha 区域。
 - 当前仓库尚无 PR5 foundation API、PR11 期待反馈 adapter、共享 HungerService/StateStore/ActivityCoordinator，也没有可信 IFileOperationProgressSink 与独立嘴/舌素材动画。因此构建脚本主动失败，禁止发布可验收候选。
 - 公共基础统一并完成上述依赖后，才允许输出 `桌面宠物_文件喂食与回收站事务修复.exe`；Windows 实机验收仍待用户执行。
+
+### INTEGRATE-20260906 第二轮
+
+- 尝试读取 PR5 `codex-od26j1` 与提交 `1a02fe9680f28dda07add8b96c78445e0b3c0f59`，但 GitHub HTTPS fetch 被容器代理以 403 拒绝；该对象也不在本地对象库，故未声称接入该 SHA。
+- 在现有 foundation adapter 上新增 FEED 业务 handler/ports：定点奖励计价、Prepared 持久化前置、确认后 FILE_ID_INFO 重验、元数据变化重新确认、可信凭据后 RecycleConfirmed、原子奖励与 Completed、缺证据 NeedsReview。
+- 新增非阻塞拥有窗 30 秒确认 adapter、Windows 句柄 FILE_ID_INFO 检查 adapter，以及严格组合 PostDeleteItem/PerformOperations/aborted/new-item 证据的凭据 assembler。
+- 尚缺实际 PR5 API 适配、PR6 HungerService、PR11 期待层、COM IFileOperationProgressSink vtable/消息泵接线和嘴/舌素材动画；构建继续 fail-closed，不发布候选。

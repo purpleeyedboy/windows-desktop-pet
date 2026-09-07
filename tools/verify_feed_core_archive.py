@@ -6,6 +6,10 @@ from pathlib import Path
 
 REQUIRED_MODULES = (
     "desktop_pet.feed_core.foundation_contract",
+    "desktop_pet.feed_core.business",
+    "desktop_pet.feed_core.progress_receipt",
+    "desktop_pet.feed_core.confirmation",
+    "desktop_pet.feed_core.windows_identity",
     "desktop_pet.feed_core.wiring",
     "desktop_pet.feed_core.windows_drop",
 )
