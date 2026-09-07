@@ -46,4 +46,10 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - `ear_asset_manifest.json` 是文本资产清单，记录素材 ID、版本、512×768 尺寸、耳根、层序、Alpha 规则、人工遮罩与安全恢复姿态；原认可素材文件未改写。
 - 云端实际调用探针已走通 `PetWindow` 按下候选 → 松开确认 → `EarFeatureAdapter` → 局部纹理合成 → renderer → 精确中性态，共观察到 27 次渲染提交；动态头姿探针观察了中心、+18° 和 -18° 下的独立耳区映射。它们不是 Windows 实机验收。
 - **未完成公共依赖：** 当前没有 PR5 `ActivityCoordinator`/`InputRouter` 基础提交。现有 `_request_ear_action()` 是待总控替换的临时接线点；公共活动优先级、CriticalHungry/InputGate、四元完成核验和统一 Recovery 未接入前，不得发布为可验收完成版。
-- Windows 打包脚本要求 `V21_FOUNDATION_COMMIT` 并导入 PR5 两个公共 API；缺失时主动失败，不生成候选。候选文件名预留为 `桌面宠物_双耳点击反馈_REPAIR-20260906.exe`。
+- Windows 打包脚本要求 `V21_FOUNDATION_COMMIT` 与真实 `docs/v21-runtime-api.md`；缺失时主动失败，不生成候选。取得 PR5 后还必须按文档补上 `create_application_services`/`ApplicationServices` 初始化验证。候选文件名预留为 `桌面宠物_双耳点击反馈_REPAIR-20260906.exe`。
+
+## INTEGRATE-20260906 第二轮
+
+- 已尝试读取 `https://github.com/purpleeyedboy/windows-desktop-pet.git` 的 `codex-od26j1`，环境代理返回 `CONNECT tunnel failed, response 403`；用户给出的 `1a02fe9680f28dda07add8b96c78445e0b3c0f59` 也不在本地对象库，且本地没有 `docs/v21-runtime-api.md` 或 `foundation/` API 文件。因此本轮没有声称已接入或读取 PR5，也没有按提示猜造 `create_application_services` 签名。
+- 在等待真实基础内容期间，已修复可独立验证的明显补洞缺陷：删除“清空原耳＋垂直采样补洞”的黑缝/亮边路径，改为在四周边界和耳根都归零的连续局部 ROI 逆向网格。临时 4× 局部接触表已人工观察，最大甩动帧不再出现原先的黑色断裂线或复制耳轮廓。
+- PR5 真实 API 合并、`create_application_services`/`ApplicationServices` 接线以及共享队列/协调器/状态存储替换仍未完成；不得生成候选 EXE。

@@ -3,7 +3,7 @@
   "feature": "V2.1-EARS",
   "source_asset_id": "approved-canonical-head-v1",
   "source_size": [512, 768],
-  "layer_order": ["derived-local-hole", "approved-ear-texture"],
+  "layer_order": ["approved-composed-frame", "continuous-local-ear-mesh"],
   "alpha_rule": "mask_polygon intersect current composed frame alpha",
   "safe_recovery_pose": {"angle_degrees": 0.0},
   "ears": {

@@ -29,8 +29,9 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "verify_eye_follow_candidate_archive.py" not in script
     assert "未自动测试" in script
     assert "V21_FOUNDATION_COMMIT" in script
-    assert "activity_coordinator import ActivityCoordinator" in script
-    assert "input_router import InputRouter" in script
+    assert "activity_coordinator import ActivityCoordinator" not in script
+    assert "input_router import InputRouter" not in script
+    assert "docs\\v21-runtime-api.md" in script
     assert "refusing to publish an acceptance candidate" in script
     assert script.index("Clear-CandidateOutputs") < script.index("-m PyInstaller")
     assert "filevers=(2, 1, 1, 0)" in version

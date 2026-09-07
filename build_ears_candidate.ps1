@@ -70,8 +70,10 @@ try {
     if ([string]::IsNullOrWhiteSpace($FoundationCommit)) {
         throw "Unified PR5 foundation is not integrated; refusing to publish an acceptance candidate."
     }
-    & $Python -c "from desktop_pet.activity_coordinator import ActivityCoordinator; from desktop_pet.input_router import InputRouter"
-    if ($LASTEXITCODE -ne 0) { throw "Unified PR5 foundation API is unavailable; refusing to package." }
+    $RuntimeApi = Join-Path $RepositoryRoot "docs\v21-runtime-api.md"
+    if (-not (Test-Path -LiteralPath $RuntimeApi -PathType Leaf)) {
+        throw "PR5 docs/v21-runtime-api.md is unavailable; refusing to package without the real API."
+    }
     $basePrefix = & $Python -c "import sys; print(sys.base_prefix)"
     if ($LASTEXITCODE -ne 0) { throw "Failed to resolve Python base prefix; exit code $LASTEXITCODE." }
     $basePrefix = $basePrefix.Trim()

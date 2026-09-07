@@ -96,28 +96,40 @@ def render_ear_pose(frame: Image.Image, side: EarSide, pose: EarPose, *, map_hea
     mapper = map_head_point or (lambda point: point)
     masks = EarHitMasks.from_frame(rgba, mapper)
     mask = masks.mask(side)
-    layer = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
-    layer.paste(rgba, mask=mask)
     root = mapper(EAR_ASSETS[side].root)
     bbox = mask.getbbox()
     if bbox is None:
         return rgba
 
+    left, top, right, bottom = bbox
+    padding = 24
+    roi = (
+        max(0, left - padding),
+        max(0, top - padding),
+        min(rgba.width, right + padding),
+        min(rgba.height, bottom + padding),
+    )
+
     def inverse(point: tuple[float, float]) -> tuple[float, float]:
         x, y = point
         root_blend = min(1.0, max(0.0, (root[1] - 8.0 - y) / 42.0))
-        angle = math.radians(-pose.angle_degrees * _minimum_jerk(root_blend))
+        edge_distance = min(
+            x - roi[0], roi[2] - x, y - roi[1], roi[3] - y
+        )
+        edge_blend = _minimum_jerk(min(1.0, max(0.0, edge_distance / padding)))
+        angle = math.radians(
+            -pose.angle_degrees * _minimum_jerk(root_blend) * edge_blend
+        )
         dx, dy = x - root[0], y - root[1]
         cosine, sine = math.cos(angle), math.sin(angle)
         return root[0] + cosine * dx - sine * dy, root[1] + sine * dx + cosine * dy
 
-    left, top, right, bottom = bbox
     mesh = []
     step = 12
-    for y0 in range(max(0, top - step), min(rgba.height, bottom + step), step):
-        y1 = min(rgba.height, y0 + step)
-        for x0 in range(max(0, left - step), min(rgba.width, right + step), step):
-            x1 = min(rgba.width, x0 + step)
+    for y0 in range(roi[1], roi[3], step):
+        y1 = min(roi[3], y0 + step)
+        for x0 in range(roi[0], roi[2], step):
+            x1 = min(roi[2], x0 + step)
             points = (
                 inverse((x0, y0)),
                 inverse((x0, y1)),
@@ -130,23 +142,14 @@ def render_ear_pose(frame: Image.Image, side: EarSide, pose: EarPose, *, map_hea
                     tuple(value for point in points for value in point),
                 )
             )
-    rotated = layer.transform(rgba.size, Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
-    moved_mask = mask.transform(rgba.size, Image.Transform.MESH, mesh, Image.Resampling.BICUBIC)
-    output = rgba.copy()
-    hole_fill = rgba.transform(
+    warped = rgba.transform(
         rgba.size,
-        Image.Transform.AFFINE,
-        (1.0, 0.0, 0.0, 0.0, 1.0, 18.0),
+        Image.Transform.MESH,
+        mesh,
         Image.Resampling.BICUBIC,
     )
-    output.paste(Image.new("RGBA", rgba.size, (0, 0, 0, 0)), mask=mask)
-    root_support = Image.new("L", rgba.size, 0)
-    ImageDraw.Draw(root_support).rectangle(
-        (left, round(root[1] - 38.0), right, bottom), fill=255
-    )
-    root_support = ImageChops.multiply(mask, root_support)
-    output.paste(hole_fill, mask=root_support)
-    output.paste(rotated, mask=moved_mask)
+    output = rgba.copy()
+    output.paste(warped.crop(roi), roi)
     return output
 
 def _minimum_jerk(value: float) -> float:
