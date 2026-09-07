@@ -7,13 +7,13 @@ from tkinter import messagebox
 
 from .assets import load_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
+from .foundation.config import BuildInfo
+from .foundation.services import DEFAULT_STATE, ApplicationServices, create_application_services
+from .foundation.runtime import Activity
 from .window import PetWindow
 
 
 ERROR_ALREADY_EXISTS = 183
-SW_RESTORE = 9
-
-
 def build_mutex_name() -> str:
     username = os.environ.get("USERNAME", "user")
     return rf"Local\DesktopCatPet-{username}"
@@ -49,6 +49,47 @@ class SingleInstanceMutex:
         self._handle = None
 
 
+def notify_existing_instance(build_info: BuildInfo) -> None:
+    if os.name == "nt":
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+        user32.FindWindowW.restype = ctypes.c_void_p
+        user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+        user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        user32.GetWindowTextW.restype = ctypes.c_int
+        hwnd = user32.FindWindowW(None, "桌面宠物")
+        existing = "未知旧实例"
+        if not hwnd:
+            found: list[int] = []
+            callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            user32.EnumWindows.argtypes = [callback_type, ctypes.c_void_p]
+            user32.EnumWindows.restype = ctypes.c_bool
+
+            def visit(candidate, _parameter):
+                buffer = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(candidate, buffer, len(buffer))
+                if buffer.value.startswith("桌面宠物"):
+                    found.append(int(candidate))
+                    return False
+                return True
+
+            user32.EnumWindows(callback_type(visit), None)
+            hwnd = found[0] if found else None
+        if hwnd:
+            buffer = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, buffer, len(buffer))
+            existing = buffer.value or existing
+            user32.ShowWindow(hwnd, 9)
+            user32.SetForegroundWindow(hwnd)
+        message = (
+            f"桌面宠物已在运行：{existing}\n"
+            f"请求版本：{build_info.product_version} ({build_info.git_short_hash})\n"
+            "本次新版本未启动。"
+        )
+        user32.MessageBoxW(None, message, "桌面宠物正在运行", 0x40)
+
+
 def enable_per_monitor_dpi_awareness() -> bool:
     if os.name != "nt":
         return False
@@ -77,47 +118,23 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
         ctypes.windll.user32.MessageBoxW(None, message, "桌面宠物无法启动", 0x10)
 
 
-def notify_existing_instance() -> None:
-    """Activate the existing pet when possible and never fail silently."""
-    if os.name != "nt":
-        return
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    matches: list[tuple[int, str]] = []
-    callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-    @callback_type
-    def collect(hwnd, _parameter):
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length:
-            buffer = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buffer, length + 1)
-            if buffer.value.startswith("桌面宠物"):
-                matches.append((int(hwnd), buffer.value))
-        return True
-
-    user32.EnumWindows(collect, None)
-    hwnd, running_version = matches[0] if matches else (0, "旧实例未报告版本")
-    if hwnd:
-        user32.ShowWindow(ctypes.c_void_p(hwnd), SW_RESTORE)
-        user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
-    user32.MessageBoxW(
-        None,
-        f"已有桌面宠物实例正在运行：\n{running_version}\n\n"
-        "已尝试激活该实例；本次 V2.1-EARS 版本未启动。",
-        "桌面宠物版本提示",
-        0x40,
-    )
-
-
 def main() -> int:
     enable_per_monitor_dpi_awareness()
+    build_info = BuildInfo.load_embedded()
     mutex = SingleInstanceMutex(build_mutex_name())
     root: tk.Tk | None = None
     pet_window: PetWindow | None = None
+    services: ApplicationServices | None = None
+    state = dict(DEFAULT_STATE)
     try:
         if not mutex.acquire():
-            notify_existing_instance()
+            notify_existing_instance(build_info)
             return 0
+        services = create_application_services(build_info)
+        state = services.store.load(default=DEFAULT_STATE)
+        if state.get("pending_transaction") is not None:
+            services.runtime.post("transaction.review", source="startup")
+            services.runtime.drain()
         root = tk.Tk()
         root.withdraw()
         frames = load_frames()
@@ -129,8 +146,9 @@ def main() -> int:
             compositor=compositor,
             cursor_provider=cursor_provider,
             head_follow=True,
+            services=services,
+            persisted_state=state,
         )
-        pet_window.show_debug_info()
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:
@@ -142,12 +160,18 @@ def main() -> int:
                 pet_window.close()
             except tk.TclError:
                 pass
-        elif root is not None:
-            try:
-                if root.winfo_exists():
-                    root.destroy()
-            except tk.TclError:
-                pass
+        else:
+            if services is not None:
+                try:
+                    services.close(state)
+                except (OSError, RuntimeError):
+                    pass
+            if root is not None:
+                try:
+                    if root.winfo_exists():
+                        root.destroy()
+                except tk.TclError:
+                    pass
         mutex.close()
 
 

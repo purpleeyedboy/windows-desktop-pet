@@ -77,3 +77,16 @@ def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None
     assert 'if ($exes.Count -ne 1)' in workflow
     assert "桌面宠物_双耳点击反馈_REPAIR-20260906.exe" in workflow
     assert "Get-FileHash" in workflow
+    assert "e178f371bd2da1c0b4e892609acfdf79bfcab450" in workflow
+
+
+def test_verified_pr5_source_manifest_and_runtime_wiring_are_present() -> None:
+    source = (ROOT / "docs/v2.1-ears-foundation-source.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"source_commit": "e178f371bd2da1c0b4e892609acfdf79bfcab450"' in source
+    assert '"base_commit": "c3b218df9dd0cfc84d96231701e771f0382388e1"' in source
+    assert source.count('"blob":') == 29
+    window = (ROOT / "src/desktop_pet/window.py").read_text(encoding="utf-8")
+    assert 'runtime.bind("input.ear", self._consume_ear)' in window
+    assert 'self.services.animation.play("ears", side, token)' in window

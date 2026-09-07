@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
-from typing import Callable, Literal, Protocol
+from typing import Literal, Protocol
 from PIL import Image, ImageChops, ImageDraw
 
 EarSide = Literal["left", "right"]  # The cat's own left/right, not screen-left/right.
@@ -20,11 +20,15 @@ class EarAsset:
 class EarPose:
     angle_degrees: float = 0.0
 
+
 @dataclass(frozen=True)
 class EarActionContext:
+    """Compatibility context for dependency-injected windows without PR5 services."""
+
     action_id: str
     state_version: int
     cancel_token: object
+
 
 @dataclass(frozen=True)
 class EarMotionConfig:
@@ -183,7 +187,7 @@ class EarFeatureAdapter:
     def __init__(self, schedule, cancel, clock, display, complete) -> None:
         self._schedule, self._cancel, self._clock = schedule, cancel, clock
         self._display, self._complete = display, complete
-        self._active: tuple[EarSide, EarActionContext, float] | None = None
+        self._active: tuple[EarSide, object, float] | None = None
         self._timer = None
         self._cooldown_until = 0.0
 
@@ -191,7 +195,7 @@ class EarFeatureAdapter:
     def active(self) -> bool:
         return self._active is not None
 
-    def start_approved(self, side: EarSide, context: EarActionContext) -> bool:
+    def start_approved(self, side: EarSide, context: object) -> bool:
         if self._active is not None or self._clock() < self._cooldown_until:
             return False
         self._active = (side, context, self._clock())
@@ -213,8 +217,8 @@ class EarFeatureAdapter:
             return
         self._timer = self._schedule(EAR_MOTION.frame_ms, self._tick)
 
-    def cancel_and_recover(self, context: EarActionContext) -> bool:
-        if self._active is None or self._active[1] != context:
+    def cancel_active(self) -> bool:
+        if self._active is None:
             return False
         if self._timer is not None:
             self._cancel(self._timer)
@@ -222,5 +226,13 @@ class EarFeatureAdapter:
         self._active = None
         self._timer = None
         self._display(side, EarPose())
+        return True
+
+    def cancel_and_recover(self, context: object) -> bool:
+        """Compatibility path for callers without the shared coordinator."""
+        if self._active is None or self._active[1] != context:
+            return False
+        if not self.cancel_active():
+            return False
         self._complete(context, True)
         return True

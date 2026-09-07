@@ -12,7 +12,7 @@ SOURCE_FALLBACK = {
     "build_date": "source checkout",
     "git_short_hash": "not packaged",
     "baseline": "BASE-001",
-    "foundation_commit": "not integrated",
+    "foundation_commit": "e178f371",
     "enabled_features": ["既有基线", "双耳点击反馈"],
     "channel": "未自动测试；等待用户 Windows 实机验收的候选版",
     "documentation_baseline": "V2.1-EARS",
@@ -20,7 +20,7 @@ SOURCE_FALLBACK = {
 
 
 def load_build_metadata() -> dict[str, object]:
-    path = asset_path("build-metadata.json")
+    path = asset_path("build_identity.json")
     if not path.is_file():
         return dict(SOURCE_FALLBACK)
     value = json.loads(path.read_text(encoding="utf-8"))

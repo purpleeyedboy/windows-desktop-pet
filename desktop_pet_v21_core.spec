@@ -1,6 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
-import os
 
 
 ROOT = Path(SPECPATH).resolve()
@@ -17,17 +16,13 @@ EYE_FILES = (
     "underlay.png",
 )
 
-BUILD_METADATA_NAME = "build_identity.json"
-METADATA = Path(os.environ["DESKTOP_PET_BUILD_METADATA"])
-
 datas = [
-    (str(METADATA), "."),
-    (str(ROOT / "src" / "desktop_pet" / "ear_asset_manifest.json"), "desktop_pet"),
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
+    (str(ROOT / "build-v21-core" / "build_identity.json"), "."),
 ]
 datas.extend((str(EYE_SOURCE / file_name), EYE_RUNTIME) for file_name in EYE_FILES)
 
@@ -36,7 +31,14 @@ a = Analysis(
     pathex=[str(ROOT / "src")],
     binaries=[],
     datas=datas,
-    hiddenimports=["PIL._tkinter_finder"],
+    hiddenimports=[
+        "PIL._tkinter_finder",
+        "desktop_pet.foundation.actions",
+        "desktop_pet.foundation.config",
+        "desktop_pet.foundation.persistence",
+        "desktop_pet.foundation.platform",
+        "desktop_pet.foundation.sources",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -51,7 +53,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_双耳点击反馈_REPAIR-20260906',
+    name='桌面宠物_公共基础接线与版本识别修复',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -64,6 +66,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=str(ROOT / 'version_info_ears.txt'),
+    version=str(ROOT / 'build-v21-core' / 'version_info.txt'),
     manifest=str(ROOT / 'desktop_pet_v21_core.manifest'),
 )

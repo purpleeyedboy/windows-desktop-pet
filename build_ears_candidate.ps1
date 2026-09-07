@@ -68,7 +68,7 @@ Push-Location $RepositoryRoot
 try {
     $env:PYTHONPATH = Join-Path $RepositoryRoot "src"
     if ([string]::IsNullOrWhiteSpace($FoundationCommit)) {
-        throw "Unified PR5 foundation is not integrated; refusing to publish an acceptance candidate."
+        $FoundationCommit = "e178f371bd2da1c0b4e892609acfdf79bfcab450"
     }
     $RuntimeApi = Join-Path $RepositoryRoot "docs\v21-runtime-api.md"
     if (-not (Test-Path -LiteralPath $RuntimeApi -PathType Leaf)) {
@@ -90,11 +90,16 @@ try {
         git_short_hash = $GitShortHash
         baseline = "BASE-001"
         foundation_commit = $FoundationCommit
-        enabled_features = @("既有基线", "双耳点击反馈")
+        enabled_features = @("common-foundation", "ears")
         channel = "未自动测试；等待用户 Windows 实机验收的候选版"
         documentation_baseline = "V2.1-EARS"
     } | ConvertTo-Json -Depth 3
-    $MetadataPath = Join-Path $WorkDirectory "build-metadata.json"
+    $BuildMetadataObject = $BuildMetadata | ConvertFrom-Json
+    $BuildMetadataObject | Add-Member -NotePropertyName test_build -NotePropertyValue $true
+    $BuildMetadataObject | Add-Member -NotePropertyName debug_enabled -NotePropertyValue $true
+    $BuildMetadataObject | Add-Member -NotePropertyName debug_menu_enabled -NotePropertyValue $true
+    $BuildMetadata = $BuildMetadataObject | ConvertTo-Json -Depth 3
+    $MetadataPath = Join-Path $WorkDirectory "build_identity.json"
     [IO.File]::WriteAllText($MetadataPath, $BuildMetadata, (New-Object Text.UTF8Encoding($false)))
     $env:DESKTOP_PET_BUILD_METADATA = $MetadataPath
 

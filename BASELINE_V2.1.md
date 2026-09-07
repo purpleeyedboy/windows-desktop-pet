@@ -48,8 +48,33 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - **未完成公共依赖：** 当前没有 PR5 `ActivityCoordinator`/`InputRouter` 基础提交。现有 `_request_ear_action()` 是待总控替换的临时接线点；公共活动优先级、CriticalHungry/InputGate、四元完成核验和统一 Recovery 未接入前，不得发布为可验收完成版。
 - Windows 打包脚本要求 `V21_FOUNDATION_COMMIT` 与真实 `docs/v21-runtime-api.md`；缺失时主动失败，不生成候选。取得 PR5 后还必须按文档补上 `create_application_services`/`ApplicationServices` 初始化验证。候选文件名预留为 `桌面宠物_双耳点击反馈_REPAIR-20260906.exe`。
 
-## INTEGRATE-20260906 第二轮
+## INTEGRATE-20260907 公共基础与双耳接线
 
-- 已尝试读取 `https://github.com/purpleeyedboy/windows-desktop-pet.git` 的 `codex-od26j1`，环境代理返回 `CONNECT tunnel failed, response 403`；用户给出的 `1a02fe9680f28dda07add8b96c78445e0b3c0f59` 也不在本地对象库，且本地没有 `docs/v21-runtime-api.md` 或 `foundation/` API 文件。因此本轮没有声称已接入或读取 PR5，也没有按提示猜造 `create_application_services` 签名。
-- 在等待真实基础内容期间，已修复可独立验证的明显补洞缺陷：删除“清空原耳＋垂直采样补洞”的黑缝/亮边路径，改为在四周边界和耳根都归零的连续局部 ROI 逆向网格。临时 4× 局部接触表已人工观察，最大甩动帧不再出现原先的黑色断裂线或复制耳轮廓。
-- PR5 真实 API 合并、`create_application_services`/`ApplicationServices` 接线以及共享队列/协调器/状态存储替换仍未完成；不得生成候选 EXE。
+- PR5 源码补丁交接标识为 `e178f371bd2da1c0b4e892609acfdf79bfcab450`，基准为 `c3b218df9dd0cfc84d96231701e771f0382388e1`；29 个重建文件均以 `git hash-object` 与交接 blob 逐项一致。`docs/v2.1-ears-foundation-source.json` 记录来源和 blob 清单；它不伪称当前 Git 历史包含远端提交。
+- `main()` 通过真实 `create_application_services(BuildInfo.load_embedded())` 创建唯一 `ApplicationServices` 并注入 `PetWindow`。普通耳点击与调试耳命令都发布 `input.ear`，由唯一运行时队列消费，再由 `ActivityCoordinator` 发放带活动版本、取消 ID、动画 ID 的令牌。
+- 双耳共用 `EAR_ACTION` 活动和 `ears` 动画通道；活动中再次点击被忽略，完整中性恢复后执行 0.5 秒 adapter 冷却。Critical health 与更高优先级活动拒绝耳动作；高优先级抢占经协调器 recovery 取消定时器并恢复精确零角。
+- 命中遮罩仍由文本人工多边形与当前合成帧 Alpha 相交，并通过当前头部 compositor 的逐帧映射重建；耳动画保持三次抖动、外甩减速、缓出恢复与不超过 5% 的回弹。
+- 已修复耳候选的实际身份打包路径：PyInstaller 同一份 `build_identity.json` 同时供 `BuildInfo` 与运行状态读取，包含测试/调试标志；工作流固定记录已核验的 PR5 来源提交，不依赖未配置的仓库变量。
+- Linux 仅进行语法、导入、临时目录调用链、素材哈希和静态打包契约检查；按用户授权未运行 pytest。Windows PyInstaller、实际 Alpha 命中、动画观感与用户实机验收仍待 Actions/用户执行。
+
+## 已撤回的 V2.1-CORE 未接线增量记录
+
+- 基础标签：`V2.1-CORE`；启用功能仅为 `common-foundation`。
+- 当时仅新增了未连接运行程序的公共契约；该状态已被用户拒收，并由下方 REPAIR-20260906 接线替代。
+- 明确未新增耳朵、前肢、舔手、饥饿、拖放、喂食、自主动画或生产用户文件处理。测试持久化仅使用 pytest 临时目录。
+- 调试时间和状态注入仅允许测试版或显式调试开关；生产随机源使用系统熵且没有固定种子。
+- 原未接线候选名为 `桌面宠物_V2.1公共基础架构.exe`，已被 REPAIR-20260906 撤回，不得再交付。修复候选版本资源包含产品版本、UTC 构建日期、Git 短哈希、基础提交、基础标签、启用功能、测试版状态、调试菜单状态和 `BASE-001` 文档基线。
+- Windows Actions 的真实构建、唯一 EXE 大小/SHA-256、下载复核及真实桌面视觉验收均须在提交和 PR 后分别记录；Linux 不作为 EXE 或视觉通过证据。
+- 两项旧视觉金图回归仍是已知基线问题；不得通过删除或放宽测试、更新金图或修改已认可素材掩盖。
+- 本增量聚焦门禁：28 项通过；Python 编译、158 个素材文件相对起点 SHA-256、`git diff --check` 均通过。容器完整收集仍缺 PyInstaller/NumPy；排除三个依赖收集文件后的检查点为 584 通过、3 跳过、12 失败、42 错误，失败包括既有素材/金图差异、无 DISPLAY 的 Tk 测试及依赖 NumPy 的 QA，不写作通过。
+- 旧单功能 EXE 已撤回。Windows 工作流仍明确以 `build_v21_core.ps1 -SkipTests` 构建；旧基线自动测试不再阻塞修复候选 EXE 打包和 artifact 上传，但其已知失败仍保留且不修改。
+
+## REPAIR-20260906 公共基础接线候选
+
+- 撤回“仅提供未调用抽象即可完成”的旧判断。真实入口现在由 `main()` 创建一个 `ApplicationServices`，并注入 `PetWindow`；窗口点击、菜单、移动、动画完成、区域更新、调试、OLE 生命周期、状态保存和退出均调用共享运行时。
+- 状态采用唯一 Tk 串行事件队列和唯一 `ActivityCoordinator`，Health、Activity、Eye、Mouth、Tear、Particle、InputGate 正交；活动令牌携带版本、取消 ID 和动画 ID，旧完成回调不能覆盖当前活动。
+- Windows 使用 PerMonitorV2/asInvoker manifest；当前 Alpha 生成原生窗口命中区并扩展 16 个物理像素。OLE 注册只提供诊断和拒绝 drop 的公共能力，不读取或操作用户文件。
+- 测试版右键菜单提供“关于 / 运行状态”和一级“调试”；调试打开一个可滚动二级列表。后续六项功能未接入的命令明确禁用，不伪造动画。
+- 新候选名：`桌面宠物_公共基础接线与版本识别修复.exe`。该候选未经旧 pytest/逐像素套件门禁，仍须 Windows 构建检查和用户实机验收；不能称为已验收完成版。
+- REPAIR 静态/临时目录证据：入口接线审查、Python 编译、事件优先级与物理恢复、四字段播放身份、损坏存储/备份/日志、STA 工作队列关闭、manifest XML 和 158 项素材 SHA-256 均已检查；按授权未运行 pytest。
+- 尚未完成的外部门禁：本容器不能验证 Windows OLE 消息、PerMonitorV2 多屏切换、Alpha/16px 原生命中、旧实例激活、真实菜单键盘操作、PyInstaller EXE 启动和用户视觉验收。该段 CORE 候选中的耳朵入口已由上方 V2.1-EARS 接线替代；饥饿、舔手、喂食、前肢、期待仍由其他功能分支接入。

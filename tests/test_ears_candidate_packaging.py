@@ -10,9 +10,10 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     script = (ROOT / "build_ears_candidate.ps1").read_text(encoding="utf-8-sig")
     version = (ROOT / "version_info_ears.txt").read_text(encoding="utf-8")
 
-    assert "name='桌面宠物_双耳点击反馈'" in spec
+    assert "name='桌面宠物_双耳点击反馈_REPAIR-20260906'" in spec
     assert "COLLECT(" not in spec
-    assert "build-metadata.json" in spec
+    assert "build_identity.json" in spec
+    assert "desktop_pet_v21_core.manifest" in spec
     assert "version_info_ears.txt" in spec
     assert EXE in script
     assert "git rev-parse --short HEAD" in script
@@ -32,7 +33,7 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "activity_coordinator import ActivityCoordinator" not in script
     assert "input_router import InputRouter" not in script
     assert "docs\\v21-runtime-api.md" in script
-    assert "refusing to publish an acceptance candidate" in script
+    assert "e178f371bd2da1c0b4e892609acfdf79bfcab450" in script
     assert script.index("Clear-CandidateOutputs") < script.index("-m PyInstaller")
     assert "filevers=(2, 1, 1, 0)" in version
     assert EXE in version
