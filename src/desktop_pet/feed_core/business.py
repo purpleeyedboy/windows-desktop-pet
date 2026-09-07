@@ -136,7 +136,6 @@ class FeedBusinessHandler:
         version, animation_id, token = self.activity.begin_feed_confirm()
         operation_id = self.state.new_operation_id()
         prepared = PreparedFeed(operation_id, snapshot, quote, version, animation_id, token)
-        self.state.persist_prepared(prepared)  # must flush before any file operation
         self._active = prepared
         self.confirmation.show(
             prepared, self.hunger.value_units,
@@ -151,21 +150,17 @@ class FeedBusinessHandler:
         if not self.activity.validate_completion(
             prepared.animation_id, prepared.activity_version, prepared.cancellation_token
         ):
-            self.state.persist_cancelled(prepared.operation_id)
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
         if not accepted:
-            self.state.persist_cancelled(prepared.operation_id)
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
         try:
             latest = self.identity.inspect(prepared.snapshot.canonical_path)
         except Exception as error:
-            self.state.persist_needs_review(
-                prepared.operation_id, f"final_identity_error:{type(error).__name__}"
-            )
+            # No transaction exists until final confirmation and final validation.
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
@@ -175,7 +170,6 @@ class FeedBusinessHandler:
             and latest.file_id_128 == prepared.snapshot.file_id_128
         )
         if not stable_identity:
-            self.state.persist_needs_review(prepared.operation_id, "identity_changed_before_commit")
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
@@ -185,7 +179,6 @@ class FeedBusinessHandler:
                 prepared.operation_id, latest, refreshed_quote, prepared.activity_version,
                 prepared.animation_id, prepared.cancellation_token,
             )
-            self.state.replace_prepared(refreshed)
             self._active = refreshed
             self.confirmation.show(
                 refreshed, self.hunger.value_units,
@@ -194,7 +187,6 @@ class FeedBusinessHandler:
             return
         current_quote = quote_reward(latest.size_bytes, self.hunger.value_units)
         if current_quote.actual_units <= 0:
-            self.state.persist_cancelled(prepared.operation_id)
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
@@ -203,7 +195,6 @@ class FeedBusinessHandler:
                 prepared.operation_id, latest, current_quote, prepared.activity_version,
                 prepared.animation_id, prepared.cancellation_token,
             )
-            self.state.replace_prepared(refreshed)
             self._active = refreshed
             self.confirmation.show(
                 refreshed, self.hunger.value_units,
@@ -215,8 +206,12 @@ class FeedBusinessHandler:
                 prepared.operation_id, latest, current_quote, prepared.activity_version,
                 prepared.animation_id, prepared.cancellation_token,
             )
-            self.state.replace_prepared(prepared)
             self._active = prepared
+        # Prepared is the first durable transaction state.  It is deliberately
+        # written only after the user accepted the final, current quote and the
+        # handle-backed identity was checked again.  persist_prepared must flush
+        # before transition_feed_processing can enqueue IFileOperation.
+        self.state.persist_prepared(prepared)
         if not self.activity.transition_feed_processing(prepared.activity_version, prepared.cancellation_token):
             self.state.persist_cancelled(prepared.operation_id)
             self._active = None
@@ -271,3 +266,9 @@ class FeedBusinessHandler:
         if not animation_started:
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
         self._active = None
+
+    def cancel_confirmation(self) -> None:
+        """Cancel an outstanding owned dialog (exit/session lock/suspend safe)."""
+        if self._active is None:
+            return
+        self.confirmation.cancel()
