@@ -14,6 +14,7 @@ datas = [
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
+    (str(ROOT / "assets" / "hunger" / "v1"), "assets/hunger/v1"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
     (str(ROOT / "build_identity.json"), "."),
 ]

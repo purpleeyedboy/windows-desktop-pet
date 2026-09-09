@@ -27,7 +27,7 @@ from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 from .hunger_animation import HungerAnimationFrame, HungerVisual
-from .hunger_effect import compose_hunger_effect
+from .hunger_effect import HungerFrameLibrary, compose_hunger_effect
 from .foundation.runtime import Activity, ActivityToken
 from .foundation.services import ApplicationServices
 from .foundation.platform import Rect as FoundationRect
@@ -312,6 +312,7 @@ class PetWindow:
         self._hunger_frame: HungerAnimationFrame | None = None
         self._last_hunger_level: object | None = None
         self._last_hunger_presentation: HungerVisual | None = None
+        self._hunger_art = HungerFrameLibrary() if services is not None else None
 
         try:
             root.title("桌面宠物")
@@ -994,12 +995,9 @@ class PetWindow:
         frame = self._hunger_frame
         if frame is None:
             return image.convert("RGBA")
-        boxes = (
-            self._hunger_eye_box_provider()
-            if self._hunger_eye_box_provider is not None
-            else self._eye_interaction_boxes
-        )
-        return compose_hunger_effect(image, frame, boxes)
+        if self._hunger_art is None:
+            raise RuntimeError("hunger art library is not attached")
+        return compose_hunger_effect(image, frame, self._hunger_art)
 
     def _cancel_action(self, action: str) -> bool:
         cancelled = self.animation.cancel_current(action)

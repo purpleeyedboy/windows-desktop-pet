@@ -20,6 +20,11 @@ try {
     debug_menu_enabled = $true
   }
   $Metadata | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath build_identity.json -Encoding UTF8
+  if (-not (Test-Path -LiteralPath (Join-Path $Root "assets\hunger\v1\manifest.json"))) {
+    throw "Hunger art frames are missing; refusing to package a geometric or empty substitute"
+  }
+  & $Python -c "import sys; sys.path.insert(0, r'$Root\src'); from desktop_pet.hunger_effect import HungerFrameLibrary; HungerFrameLibrary()"
+  if ($LASTEXITCODE -ne 0) { throw "Hunger art frame validation failed: $LASTEXITCODE" }
   foreach ($path in @($Dist, $Work)) {
     if (Test-Path $path) {
       $full = [IO.Path]::GetFullPath($path)

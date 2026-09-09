@@ -5,16 +5,19 @@
 - `assets/rig/v1/source/eye-neutral-v1/{authoring.json,body-backplate.png,eye-left-mask.png,eye-left.png,eye-right-mask.png,eye-right.png,head-cutout.png,underlay.png}` packaged at `assets/rig/v1/runtime/eye-neutral-v1`.
 - Existing `assets/keyframes`, `assets/bubble`, `assets/fonts`, and `assets/dialogue` trees.
 
-## New runtime-only local layers (no binary asset files)
+## Required authored local-frame asset set
 
-- Mouth interior: deterministic RGBA ellipse anchored below the current-pose eye midpoint.
-- Tongue: deterministic lower-mouth RGBA ellipse.
-- Tears: two deterministic RGBA drop layers anchored below current-pose eye boxes.
-- Layers are recreated from the current approved compositor frame on every presentation frame; no accumulated transform or source-byte mutation occurs.
+- Runtime requires `assets/hunger/v1/manifest.json` plus its listed transparent
+  PNG local frames for `hungry`, `severe`, and `critical` sequences.
+- Every frame must use the approved 640×768 canvas anchor and provide an explicit
+  `duration_ms`; the loader rejects missing, empty, or wrong-sized frames.
+- Frames are composed over the current approved head/eye pose and never transform
+  a prior output frame, so interruption returns to the current live default pose.
 
-These program-drawn layers remain a functional fallback, not accepted final
-art.  The replaceable layer/anchor contract is documented in
-`docs/hunger-local-art-contract.md`; no new binary asset is included here.
+The prior program-drawn ellipse/polygon mouth, tongue, and tear substitute has
+been removed from the runtime. The required authored frames are not present in
+this commit because this execution environment has no image-generation tool;
+the build script now refuses to package until validated frames are supplied.
 
 ## Call chain
 

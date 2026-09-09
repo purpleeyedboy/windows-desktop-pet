@@ -1,92 +1,126 @@
-"""Program-drawn mouth interior, tongue and tear layers over approved frames."""
+"""Asset-backed hunger expression frames composed over the approved live pose."""
 from __future__ import annotations
-from collections.abc import Sequence
-from PIL import Image, ImageDraw, ImageFilter
+
+from dataclasses import dataclass
+import json
+from pathlib import Path
+
+from PIL import Image
+
+from .hunger import HungerLevel
 from .hunger_animation import HungerAnimationFrame, HungerVisual
+from .paths import asset_path
 
-EyeBox = tuple[int, int, int, int]
+
+@dataclass(frozen=True)
+class HungerArtFrame:
+    image: Image.Image
+    duration_millis: int
+    source: Path
 
 
-def _mouth_layer(size: tuple[int, int], center: tuple[int, int], width: int,
-                 height: int) -> Image.Image:
-    """Build a feathered, shaded mouth cavity and tongue rather than a flat glyph."""
-    layer = Image.new("RGBA", size, (0, 0, 0, 0))
-    left, top = center[0] - width // 2, center[1] - height // 3
-    right, bottom = center[0] + width // 2, center[1] + height
-    mask = Image.new("L", size, 0)
-    ImageDraw.Draw(mask).ellipse((left, top, right, bottom), fill=245)
-    mask = mask.filter(ImageFilter.GaussianBlur(max(0.6, width / 35)))
-    cavity = Image.new("RGBA", size, (0, 0, 0, 0))
-    pixels = cavity.load()
-    for y in range(max(0, top), min(size[1], bottom + 1)):
-        depth = (y - top) / max(1, bottom - top)
-        color = (
-            round(55 - 23 * depth),
-            round(25 - 12 * depth),
-            round(25 - 10 * depth),
-            255,
-        )
-        for x in range(max(0, left), min(size[0], right + 1)):
-            pixels[x, y] = color
-    cavity.putalpha(mask)
-    layer.alpha_composite(cavity)
+class HungerFrameLibrary:
+    """Validated local RGBA frames; no geometric substitute is permitted."""
 
-    tongue_mask = Image.new("L", size, 0)
-    tongue_top = top + (bottom - top) * 3 // 5
-    ImageDraw.Draw(tongue_mask).ellipse(
-        (center[0] - width // 3, tongue_top,
-         center[0] + width // 3, bottom + 1),
-        fill=235,
-    )
-    tongue_mask = tongue_mask.filter(ImageFilter.GaussianBlur(max(0.5, width / 45)))
-    tongue = Image.new("RGBA", size, (187, 76, 91, 0))
-    tongue.putalpha(tongue_mask)
-    layer.alpha_composite(tongue)
-    highlight = ImageDraw.Draw(layer, "RGBA")
-    highlight.arc(
-        (center[0] - width // 4, tongue_top,
-         center[0] + width // 4, bottom),
-        205,
-        335,
-        fill=(235, 139, 145, 150),
-        width=max(1, width // 16),
-    )
-    return layer
+    REQUIRED_SEQUENCES = ("hungry", "severe", "critical")
 
-def compose_hunger_effect(source: Image.Image, frame: HungerAnimationFrame,
-                          eye_boxes: Sequence[EyeBox]) -> Image.Image:
-    """Compose independent local layers; approved source bytes remain untouched."""
+    def __init__(self, root: Path | None = None) -> None:
+        self.root = root or asset_path("assets", "hunger", "v1")
+        manifest_path = self.root / "manifest.json"
+        if not manifest_path.is_file():
+            raise RuntimeError(
+                "V2.1 hunger art is missing: assets/hunger/v1/manifest.json"
+            )
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        canvas = payload.get("canvas")
+        if (
+            not isinstance(canvas, list)
+            or len(canvas) != 2
+            or any(type(value) is not int or value <= 0 for value in canvas)
+        ):
+            raise ValueError("hunger art manifest canvas is invalid")
+        self.canvas = (canvas[0], canvas[1])
+        sequences = payload.get("sequences")
+        if not isinstance(sequences, dict):
+            raise ValueError("hunger art manifest sequences are invalid")
+        self.sequences = {
+            name: self._load_sequence(name, sequences.get(name))
+            for name in self.REQUIRED_SEQUENCES
+        }
+        for name in ("hungry", "severe"):
+            if len(self.sequences[name]) < 5:
+                raise ValueError(f"hunger art sequence needs at least five poses: {name}")
+            if sum(frame.duration_millis for frame in self.sequences[name]) != 1_700:
+                raise ValueError(f"hunger art sequence must total 1700ms: {name}")
+        if len(self.sequences["critical"]) < 2:
+            raise ValueError("critical hunger tears require at least two authored poses")
+
+    def _load_sequence(
+        self,
+        name: str,
+        entries: object,
+    ) -> tuple[HungerArtFrame, ...]:
+        if not isinstance(entries, list) or not entries:
+            raise ValueError(f"hunger art sequence is missing: {name}")
+        frames: list[HungerArtFrame] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError(f"hunger art frame entry is invalid: {name}")
+            relative = entry.get("file")
+            duration = entry.get("duration_ms")
+            if (
+                not isinstance(relative, str)
+                or not relative.endswith(".png")
+                or type(duration) is not int
+                or duration <= 0
+            ):
+                raise ValueError(f"hunger art frame metadata is invalid: {name}")
+            source = self.root / relative
+            if not source.is_file():
+                raise RuntimeError(f"hunger art frame is missing: {source}")
+            with Image.open(source) as opened:
+                image = opened.convert("RGBA")
+            if image.size != self.canvas:
+                raise ValueError(
+                    f"hunger art frame {source} must use canvas {self.canvas}"
+                )
+            if image.getchannel("A").getbbox() is None:
+                raise ValueError(f"hunger art frame is empty: {source}")
+            frames.append(HungerArtFrame(image, duration, source))
+        return tuple(frames)
+
+    def overlay_for(self, frame: HungerAnimationFrame) -> Image.Image | None:
+        if frame.visual is HungerVisual.SUSPENDED or frame.health is HungerLevel.NORMAL:
+            return None
+        name = {
+            HungerLevel.HUNGRY: "hungry",
+            HungerLevel.SEVERE_HUNGRY: "severe",
+            HungerLevel.CRITICAL_HUNGRY: "critical",
+        }[frame.health]
+        sequence = self.sequences[name]
+        total = sum(item.duration_millis for item in sequence)
+        position = max(0, frame.phase_millis)
+        if frame.health is HungerLevel.CRITICAL_HUNGRY:
+            position %= total
+        else:
+            position = min(position, total - 1)
+        for item in sequence:
+            if position < item.duration_millis:
+                return item.image
+            position -= item.duration_millis
+        return sequence[-1].image
+
+
+def compose_hunger_effect(
+    source: Image.Image,
+    frame: HungerAnimationFrame,
+    library: HungerFrameLibrary,
+) -> Image.Image:
+    """Composite an authored local frame over the current approved live pose."""
     base = source.convert("RGBA")
-    if frame.visual is HungerVisual.SUSPENDED or len(eye_boxes) < 2:
-        return base.copy()
-    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay, "RGBA")
-    boxes = tuple(eye_boxes)[:2]
-    eye_centers = [((l + r) // 2, (t + b) // 2) for l, t, r, b in boxes]
-    eye_distance = max(12, abs(eye_centers[1][0] - eye_centers[0][0]))
-    face_x = sum(p[0] for p in eye_centers) // 2
-    eye_y = sum(p[1] for p in eye_centers) // 2
-    mouth_y = eye_y + eye_distance * 7 // 10
-    openness = max(0.0, min(1.0, frame.mouth_open))
-    if openness > 0:
-        mouth_w = max(7, eye_distance * 18 // 100)
-        mouth_h = max(2, round(eye_distance * .38 * openness))
-        # The cavity uses feathered Alpha, vertical depth shading and a
-        # separately shaded tongue. It is regenerated from current-pose
-        # anchors, rather than pasted as a fixed circle or stored bitmap.
-        overlay.alpha_composite(
-            _mouth_layer(base.size, (face_x, mouth_y), mouth_w, mouth_h)
+    if base.size != library.canvas:
+        raise ValueError(
+            f"live pose canvas {base.size} does not match hunger art {library.canvas}"
         )
-    if frame.tears_visible:
-        fall = round((base.height * .025) * max(.2, frame.tear_intensity))
-        tear_w = max(2, base.width // 100)
-        tear_h = max(8, base.height // 25)
-        for left, _top, right, bottom in boxes:
-            center = (left + right) // 2
-            top = bottom + max(1, base.height // 250) + (frame.phase_millis // 50 % max(1, fall))
-            draw.polygon(((center, top), (center-tear_w, top+tear_h*2//3),
-                          (center, top+tear_h), (center+tear_w, top+tear_h*2//3)),
-                         fill=(105, 190, 245, round(230*frame.tear_intensity)))
-            draw.ellipse((center-tear_w, top+tear_h//2, center+tear_w, top+tear_h),
-                         fill=(105, 190, 245, round(230*frame.tear_intensity)))
-    return Image.alpha_composite(base, overlay)
+    overlay = library.overlay_for(frame)
+    return base.copy() if overlay is None else Image.alpha_composite(base, overlay)
