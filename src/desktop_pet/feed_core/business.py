@@ -147,6 +147,12 @@ class FeedBusinessHandler:
         return True
 
     def _on_confirmation(self, expected: PreparedFeed, accepted: bool) -> None:
+        try:
+            self._confirm(expected, accepted)
+        except (OSError, RuntimeError, ValueError):
+            self._recover_after_failure(expected, "confirmation_or_prepared_commit_failed")
+
+    def _confirm(self, expected: PreparedFeed, accepted: bool) -> None:
         prepared = self._active
         if prepared is None or prepared != expected:
             return
@@ -217,6 +223,7 @@ class FeedBusinessHandler:
         self.state.persist_prepared(prepared)
         if not self.activity.transition_feed_processing(prepared.activity_version, prepared.cancellation_token):
             self.state.persist_cancelled(prepared.operation_id)
+            self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
         try:
@@ -231,6 +238,12 @@ class FeedBusinessHandler:
             self._active = None
 
     def _on_recycle(self, expected: PreparedFeed, result) -> None:
+        try:
+            self._finish_recycle(expected, result)
+        except (OSError, RuntimeError, ValueError):
+            self._recover_after_failure(expected, "recycle_result_or_reward_commit_failed", result)
+
+    def _finish_recycle(self, expected: PreparedFeed, result) -> None:
         prepared = self._active
         if prepared is None or prepared != expected:
             return
@@ -260,16 +273,28 @@ class FeedBusinessHandler:
         )
         if not applied:
             self.state.persist_needs_review(prepared.operation_id, "reward_atomic_commit_failed")
+            self.activity.recover(prepared.activity_version, prepared.cancellation_token)
             self._active = None
             return
         self.state.persist_reward_applied(prepared.operation_id)
+        self.state.persist_completed(prepared.operation_id)
         animation_started = self.activity.transition_feed_animation(
             prepared.activity_version, prepared.cancellation_token
         )
-        self.state.persist_completed(prepared.operation_id)
         if not animation_started:
             self.activity.recover(prepared.activity_version, prepared.cancellation_token)
         self._active = None
+
+    def _recover_after_failure(self, prepared, reason, evidence=None):
+        """A failed durable write never starts animation or leaves input owned."""
+        try:
+            self.state.persist_needs_review(prepared.operation_id, reason, evidence)
+        except (OSError, RuntimeError, ValueError):
+            # The previous durable phase remains the recovery authority.
+            pass
+        finally:
+            self._active = None
+            self.activity.recover(prepared.activity_version, prepared.cancellation_token)
 
     def cancel_confirmation(self) -> None:
         """Cancel an outstanding owned dialog (exit/session lock/suspend safe)."""

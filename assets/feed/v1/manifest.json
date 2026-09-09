@@ -13,23 +13,23 @@
     }
   },
   "poses": [
+    "closed",
     "half_open",
     "wide_open",
-    "puffed_closed",
-    "wide_open_repeat",
+    "half_open_return",
     "upper_lip_lick",
     "corner_lick"
   ],
   "canonical": {
     "canvas": [
-      672,
+      640,
       768
     ],
     "subject_height": 524,
     "feet_y": 736,
-    "center_x": 336,
+    "center_x": 320,
     "original_offset": [
-      80,
+      64,
       0
     ],
     "original_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"

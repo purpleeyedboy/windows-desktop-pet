@@ -1,6 +1,7 @@
 """Non-blocking owned 30-second FEED confirmation window."""
 from __future__ import annotations
 import tkinter as tk
+from datetime import datetime, timedelta, timezone
 
 
 class TkFeedConfirmation:
@@ -20,10 +21,12 @@ class TkFeedConfirmation:
         window.protocol("WM_DELETE_WINDOW", lambda: self._finish(False))
         window.bind("<Escape>", lambda _event: self._finish(False))
         quote = prepared.quote
+        modified = (datetime(1601, 1, 1, tzinfo=timezone.utc) +
+                    timedelta(microseconds=prepared.snapshot.modified_100ns // 10)).astimezone()
         text = (
             f"完整路径：{prepared.snapshot.canonical_path}\n"
             f"文件大小：{prepared.snapshot.size_bytes} 字节\n"
-            f"修改时间：{prepared.snapshot.modified_100ns} (100ns UTC ticks)\n"
+            f"修改时间：{modified:%Y-%m-%d %H:%M:%S %Z}\n"
             f"当前饥饿值：{current_hunger / 1000:.3f}\n"
             f"理论奖励：{quote.theoretical_units / 1000:.3f}\n"
             f"实际奖励：{quote.actual_units / 1000:.3f}\n"

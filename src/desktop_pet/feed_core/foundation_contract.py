@@ -1,19 +1,10 @@
-"""FEED adapter boundary for the shared V2.1 foundation owned by PR5.
-
-This module intentionally defines protocols only.  It does not implement a second
-state store, clock, event queue, activity state machine, or hunger service.
-"""
+"""OLE input snapshots routed through the injected shared runtime."""
 from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Protocol, Sequence
-
-
-@dataclass(frozen=True)
-class FeedDragPreviewSnapshot:
-    screen_x: int
-    screen_y: int
-
+from typing import Sequence
+from desktop_pet.foundation.platform import Point
+from desktop_pet.foundation.runtime import RuntimeContext
+from desktop_pet.foundation.services import ApplicationServices
 
 @dataclass(frozen=True)
 class FeedDropSnapshot:
@@ -23,123 +14,45 @@ class FeedDropSnapshot:
     received_utc: str
     requested_effect: str = "copy"
 
-
-class InteractionRegionService(Protocol):
-    def hit_test_alpha_region(self, name: str, screen_x: int, screen_y: int) -> bool: ...
-
-
-class InputRouter(Protocol):
-    def submit(self, event_name: str, payload: object) -> bool: ...
-
-
-class ActivityCoordinator(Protocol):
-    def current_version(self) -> int: ...
-
-
-class HungerService(Protocol):
-    @property
-    def value_units(self) -> int: ...
-
-
-class StateStore(Protocol):
-    def flush(self) -> None: ...
-
-
-class ClockService(Protocol):
-    def utc_iso(self) -> str: ...
-
-
-class CapabilityService(Protocol):
-    def supports(self, name: str) -> bool: ...
-
-
-class FeedFoundationServices(Protocol):
-    capabilities: CapabilityService
-    interaction_regions: InteractionRegionService
-    input_router: InputRouter
-    activities: ActivityCoordinator
-    hunger: HungerService
-    state_store: StateStore
-    clock: ClockService
-
-
-REQUIRED_FEED_CAPABILITIES = (
-    "feed.activity_pipeline.v2_1",
-    "feed.ifileoperation_progress_sink.v1",
-    "feed.hunger_fixed_point.v1",
-    "feed.expectation_adapter.v1",
-)
-
-
-def foundation_feed_ready(services) -> bool:
-    """Fail closed until PR5 exposes all trusted FEED handler capabilities."""
-    if services is None:
-        return False
-    capabilities = getattr(services, "capabilities", None)
-    input_router = getattr(services, "input_router", None)
-    if capabilities is None or input_router is None:
-        return False
-    supports = getattr(capabilities, "supports", None)
-    has_handler = getattr(input_router, "has_handler", None)
-    if not callable(supports) or not callable(has_handler):
-        return False
-    return all(bool(supports(name)) for name in REQUIRED_FEED_CAPABILITIES) and bool(
-        has_handler("FeedDrop", "V2.1-FEED-CORE")
-    )
-
-def load_foundation_services(build_info):
-    """Create services through the public entry point published by codex-od26j1."""
-    try:
-        from desktop_pet.foundation.services import create_application_services
-    except ImportError:
-        return None
-    return create_application_services(build_info)
-
+def foundation_feed_ready(runtime) -> bool:
+    """Check the installed feature, not nonexistent capabilities."""
+    return bool(runtime is not None and runtime.ready and
+                isinstance(runtime.services, ApplicationServices) and
+                runtime.services.runtime is runtime.runtime)
 
 def load_runtime_context_type():
-    """Return the published runtime integration type, or fail closed when absent."""
-    try:
-        from desktop_pet.foundation.runtime import RuntimeContext
-    except ImportError:
-        return None
     return RuntimeContext
 
-
 class FoundationFeedInputAdapter:
-    """Copies OLE input into an immutable event and submits it to the one router."""
-
-    def __init__(self, services: FeedFoundationServices):
-        self.services = services
+    def __init__(self, feed):
+        self.feed = feed
+        self.services = feed.services
         self._preview_active = False
 
     def drag_enter(self, paths: Sequence[str], screen_x: int, screen_y: int) -> str:
-        if len(paths) != 1:
+        if len(paths) != 1 or not self.feed.accepting_input:
+            self.drag_leave()
             return "none"
-        if not self.services.interaction_regions.hit_test_alpha_region(
-            "head_feed", screen_x, screen_y
-        ):
+        hit = self.services.regions.hit_test(Point(int(screen_x), int(screen_y)), "click")
+        if hit is None:
+            self.drag_leave()
             return "none"
         if not self._preview_active:
-            self._preview_active = bool(
-                self.services.input_router.submit(
-                    "FeedDragPreview",
-                    FeedDragPreviewSnapshot(int(screen_x), int(screen_y)),
-                )
-            )
-        return "copy" if self._preview_active else "none"
+            self.services.runtime.post("feed.preview", source="ole")
+            self._preview_active = True
+        return "copy" if hit.part == "head" else "none"
 
     def drag_leave(self) -> None:
-        self._preview_active = False
-        self.services.input_router.submit("FeedDragLeave", None)
+        if self._preview_active:
+            self.services.runtime.post("feed.leave", source="ole")
+            self._preview_active = False
 
     def submit_drop(self, paths: Sequence[str], screen_x: int, screen_y: int) -> bool:
         if self.drag_enter(paths, screen_x, screen_y) != "copy":
+            self.drag_leave()
             return False
-        snapshot = FeedDropSnapshot(
-            paths=tuple(str(path) for path in paths),
-            screen_x=int(screen_x),
-            screen_y=int(screen_y),
-            received_utc=self.services.clock.utc_iso(),
-        )
+        snapshot = FeedDropSnapshot(tuple(str(path) for path in paths),
+            int(screen_x), int(screen_y), self.services.runtime.clock.utc_now().isoformat())
         self._preview_active = False
-        return bool(self.services.input_router.submit("FeedDrop", snapshot))
+        self.services.runtime.post("feed.drop", source="ole", drop=snapshot)
+        return True

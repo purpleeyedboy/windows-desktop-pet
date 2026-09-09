@@ -5,6 +5,13 @@ import sys
 from pathlib import Path
 
 REQUIRED_MODULES = (
+    "desktop_pet.foundation.services",
+    "desktop_pet.foundation.runtime",
+    "desktop_pet.foundation.animation",
+    "desktop_pet.foundation.persistence",
+    "desktop_pet.foundation_contract",
+    "desktop_pet.hunger",
+    "desktop_pet.feed_core.runtime",
     "desktop_pet.feed_core.foundation_contract",
     "desktop_pet.feed_core.business",
     "desktop_pet.feed_core.progress_receipt",
@@ -18,7 +25,7 @@ REQUIRED_MODULES = (
     "desktop_pet.feed_animation",
 )
 
-REQUIRED_RESOURCES = tuple(
+REQUIRED_RESOURCES = ('assets/keyframes/playback.json', 'BUILD_INFO_FEED_CORE.json') + tuple(
     f"assets/feed/v1/frames/{index:02d}.png" for index in range(6)
 )
 

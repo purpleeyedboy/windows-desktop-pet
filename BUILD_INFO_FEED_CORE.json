@@ -6,9 +6,9 @@
   "features": {
     "foundation_feed_input_adapter": true,
     "native_ole_copy_only_snapshot": true,
-    "shared_foundation_connected": false,
+    "shared_foundation_connected": true,
     "trusted_recycle_progress_sink": true,
-    "real_user_confirmed_feed": false,
+    "real_user_confirmed_feed": true,
     "feed_business_handler_ports": true,
     "windows_file_id_info_inspector": true,
     "nonblocking_30s_confirmation": true,
@@ -19,11 +19,12 @@
     "animation_debug_without_recycle": true
   },
   "test_build": true,
-  "debug_menu": false,
+  "debug_menu": true,
   "documentation_baseline": "BASE-001",
-  "release_state": "BLOCKED LOCALLY: codex-od26j1 foundation/services.py and foundation/runtime.py are absent; Windows build pending",
+  "release_state": "candidate: shared runtime integration verified; Windows native and visual acceptance pending",
   "automated_test_gate": false,
   "acceptance": "source_and_linux_checks_only_windows_build_and_user_visual_acceptance_pending",
-  "foundation_requested_commit": "e178f371",
-  "foundation_actual_commit": null
+  "foundation_requested_commit": "f617765",
+  "foundation_actual_commit": "f617765 + e361579 graphic playback + 6af8446 input priority",
+  "source_head_sha": "source"
 }
