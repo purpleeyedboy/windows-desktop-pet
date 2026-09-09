@@ -42,10 +42,10 @@ closes the mouth three times, then holds the two squint-and-lick poses. There is
 no separate swallow stage. Playback uses the foundation's body channel and exact
 neutral restoration, including cancellation and stale-callback protection.
 
-The generated source cat is narrower/more front-facing than the accepted neutral
-cat. This is a source pose/shape difference, not solved by this integration.
-Therefore the frames must remain a visual candidate; no claim of matching the
-accepted default appearance is made. The accepted original head/body are intact.
+The first integrated whole-cat source was rejected because it was narrower and
+more front-facing than the accepted neutral. The fixed-body local-face follow-up
+below supersedes that source in production. The accepted original head/body
+remain intact. User visual acceptance of the updated expression remains pending.
 
 ## Verification
 
@@ -73,3 +73,22 @@ It verifies no transaction/reward was created and closes only its own process
 tree. A failure to create a desktop/event loop fails this gate; launch readiness
 does not establish visual or native recycle acceptance. This script is authored
 but cannot be executed in the current Linux environment.
+
+## Follow-up: fixed-body local graphic frames
+
+The whole-cat generated source was rejected after review showed a 28–29%
+body-width change. The new manifest version 2 builds every frame over the exact
+accepted runtime neutral. Four ImageGen edits of canonical-idle provide only
+local mouth/jaw/eyelid texture patches. The body, head contour, ears, paws, and
+all alpha pixels remain byte-identical to neutral; only face ROI
+(104,312)-(264,476) can change. The unchanged closed frame and a repeated real
+half-open key pose complete six indexed frames. Frame timing remains 1.9 seconds.
+
+`feed-face-patches.base64.txt` stores only the four small generated face patches
+(about 299 KB text); legacy whole-cat source is retained for provenance but is
+not used by the new importer. `local-face-provenance.json` records generation
+constraints and approved-reference hash. The shared build gate now enforces
+neutral identity outside the face ROI and exact silhouette preservation.
+`tools/create_feed_frame_preview.py` renders actual-timeline black/white GIFs and
+contact sheets, including an optional 800 ms neutral pause at each end to inspect
+transitions. Those pauses are preview-only.

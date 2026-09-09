@@ -1,0 +1,14 @@
+{
+  "tool": "builtin image_gen",
+  "reference": "canonical-idle.png",
+  "reference_png_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+  "common_prompt_constraints": "Use case: precise-object-edit. Edit target: the exact approved desktop-pet cat PNG. One key pose. Preserve head angle, face proportions, nose, ears, whiskers, fur markings, lighting, neck, body, legs, feet, tail, width, position, framing and scale. Keep the same three-quarter seated cat and 2:3 composition. Change only localized mouth/lower jaw, with eyelids changed only for licking. No head tilt/body movement/checkerboard/text/contact sheet. The remainder is mechanically restored from the accepted original.",
+  "poses": {
+    "half": "Half-open chewing pose, small dark mouth interior and visible pink tongue; original eyes remain open.",
+    "wide": "Clearly wide-open cute ah-oom eating mouth, dark interior, little teeth and pink tongue; original eyes remain open.",
+    "upper": "Happy fully squinted eyes and visible pink tongue curling upward to lick upper lip below nose; mouth otherwise closed.",
+    "corner": "Happy fully squinted eyes and visible pink tongue curling to cat-left/viewer-right mouth corner; mouth otherwise closed."
+  },
+  "authoring": "Generated 1024x1536 frames were uniformly reduced to reference coordinates, locally translated 7-11 px to match the nose, then only 160x164 RGB face patches were encoded. Generated bodies/backgrounds are not runtime assets. All outside-face pixels and full alpha come from the SHA-locked actual neutral compositor. No runtime scaling/deformation of body is used.",
+  "transparency": "Built-in outputs were RGB; generated background is deliberately excluded by local masks and accepted opaque-pixel clipping. Runtime alpha is exactly the accepted neutral alpha."
+}

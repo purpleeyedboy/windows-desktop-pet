@@ -1,4 +1,4 @@
-"""Deterministically reconstruct the six FEED RGBA frames from approved sheets."""
+"""Build six real FEED frames from local generated art and the accepted neutral."""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +6,9 @@ import base64
 import hashlib
 import io
 import json
+import math
+import sys
+from uuid import uuid4
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +20,75 @@ class BuiltFrame:
     name: str
     path: Path
     sha256: str
+
+
+def build_local_face_assets(manifest_path: Path, manifest: dict, output_root: Path) -> list[BuiltFrame]:
+    """Author real full frames over the exact accepted neutral head/body.
+
+    Only generated muzzle/jaw and eyelid patches are allowed to change pixels.
+    This is a build-time graphic composition, never a runtime geometry effect.
+    """
+    checkout = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(checkout / 'src'))
+    from desktop_pet.assets import load_head_neck_compositor
+    from desktop_pet.head_neck_deformation import HeadPose
+
+    base = load_head_neck_compositor().compose(0, 0, HeadPose(0, 0))
+    if hashlib.sha256(base.tobytes()).hexdigest() != manifest['canonical']['neutral_rgba_sha256']:
+        raise RuntimeError('accepted neutral head/body pixel hash changed')
+    if list(base.size) != manifest['canonical']['canvas']:
+        raise RuntimeError('local face canvas differs from accepted neutral')
+    bundle = json.loads((manifest_path.parent/'source'/manifest['source_bundle']).read_text(encoding='ascii'))
+    if bundle.get('version') != 2 or set(bundle.get('patches', {})) != {'half', 'wide', 'upper', 'corner'}:
+        raise RuntimeError('invalid local face source bundle')
+    left, top, right, bottom = bundle['patch_box']
+    patches = {}
+    for name, record in bundle['patches'].items():
+        data = base64.b64decode(''.join(record['png_base64']), validate=True)
+        if hashlib.sha256(data).hexdigest() != record['sha256']:
+            raise RuntimeError(f'local face source hash mismatch: {name}')
+        with Image.open(io.BytesIO(data)) as opened:
+            if opened.size != (right-left, bottom-top) or opened.mode != 'RGB':
+                raise RuntimeError(f'local face source dimensions/mode invalid: {name}')
+            patches[name] = opened.copy()
+    output_root.mkdir(parents=True, exist_ok=True)
+    built = []
+    face_left, face_top, face_right, face_bottom = manifest['canonical']['face_region']
+    if (face_left, face_top, face_right, face_bottom) != (left+64, top, right+64, bottom):
+        raise RuntimeError('face patch region must retain the fixed canonical translation')
+    for index, name in enumerate(manifest['frame_patches']):
+        frame = base.copy()
+        if name is not None:
+            mask = Image.new('L', patches[name].size)
+            rules = manifest['face_patch_masks'][name]
+            for y in range(top, bottom):
+                for x in range(left, right):
+                    if base.getpixel((x+64, y))[3] != 255:
+                        continue
+                    opacity = 0.0
+                    for l, t, r, b in rules['ellipses']:
+                        distance = math.hypot((x-(l+r)/2)/((r-l)/2), (y-(t+b)/2)/((b-t)/2))
+                        weight = max(0.0, min(1.0, (1.0-distance)/0.25))
+                        opacity = max(opacity, weight*weight*(3-2*weight))
+                    if rules.get('lower_left_guard') and y > 414:
+                        # Keep generated outside-head backgrounds out of the jaw seam.
+                        safe_left = 75 + (y-414)*0.75
+                        edge = max(0.0, min(1.0, (x-safe_left)/6))
+                        opacity *= edge*edge*(3-2*edge)
+                    mask.putpixel((x-left, y-top), round(opacity*255))
+            frame.paste(patches[name], (face_left, face_top), mask)
+            frame.putalpha(base.getchannel('A'))
+        path = output_root/f'{index:02d}.png'
+        encoded = io.BytesIO()
+        frame.save(encoded, format='PNG', compress_level=9)
+        temporary = path.with_name(f'.{path.name}.{uuid4().hex}.tmp')
+        try:
+            temporary.write_bytes(encoded.getvalue())
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        built.append(BuiltFrame(path.name, path, hashlib.sha256(path.read_bytes()).hexdigest()))
+    return built
 
 
 def _foreground(pixel: tuple[int, ...] | int) -> bool:
@@ -167,6 +239,8 @@ def _isolated_alpha(mask: Image.Image, box: tuple[int, int, int, int]) -> Image.
 def build_feed_assets(manifest_path: Path, output_root: Path) -> list[BuiltFrame]:
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get('version') == 2 and manifest.get('composite_mode') == 'canonical_local_face':
+        return build_local_face_assets(manifest_path, manifest, output_root)
     source_root = manifest_path.parent / "source"
     expected_size = tuple(manifest["source_size"])
     sources = manifest["sources"]
@@ -202,7 +276,7 @@ def build_feed_assets(manifest_path: Path, output_root: Path) -> list[BuiltFrame
 def write_contact_sheets(frames: list[BuiltFrame], output_root: Path) -> None:
     """Write untracked black/white/checker evidence from the actual RGBA frames."""
     output_root.mkdir(parents=True, exist_ok=True)
-    thumb_size = (336, 384)
+    thumb_size = (320, 384)
     for background in ("black", "white", "checker"):
         sheet = Image.new("RGB", (thumb_size[0] * 3, thumb_size[1] * 2))
         for index, built in enumerate(frames):

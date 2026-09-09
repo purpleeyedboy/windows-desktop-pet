@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from PIL import ImageChops
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
@@ -98,6 +99,14 @@ def main():
         try:
             pet, shown, scheduled = make_window(services)
             frames = load_feed_frames(ROOT/'assets/generated/work/feed/v1')
+            neutral = pet._neutral_center_frame
+            allowed_face = (104, 312, 264, 476)
+            assert frames[0].tobytes() == neutral.tobytes(), 'closed pose must be exact accepted neutral'
+            for frame in frames:
+                assert frame.getchannel('A').tobytes() == neutral.getchannel('A').tobytes(), 'cat silhouette changed'
+                outside = ImageChops.difference(neutral.convert('RGB'), frame.convert('RGB'))
+                outside.paste((0, 0, 0), allowed_face)
+                assert outside.getbbox() is None, 'body/head pixels changed outside local face patches'
             feature.attach_window(pet, frames)
             assert foundation_feed_ready(feature)
             assert feature.services is pet.services is services
