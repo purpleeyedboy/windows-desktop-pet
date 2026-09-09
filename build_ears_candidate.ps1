@@ -68,12 +68,16 @@ Push-Location $RepositoryRoot
 try {
     $env:PYTHONPATH = Join-Path $RepositoryRoot "src"
     if ([string]::IsNullOrWhiteSpace($FoundationCommit)) {
-        $FoundationCommit = "e178f371bd2da1c0b4e892609acfdf79bfcab450"
+        $FoundationCommit = "4eda8964ccee8ccd0bd0e2bddb9670618924f90e"
     }
     $RuntimeApi = Join-Path $RepositoryRoot "docs\v21-runtime-api.md"
     if (-not (Test-Path -LiteralPath $RuntimeApi -PathType Leaf)) {
         throw "PR5 docs/v21-runtime-api.md is unavailable; refusing to package without the real API."
     }
+    & $Python tools/verify_ears_foundation_recovery.py
+    if ($LASTEXITCODE -ne 0) { throw "Shared persistence recovery verification failed." }
+    & $Python tools/verify_graphic_animation_contract.py
+    if ($LASTEXITCODE -ne 0) { throw "Shared graphic playback verification failed." }
     & $Python tools/verify_ears_runtime_wiring.py
     if ($LASTEXITCODE -ne 0) { throw "Ear raster/runtime verification failed; refusing to package." }
     $basePrefix = & $Python -c "import sys; print(sys.base_prefix)"

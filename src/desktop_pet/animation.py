@@ -1,4 +1,5 @@
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import Protocol
 
 
@@ -15,6 +16,60 @@ CancelCallback = Callable[[object], None]
 _SCHEDULING = object()
 
 
+@dataclass(frozen=True)
+class FrameStep:
+    frame_index: int
+    duration_ms: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.frame_index, bool) or not isinstance(self.frame_index, int) or self.frame_index < 0:
+            raise ValueError("frame index must be a non-negative integer")
+        if isinstance(self.duration_ms, bool) or not isinstance(self.duration_ms, int) or self.duration_ms <= 0:
+            raise ValueError("frame duration must be a positive integer")
+
+
+@dataclass(frozen=True)
+class AnimationSequence:
+    """Ordered graphic frames, finite loop segment, fixed canvas anchor and layer mode."""
+
+    steps: tuple[FrameStep, ...]
+    anchor: tuple[int, int]
+    loop_start: int | None = None
+    loop_end: int | None = None
+    loop_count: int = 0
+    layer_mode: str = "full"
+
+    def __post_init__(self) -> None:
+        if not self.steps:
+            raise ValueError("animation sequence requires graphic frames")
+        if len(self.anchor) != 2:
+            raise ValueError("animation anchor requires x and y")
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in self.anchor):
+            raise ValueError("animation anchor coordinates must be integers")
+        if self.layer_mode not in {"full", "local"}:
+            raise ValueError("layer mode must be full or local")
+        loop_values = (self.loop_start, self.loop_end)
+        if any(value is not None for value in loop_values):
+            if (
+                None in loop_values
+                or any(isinstance(value, bool) or not isinstance(value, int) for value in loop_values)
+                or not (0 <= self.loop_start <= self.loop_end < len(self.steps))
+            ):
+                raise ValueError("loop segment is outside the frame sequence")
+        if isinstance(self.loop_count, bool) or not isinstance(self.loop_count, int) or self.loop_count < 0:
+            raise ValueError("loop count must be a non-negative integer")
+
+    def timeline(self) -> tuple[FrameStep, ...]:
+        if self.loop_start is None or self.loop_count == 0:
+            return self.steps
+        segment = self.steps[self.loop_start : self.loop_end + 1]
+        return self.steps[: self.loop_end + 1] + segment * self.loop_count + self.steps[self.loop_end + 1 :]
+
+    @classmethod
+    def legacy(cls, frame_count: int, interval_ms: int) -> "AnimationSequence":
+        return cls(tuple(FrameStep(index, interval_ms) for index in range(frame_count)), (0, 0))
+
+
 class _PlayOutcome:
     def __init__(self, generation: int, playback_id: str | None) -> None:
         self.generation = generation
@@ -26,7 +81,7 @@ class _PlayOutcome:
 class AnimationController:
     def __init__(
         self,
-        frame_counts: Mapping[str, int],
+        frame_counts: Mapping[str, int | AnimationSequence],
         scheduler: Scheduler,
         frame_changed: FrameCallback,
         finished: FinishedCallback,
@@ -34,12 +89,17 @@ class AnimationController:
         cancel: CancelCallback | None = None,
         finished_with_id: FinishedWithIdCallback | None = None,
     ) -> None:
-        self._frame_counts = dict(frame_counts)
-        for action, count in self._frame_counts.items():
-            if isinstance(count, bool) or not isinstance(count, int) or count <= 0:
+        self._sequences: dict[str, AnimationSequence] = {}
+        for action, value in frame_counts.items():
+            if isinstance(value, AnimationSequence):
+                sequence = value
+            elif isinstance(value, int) and not isinstance(value, bool) and value > 0:
+                sequence = AnimationSequence.legacy(value, interval_ms)
+            else:
                 raise ValueError(
                     f"frame count for {action!r} must be a positive integer"
                 )
+            self._sequences[action] = sequence
         self._schedule = scheduler
         self._frame_changed = frame_changed
         self._finished = finished
@@ -48,6 +108,7 @@ class AnimationController:
         self._finished_with_id = finished_with_id
         self._action: str | None = None
         self._index = 0
+        self._timeline: tuple[FrameStep, ...] = ()
         self._generation = 0
         self._token: object | None = None
         self._slot: object | None = None
@@ -58,6 +119,14 @@ class AnimationController:
     @property
     def busy(self) -> bool:
         return self._action is not None
+
+    def register_sequence(self, action: str, sequence: AnimationSequence) -> None:
+        if self.busy or not action or action in self._sequences:
+            raise ValueError("animation sequence cannot be registered")
+        self._sequences[action] = sequence
+
+    def sequence(self, action: str) -> AnimationSequence:
+        return self._sequences[action]
 
     def play(self, action: str, *, playback_id: str | None = None) -> bool:
         if self._attempts:
@@ -70,12 +139,13 @@ class AnimationController:
             self._stopped
             or self._cleaning_up
             or self.busy
-            or self._frame_counts.get(action, 0) <= 0
+            or action not in self._sequences
         ):
             return False
         self._generation += 1
         generation = self._generation
         self._action = action
+        self._timeline = self._sequences[action].timeline()
         self._index = 1
         outcome = _PlayOutcome(generation, playback_id)
         self._attempts.append(outcome)
@@ -83,7 +153,7 @@ class AnimationController:
             try:
                 outcome.phase = "frame"
                 try:
-                    self._frame_changed(action, 0)
+                    self._frame_changed(action, self._timeline[0].frame_index)
                 finally:
                     outcome.phase = "in_flight"
             except Exception:
@@ -115,6 +185,7 @@ class AnimationController:
         self._slot = None
         self._action = None
         self._index = 0
+        self._timeline = ()
         if token is not None and token is not _SCHEDULING and self._cancel is not None:
             try:
                 self._cancel(token)
@@ -136,6 +207,7 @@ class AnimationController:
         self._slot = None
         self._action = None
         self._index = 0
+        self._timeline = ()
         if token is not None and token is not _SCHEDULING and self._cancel is not None:
             try:
                 self._cancel(token)
@@ -161,7 +233,8 @@ class AnimationController:
         previous_phase = outcome.phase
         outcome.phase = "scheduler"
         try:
-            token = self._schedule(self._interval_ms, scheduled_callback)
+            duration = self._timeline[self._index - 1].duration_ms
+            token = self._schedule(duration, scheduled_callback)
         except Exception:
             self._abort(generation)
             raise
@@ -185,17 +258,17 @@ class AnimationController:
         self._slot = None
         self._token = None
         try:
-            frame_count = self._frame_counts[action]
+            frame_count = len(self._timeline)
         except Exception:
             self._abort(generation)
             raise
         if self._index < frame_count:
-            index = self._index
+            step = self._timeline[self._index]
             self._index += 1
             previous_phase = outcome.phase
             outcome.phase = "frame"
             try:
-                self._frame_changed(action, index)
+                self._frame_changed(action, step.frame_index)
             except Exception:
                 self._abort(generation)
                 raise
@@ -206,6 +279,7 @@ class AnimationController:
             return
         self._action = None
         self._index = 0
+        self._timeline = ()
         outcome.completed = True
         self._generation += 1
         handoff_generation = self._generation
@@ -241,6 +315,7 @@ class AnimationController:
             self._slot = None
             self._action = None
             self._index = 0
+            self._timeline = ()
             self._cancel_token(token)
         finally:
             self._cleaning_up = was_cleaning_up

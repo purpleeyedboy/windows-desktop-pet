@@ -5,7 +5,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_head_neck_compositor
+from .assets import load_frames, load_head_neck_compositor, load_playback_sequences
 from .eye_follow import Win32CursorProvider
 from .foundation.config import BuildInfo
 from .foundation.services import DEFAULT_STATE, ApplicationServices, create_application_services
@@ -131,13 +131,14 @@ def main() -> int:
             notify_existing_instance(build_info)
             return 0
         services = create_application_services(build_info)
-        state = services.store.load(default=DEFAULT_STATE)
+        state = services.load_state()
         if state.get("pending_transaction") is not None:
             services.runtime.post("transaction.review", source="startup")
             services.runtime.drain()
         root = tk.Tk()
         root.withdraw()
         frames = load_frames()
+        animation_sequences = load_playback_sequences()
         compositor = load_head_neck_compositor()
         cursor_provider = Win32CursorProvider()
         pet_window = PetWindow(
@@ -148,6 +149,7 @@ def main() -> int:
             head_follow=True,
             services=services,
             persisted_state=state,
+            animation_sequences=animation_sequences,
         )
         root.mainloop()
         return 0
@@ -163,7 +165,7 @@ def main() -> int:
         else:
             if services is not None:
                 try:
-                    services.close(state)
+                    services.close()
                 except (OSError, RuntimeError):
                     pass
             if root is not None:

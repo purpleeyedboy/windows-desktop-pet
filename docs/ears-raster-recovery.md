@@ -15,3 +15,11 @@ Validation:
 - Windows candidate workflow additionally launches the packaged EXE in an isolated temporary profile and requires the identified visible Tk window. This verifies startup only; visual and real interaction acceptance remains separate.
 
 No preview binaries or redundant decoded runtime frames are committed.
+
+## Shared foundation follow-up
+
+The first recovered ear candidate still contained the earlier `e178f371` services/persistence implementation. A later bounded comparison found the missing backup/journal recovery, legacy migration, rotating logs, authoritative shared state, frame-playback APIs and menu-priority fix. This follow-up incorporates the actual shared code from local core commit `6af8446` (remote PR 5 commit `4eda8964ccee8ccd0bd0e2bddb9670618924f90e`), retaining only the ear-specific activity/config extension and the ear compositor/session methods. The metadata now identifies that real shared source.
+
+`verify_ears_foundation_recovery.py` verifies migration without changing the legacy inputs, corrupt-primary backup recovery, pending journal recovery, redacted rotating logs and authoritative state on window close, using only temporary synthetic files. Shared graphic and ear-specific playback checks both remain enabled in the ear builder.
+
+The shared frame-anchor change also needed a compatibility adjustment: old six-frame action endpoints are replaced by the existing 640px-wide center frame, while their physical frames and manifest are 512px-wide. Logical endpoints retain their actual image-center anchor; other authored frames continue to use manifest anchors. This prevents introducing horizontal displacement into the already working baseline.

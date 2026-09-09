@@ -24,7 +24,7 @@ jobs:
         run: python -m pip install "Pillow>=11,<12" "fonttools>=4.59,<5" "PyInstaller>=6,<7"
       - name: Build untested Windows acceptance candidate
         env:
-          V21_FOUNDATION_COMMIT: e178f371bd2da1c0b4e892609acfdf79bfcab450
+          V21_FOUNDATION_COMMIT: 4eda8964ccee8ccd0bd0e2bddb9670618924f90e
         run: .\build_ears_candidate.ps1
         shell: pwsh
       - name: Verify isolated Windows candidate startup
