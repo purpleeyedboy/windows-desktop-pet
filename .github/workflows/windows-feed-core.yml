@@ -26,3 +26,13 @@ jobs:
           "UNTESTED HIGH-RISK CANDIDATE`nsize: $($exes[0].Length) bytes`nSHA256: $($hash.Hash)"|Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: {name: desktop-pet-v2.1-feed-animation-recovery, path: 'dist-feed-core/桌面宠物_文件进食动画恢复候选.exe', if-no-files-found: error}
+      - name: Preserve failed startup evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-pet-feed-startup-diagnostics
+          path: |
+            build-feed-core-diagnostics/
+            build-feed-core/**/warn-*.txt
+            dist-feed-core/*.exe
+          if-no-files-found: warn

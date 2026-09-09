@@ -4,6 +4,8 @@ import ctypes
 from datetime import date
 import json
 import os
+from pathlib import Path
+import traceback
 import tkinter as tk
 from tkinter import messagebox
 
@@ -148,6 +150,14 @@ def main() -> int:
         services = create_application_services(build_info)
         state = services.load_state()
         root = tk.Tk()
+        if os.environ.get('DESKTOP_PET_STARTUP_DIAGNOSTICS'):
+            def report_callback_error(kind, error, trace):
+                diagnostic = Path(os.environ['DESKTOP_PET_STARTUP_DIAGNOSTICS'])
+                diagnostic.parent.mkdir(parents=True, exist_ok=True)
+                with diagnostic.open('a', encoding='utf-8') as stream:
+                    stream.write(''.join(traceback.format_exception(kind, error, trace)))
+                root.quit()
+            root.report_callback_exception = report_callback_error
         root.withdraw()
         feed_runtime = FeedRuntime(services, root)
         services.dragdrop.close()
@@ -178,6 +188,12 @@ def main() -> int:
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:
+        destination = os.environ.get('DESKTOP_PET_STARTUP_DIAGNOSTICS')
+        if destination:
+            diagnostic = Path(destination)
+            diagnostic.parent.mkdir(parents=True, exist_ok=True)
+            diagnostic.write_text(traceback.format_exc(), encoding='utf-8')
+            return 1
         show_fatal_error(str(error), root)
         return 1
     finally:

@@ -3,7 +3,9 @@
 Uses only a temporary state folder. It never inspects or recycles user files.
 """
 from __future__ import annotations
+import ast
 from datetime import date
+import inspect
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -23,6 +25,8 @@ from desktop_pet.feed_core.foundation_contract import FeedDropSnapshot, foundati
 from desktop_pet.feed_core.runtime import FeedRuntime, SharedFeedState
 from desktop_pet.feed_core.recovery import FeedRecovery
 from desktop_pet.window import PetWindow
+from desktop_pet.eye_runtime import RuntimeEyeSession
+from desktop_pet.layered_window import LayeredWindowRenderer
 
 class Confirmation:
     def show(self, prepared, current, callback):
@@ -71,6 +75,16 @@ def make_window(services):
     return pet, shown, scheduled
 
 def main():
+    # Validate the real construction boundary before a Tk-free playback check.
+    # A newer window with an older eye runtime otherwise builds successfully,
+    # then fails before its first GUI frame with an unexpected keyword error.
+    window_source = ast.parse((ROOT/'src/desktop_pet/window.py').read_text(encoding='utf-8'))
+    eye_call = next(node for node in ast.walk(window_source)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        and node.func.id == 'RuntimeEyeSession')
+    inspect.signature(RuntimeEyeSession).bind(**{keyword.arg: None for keyword in eye_call.keywords})
+    assert callable(RuntimeEyeSession.cancel_blink) and callable(RuntimeEyeSession.cancel_for_recovery)
+    assert callable(LayeredWindowRenderer.set_input_region)
     info = BuildInfo('2.1.0', date(2026, 9, 9), 'gate', 'f617765+e361579',
         FeatureConfig(enabled_features=('common-foundation', 'feed'), test_build=True,
                       debug_enabled=True, debug_menu_enabled=True))
