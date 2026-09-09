@@ -5,7 +5,7 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_head_neck_compositor
+from .assets import load_frames, load_groom_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
 from .window import PetWindow
 
@@ -95,6 +95,7 @@ def main() -> int:
             compositor=compositor,
             cursor_provider=cursor_provider,
             head_follow=True,
+            groom_frames=load_groom_frames(),
         )
         root.mainloop()
         return 0

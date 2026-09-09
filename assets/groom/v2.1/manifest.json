@@ -1,0 +1,44 @@
+{
+  "schema": "desktop-pet-v2.1-approved-groom-sheet-v1",
+  "side": "cat-left-paw",
+  "source": "source/groom-left-approved.png.b64",
+  "delivered_color_sha256": "ab61fa92fe0334d9335dd5decdf668979efdb1f339e7ece526c7086f43aab1c8",
+  "delivered_alpha_sha256": "66230f672ebfd8ef592ad2d3554f2e7198c651c92cbd53d813d88a46ff195683",
+  "sheet_size": [
+    1448,
+    1086
+  ],
+  "grid": [
+    4,
+    3
+  ],
+  "frame_order": [
+    "default",
+    "raise",
+    "near-mouth",
+    "tongue-out",
+    "lick-1",
+    "lick-2",
+    "lick-3",
+    "tongue-in",
+    "withdraw",
+    "lower-1",
+    "lower-2",
+    "default"
+  ],
+  "art_canvas": [
+    512,
+    768
+  ],
+  "runtime_canvas": [
+    672,
+    768
+  ],
+  "runtime_offset": [
+    80,
+    0
+  ],
+  "canonical_idle_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+  "source_encoding": "base64-lines-max-120",
+  "decoded_png_sha256": "e9a2596e6a34d380c48645f8a295911b4826dac2a253e14395ae55be2ee32139"
+}

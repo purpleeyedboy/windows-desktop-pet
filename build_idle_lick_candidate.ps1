@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$SkipTests)
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path $PSScriptRoot).Path
@@ -6,24 +6,26 @@ $Python = if (Test-Path "$Root\.venv\Scripts\python.exe") { "$Root\.venv\Scripts
 $Dist = Join-Path $Root "dist-idle-lick"
 $Work = Join-Path $Root "build-idle-lick"
 $Metadata = Join-Path $Root "build-idle-lick-metadata"
-$CandidateName = "桌面宠物_空闲舔手返工候选.exe"
+$CandidateName = "桌面宠物_舔手逐帧动画恢复.exe"
 $MaxCandidateBytes = 52428800
 
 Push-Location $Root
 try {
-    $Foundation = Join-Path $Root "src\desktop_pet\activity_coordinator.py"
+    $Foundation = Join-Path $Root "src\desktop_pet\eye_runtime.py"
     $GroomManifest = Join-Path $Root "assets\groom\v2.1\manifest.json"
     if (-not (Test-Path -LiteralPath $Foundation) -or -not (Test-Path -LiteralPath $GroomManifest)) {
-        throw "Refusing to publish: shared ActivityCoordinator and reviewed grooming assets are required."
+        throw "Refusing to publish: runtime activity arbitration and reviewed grooming assets are required."
     }
     Remove-Item -LiteralPath $Dist,$Work,$Metadata -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $Metadata | Out-Null
+    & $Python tools/import_groom_frames.py --output (Join-Path $Metadata "groom-frames")
+    if ($LASTEXITCODE -ne 0 -or @(Get-ChildItem (Join-Path $Metadata "groom-frames") -Filter "*.png").Count -ne 12) { throw "Approved groom frame rebuild failed" }
     $ShortHash = (& git rev-parse --short HEAD).Trim()
-    $FoundationHash = (& git log -1 --format=%h -- src/desktop_pet/activity_coordinator.py).Trim()
+    $FoundationHash = (& git log -1 --format=%h -- src/desktop_pet/eye_runtime.py).Trim()
     $BuildDate = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ")
     @{
         version = "2.1-LICK"; date_utc = $BuildDate; git_short_hash = $ShortHash
-        base_tag = "BASE-001"; enabled_feature = "idle-random-left-right-hand-lick"
+        base_tag = "BASE-001"; enabled_feature = "approved-cat-left-paw-groom-frames"
         foundation_git_short_hash = $FoundationHash
         automated_tests = "automated_tests=false"
         acceptance_status = "acceptance_status=awaiting-user-windows-validation"

@@ -6,7 +6,7 @@ VSVersionInfo(
     StringStruct('FileDescription', '桌面宠物 V2.1-LICK 返工候选'),
     StringStruct('FileVersion', '2.1.1.0'),
     StringStruct('InternalName', 'desktop_pet_idle_lick'),
-    StringStruct('OriginalFilename', '桌面宠物_空闲舔手返工候选.exe'),
+    StringStruct('OriginalFilename', '桌面宠物_舔手逐帧动画恢复.exe'),
     StringStruct('ProductName', '桌面宠物'),
     StringStruct('ProductVersion', '2.1-LICK')
   ])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])]

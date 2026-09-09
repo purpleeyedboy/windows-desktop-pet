@@ -11,6 +11,7 @@ EYE_FILES = (
     "head-cutout.png", "underlay.png",
 )
 BUILD_INFO = ROOT / "build-idle-lick-metadata/build-info.json"
+GROOM_RUNTIME = ROOT / "build-idle-lick-metadata/groom-frames"
 
 datas = [
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
@@ -18,6 +19,8 @@ datas = [
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
     (str(ROOT / "assets" / "groom" / "v2.1"), "assets/groom/v2.1"),
+    (str(ROOT / "assets/rig/v1/source/canonical-idle.png"), "assets/rig/v1/source"),
+    (str(GROOM_RUNTIME), "assets/groom/v2.1/runtime"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
     (str(BUILD_INFO), "."),
 ]
@@ -34,7 +37,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name='桌面宠物_空闲舔手返工候选', debug=False,
+    name='桌面宠物_舔手逐帧动画恢复', debug=False,
     bootloader_ignore_signals=False, strip=False, upx=True,
     upx_exclude=[], runtime_tmpdir=None, console=False,
     disable_windowed_traceback=False, argv_emulation=False,

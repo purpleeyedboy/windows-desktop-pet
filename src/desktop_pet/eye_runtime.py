@@ -23,6 +23,7 @@ from .idle_head_tilt import (
     TiltMode,
 )
 from .model import ACTIONS, ActionCycle
+from .groom_frames import GroomFramePlayer
 
 
 RECENTER_DURATION_SECONDS = 0.132
@@ -86,6 +87,7 @@ class RuntimeEyeSession:
         head_follow: bool = False,
         blink_motion: NaturalBlinkMotion | None = None,
         idle_tilt_motion: IdleHeadTiltMotion | None = None,
+        groom_player: GroomFramePlayer | None = None,
     ) -> None:
         self._compositor = compositor
         self._head_follow = bool(head_follow)
@@ -115,6 +117,8 @@ class RuntimeEyeSession:
             else IdleHeadTiltMotion() if self._head_follow else None
         )
         self._idle_tilt_pose = IdleTiltPose()
+        self._groom_player = groom_player
+        self._groom_frame: object | None = None
         self._rect_provider = rect_provider
         self._display = display
         self._scheduler = scheduler
@@ -176,6 +180,7 @@ class RuntimeEyeSession:
                 if (
                     self._blink_motion is not None
                     or self._idle_tilt_motion is not None
+                    or self._groom_player is not None
                 )
                 else None
             ),
@@ -362,8 +367,12 @@ class RuntimeEyeSession:
             return SessionResult.REJECTED
         if self._state == "disabled":
             return SessionResult.FALLBACK
-        if self._state != "following" or self._idle_tilt_motion is None:
+        if self._state != "following":
             return SessionResult.REJECTED
+        if self._groom_player is not None:
+            self._groom_frame = self._groom_player.interrupt(self._clock())
+        if self._idle_tilt_motion is None:
+            return SessionResult.ACCEPTED
         try:
             self._idle_tilt_motion.reset(self._clock())
         except Exception:
@@ -383,6 +392,13 @@ class RuntimeEyeSession:
         ):
             return SessionResult.REJECTED
         return SessionResult.ACCEPTED
+
+    def request_groom_debug(self, repetitions: int = 3) -> SessionResult:
+        if self._state != "following" or self._groom_player is None:
+            return SessionResult.REJECTED
+        return (SessionResult.ACCEPTED if self._groom_player.trigger(
+            self._clock(), repetitions=repetitions
+        ) else SessionResult.REJECTED)
 
     def request_idle_tilt(self, mode: TiltMode) -> SessionResult:
         """Start one explicitly selected idle-tilt pattern."""
@@ -444,6 +460,9 @@ class RuntimeEyeSession:
             or self._starting_action is not None
         ):
             return SessionResult.REJECTED
+
+        if self._groom_player is not None:
+            self._groom_frame = self._groom_player.interrupt(self._clock())
 
         self._action_failure = None
         self._pending_action = action
@@ -519,6 +538,11 @@ class RuntimeEyeSession:
         except Exception:
             return
         changed = False
+        if self._groom_player is not None:
+            groom_frame = self._groom_player.sample(now)
+            if groom_frame is not self._groom_frame:
+                self._groom_frame = groom_frame
+                changed = True
         if self._blink_motion is not None:
             try:
                 closure = self._blink_motion.sample(now)
@@ -581,7 +605,9 @@ class RuntimeEyeSession:
         if not self._work_is_current(epoch, expected_state):
             return False
         try:
-            if self._head_follow:
+            if expected_state == "following" and self._groom_frame is not None:
+                frame = self._groom_frame
+            elif self._head_follow:
                 idle_pose = (
                     self._idle_tilt_pose
                     if expected_state == "following"

@@ -26,6 +26,7 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .groom_frames import GroomFramePlayer
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -239,6 +240,8 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        groom_frames: Sequence[Image.Image] | None = None,
+        groom_debug_menu: bool = False,
     ) -> None:
         if legacy_mode:
             if (
@@ -258,6 +261,7 @@ class PetWindow:
         self.always_on_top = True
         self.action_cycle = ActionCycle()
         self._rng = Random()
+        self._groom_debug_menu = bool(groom_debug_menu)
         self.dialogue = DialogueChooser(load_phrase_pools(), self._rng)
         self._current_image = frames["jump"][0]
         self._resized_image = self._current_image
@@ -338,6 +342,7 @@ class PetWindow:
                     present_phrase=self._present_phrase,
                     on_action_failed=self._on_action_failed,
                     head_follow=head_follow,
+                    groom_player=(GroomFramePlayer(groom_frames, rng=self._rng) if groom_frames is not None else None),
                 )
                 result = self.eye_session.start()
                 self._neutral_center_frame = cached_compositor.center_frame
@@ -365,6 +370,14 @@ class PetWindow:
                 command=lambda value=action: self.trigger_named_action(value),
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
+        if self._groom_debug_menu:
+            menu.add_command(
+                label="调试：舔手逐帧动画（3次）",
+                command=lambda: (
+                    self.eye_session.request_groom_debug(3)
+                    if self.eye_session is not None else None
+                ),
+            )
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,

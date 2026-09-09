@@ -2,6 +2,7 @@ import hashlib
 from io import BytesIO
 from pathlib import Path
 import sys
+import tempfile
 from typing import Sequence
 
 from PIL import Image
@@ -135,3 +136,23 @@ def load_frames(root: Path | None = None) -> dict[str, Sequence[Image.Image]]:
                 frames.append(image.copy())
         loaded[action] = tuple(frames)
     return loaded
+
+
+def load_groom_frames() -> tuple[Image.Image, ...]:
+    """Load packaged verified frames, or rebuild them in a source checkout."""
+    from .groom_import import import_groom_frames
+    runtime = asset_path("assets", "groom", "v2.1", "runtime")
+    paths = sorted(runtime.glob("*.png"))
+    if paths:
+        expected = tuple(f"{index:02d}.png" for index in range(12))
+        if tuple(path.name for path in paths) != expected:
+            raise RuntimeError("packaged grooming action must contain exactly 12 ordered frames")
+        frames = tuple(Image.open(path).convert("RGBA") for path in paths)
+        if any(frame.size != (672, 768) for frame in frames):
+            raise RuntimeError("packaged grooming frames must be 672x768 RGBA")
+        if frames[0].tobytes() != frames[-1].tobytes():
+            raise RuntimeError("packaged grooming endpoints must be canonical idle")
+        return frames
+    manifest = asset_path("assets", "groom", "v2.1", "manifest.json")
+    with tempfile.TemporaryDirectory(prefix="desktop-pet-groom-") as directory:
+        return import_groom_frames(manifest, Path(directory))
