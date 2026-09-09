@@ -133,7 +133,7 @@ def main() -> int:
             notify_existing_instance(build_info)
             return 0
         services = create_application_services(build_info)
-        state = services.store.load(default=DEFAULT_STATE)
+        state = services.load_state()
         if state.get("pending_transaction") is not None:
             services.runtime.post("transaction.review", source="startup")
             services.runtime.drain()
@@ -165,7 +165,7 @@ def main() -> int:
         else:
             if services is not None:
                 try:
-                    services.close(state)
+                    services.close()
                 except (OSError, RuntimeError):
                     pass
             if root is not None:

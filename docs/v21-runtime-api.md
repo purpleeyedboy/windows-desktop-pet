@@ -13,7 +13,7 @@ the sole event consumer and `ActivityCoordinator` is the sole state writer.
 
 ```python
 services = create_application_services(BuildInfo.load_embedded())
-state = services.store.load(default=DEFAULT_STATE)
+state = services.load_state()
 window = PetWindow(root, frames, services=services, persisted_state=state, ...)
 services.runtime.post("feature.request", source="hunger", operation_id=operation_id)
 ```
@@ -86,15 +86,29 @@ clock.monotonic() -> float
 store.load(*, default: dict[str, Any]) -> dict[str, Any]
 store.save(data: dict[str, Any], *, durable: bool = False) -> None
 journal.append(record: dict[str, Any], *, durable: bool) -> None
+services.load_state() -> dict[str, Any]
+services.state_snapshot() -> dict[str, Any]
+services.commit_state(next_state: dict[str, Any], *, durable=False) -> dict[str, Any]
+services.update_state(mutate: Callable[[dict[str, Any]], None], *, durable=False) -> dict[str, Any]
 ```
 
 Production uses `SystemTimeSource` and `SystemRandomSource`. The state schema is
 `desktop-pet-v2.1` version 1 and reserves integer `hunger_anchor_utc_seconds`,
 `pending_transaction`, and `recent_operation_ids`. Writes use a sibling temporary
-file, flush/fsync, atomic replace, read-back backup, and retain corrupt input under
-a `.corrupt-*` name. The journal strips full-path keys. Feature branches must wait
+file, flush/fsync, validation, atomic replace, and an independently validated
+`state.backup.json`. Load recovery order is formal state, valid backup, then the
+latest non-terminal sanitized journal transaction. Corrupt inputs are retained in
+`recovery/`. The journal recursively strips full-path keys. Feature branches must wait
 for durable writes at transaction boundaries and must enter transaction review
 when `pending_transaction` is present before enabling feeding.
+
+The unified data root is `%LOCALAPPDATA%/DesktopPet`: `state.json`,
+`state.backup.json`, `settings.json`, `feed-journal.jsonl`, `logs/`, and
+`recovery/`. A one-time migration copies missing files from `DesktopPetV21`
+without changing or overwriting the legacy source. `SharedState` persists a
+candidate before publishing it as the in-memory snapshot; `close()` ignores its
+legacy state argument so a stale startup copy cannot overwrite a committed reward.
+Normal logs rotate at 2 MiB with five backups and redact complete paths.
 
 ## OLE, workers, and debugging
 

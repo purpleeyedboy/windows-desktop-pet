@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import deepcopy
 import ctypes
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 from queue import Queue
-from threading import Event as ThreadEvent, Thread
-from typing import Callable
-from uuid import UUID
+from threading import Event as ThreadEvent, RLock, Thread
+from typing import Callable, Any
+import shutil
+import re
+from uuid import UUID, uuid4
 
 from .animation import AnimationChannels
 from .config import BuildInfo, FeatureConfig
@@ -27,6 +31,15 @@ DEFAULT_STATE = {
 }
 
 
+class _PathRedactionFilter(logging.Filter):
+    _path = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s,;]+")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = self._path.sub("<redacted-path>", record.getMessage())
+        record.args = ()
+        return True
+
+
 def valid_v21_state(data: dict) -> bool:
     return (
         type(data.get("hunger_anchor_utc_seconds")) is int
@@ -35,6 +48,88 @@ def valid_v21_state(data: dict) -> bool:
         and all(isinstance(item, str) for item in data.get("recent_operation_ids", ()))
         and isinstance(data.get("window"), dict)
     )
+
+
+@dataclass(frozen=True)
+class DataPaths:
+    root: Path
+    state: Path
+    state_backup: Path
+    settings: Path
+    journal: Path
+    logs: Path
+    recovery: Path
+
+    @classmethod
+    def under(cls, root: Path) -> "DataPaths":
+        return cls(root, root / "state.json", root / "state.backup.json", root / "settings.json", root / "feed-journal.jsonl", root / "logs", root / "recovery")
+
+
+def migrate_legacy_data(legacy_root: Path, paths: DataPaths) -> tuple[Path, ...]:
+    """Copy legacy files once; never rename, delete, or overwrite legacy/new data."""
+    mappings = (
+        (legacy_root / "state.json", paths.state),
+        (legacy_root / "state.json.bak", paths.state_backup),
+        (legacy_root / "settings.json", paths.settings),
+        (legacy_root / "transactions.jsonl", paths.journal),
+    )
+    migrated: list[Path] = []
+    paths.root.mkdir(parents=True, exist_ok=True)
+    for source, destination in mappings:
+        if not source.is_file() or destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.migration.tmp")
+        try:
+            with source.open("rb") as input_stream, temporary.open("xb") as output_stream:
+                shutil.copyfileobj(input_stream, output_stream)
+                output_stream.flush()
+                os.fsync(output_stream.fileno())
+            os.replace(temporary, destination)
+            migrated.append(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return tuple(migrated)
+
+
+class SharedState:
+    """The only publisher of persisted/in-memory application state."""
+
+    def __init__(self, store: AtomicJsonStore, journal: TransactionJournal) -> None:
+        self.store = store
+        self.journal = journal
+        self._lock = RLock()
+        self._current = deepcopy(DEFAULT_STATE)
+
+    def load(self) -> dict[str, Any]:
+        with self._lock:
+            loaded = self.store.load(default=DEFAULT_STATE)
+            if self.store.last_source == "default":
+                pending = self.journal.recover_pending()
+                if pending is not None:
+                    loaded["pending_transaction"] = pending
+            self._current = deepcopy(loaded)
+            return deepcopy(self._current)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return deepcopy(self._current)
+
+    def commit(self, next_state: dict[str, Any], *, durable: bool = False) -> dict[str, Any]:
+        """Persist first; publish memory only after the durable replace succeeds."""
+        candidate = deepcopy(next_state)
+        if not valid_v21_state(candidate):
+            raise ValueError("V2.1 state is invalid")
+        with self._lock:
+            self.store.save(candidate, durable=durable)
+            self._current = candidate
+            return deepcopy(self._current)
+
+    def update(self, mutate: Callable[[dict[str, Any]], None], *, durable: bool = False) -> dict[str, Any]:
+        with self._lock:
+            candidate = deepcopy(self._current)
+            mutate(candidate)
+            return self.commit(candidate, durable=durable)
 
 
 class DebugService:
@@ -247,6 +342,8 @@ class ApplicationServices:
     animation: AnimationChannels
     regions: RegionService
     store: AtomicJsonStore
+    state: SharedState
+    settings: AtomicJsonStore
     journal: TransactionJournal
     dragdrop: OleDragDropService
     file_worker: FileWorkerQueue
@@ -255,14 +352,28 @@ class ApplicationServices:
     random: SystemRandomSource
     logger: logging.Logger
     log_path: Path
+    paths: DataPaths
 
-    def close(self, state: dict) -> None:
+    def load_state(self) -> dict[str, Any]:
+        return self.state.load()
+
+    def state_snapshot(self) -> dict[str, Any]:
+        return self.state.snapshot()
+
+    def commit_state(self, next_state: dict[str, Any], *, durable: bool = False) -> dict[str, Any]:
+        return self.state.commit(next_state, durable=durable)
+
+    def update_state(self, mutate: Callable[[dict[str, Any]], None], *, durable: bool = False) -> dict[str, Any]:
+        return self.state.update(mutate, durable=durable)
+
+    def close(self, state: dict | None = None) -> None:
+        del state  # Compatibility: stale caller copies are intentionally ignored.
         errors: list[Exception] = []
         for operation in (
             self.file_worker.close,
             lambda: self.runtime.drain(),
             self.dragdrop.close,
-            lambda: self.store.save(state, durable=True),
+            lambda: self.state.commit(self.state.snapshot(), durable=True),
             self.runtime.close,
         ):
             try:
@@ -279,22 +390,36 @@ class ApplicationServices:
             raise RuntimeError("application cleanup failed") from errors[0]
 
 
-def create_application_services(build_info: BuildInfo, state_root: Path | None = None) -> ApplicationServices:
+def create_application_services(build_info: BuildInfo, state_root: Path | None = None, legacy_root: Path | None = None) -> ApplicationServices:
     clock = SystemTimeSource()
     runtime = RuntimeContext(clock)
-    root = state_root or Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DesktopPetV21"
-    store = AtomicJsonStore(root / "state.json", schema="desktop-pet-v2.1", version=1, validator=valid_v21_state)
+    base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    root = state_root or base / "DesktopPet"
+    paths = DataPaths.under(root)
+    migrate_legacy_data(legacy_root or base / "DesktopPetV21", paths)
+    store = AtomicJsonStore(paths.state, schema="desktop-pet-v2.1", version=1, validator=valid_v21_state, backup_path=paths.state_backup, recovery_dir=paths.recovery)
+    journal = TransactionJournal(paths.journal)
+    state = SharedState(store, journal)
+    settings = AtomicJsonStore(paths.settings, schema="desktop-pet-settings-v2.1", version=1, validator=lambda data: isinstance(data, dict), backup_path=paths.recovery / "settings.backup.json", recovery_dir=paths.recovery)
+    settings_value = settings.load(default={})
+    if settings.last_source == "default":
+        settings.save(settings_value, durable=True)
+    paths.recovery.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("desktop_pet")
-    log_path = root / "desktop-pet.log"
+    log_path = paths.logs / "desktop-pet.log"
     if not logger.handlers:
-        root.mkdir(parents=True, exist_ok=True)
-        logger.addHandler(logging.FileHandler(log_path, encoding="utf-8"))
+        paths.logs.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8")
+        handler.addFilter(_PathRedactionFilter())
+        logger.addHandler(handler)
     return ApplicationServices(
         runtime=runtime,
         animation=AnimationChannels(runtime.coordinator),
         regions=RegionService(),
         store=store,
-        journal=TransactionJournal(root / "transactions.jsonl"),
+        state=state,
+        settings=settings,
+        journal=journal,
         dragdrop=OleDragDropService(runtime.post),
         file_worker=FileWorkerQueue(runtime.post),
         debug=DebugService(build_info.feature_config),
@@ -302,4 +427,5 @@ def create_application_services(build_info: BuildInfo, state_root: Path | None =
         random=SystemRandomSource(),
         logger=logger,
         log_path=log_path,
+        paths=paths,
     )

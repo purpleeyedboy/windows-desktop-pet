@@ -49,3 +49,11 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 新候选名：`桌面宠物_公共基础接线与版本识别修复.exe`。该候选未经旧 pytest/逐像素套件门禁，仍须 Windows 构建检查和用户实机验收；不能称为已验收完成版。
 - REPAIR 静态/临时目录证据：入口接线审查、Python 编译、事件优先级与物理恢复、四字段播放身份、损坏存储/备份/日志、STA 工作队列关闭、manifest XML 和 158 项素材 SHA-256 均已检查；按授权未运行 pytest。
 - 尚未完成的外部门禁：本容器不能验证 Windows OLE 消息、PerMonitorV2 多屏切换、Alpha/16px 原生命中、旧实例激活、真实菜单键盘操作、PyInstaller EXE 启动和用户视觉验收。饥饿、舔手、喂食、耳朵、前肢、期待仍由 PR6～PR11 接入，本候选中明确禁用，不得当作已完成功能。
+
+## CORE-DATA-REPAIR-20260907 数据恢复增量
+
+- 统一数据目录改为 `%LOCALAPPDATA%/DesktopPet`，固定包含 `state.json`、`state.backup.json`、`settings.json`、`feed-journal.jsonl`、`logs/` 和 `recovery/`。
+- 加载顺序固定为正式状态、有效备份、脱敏事务日志；正式与备份双损坏时，日志中的未完成事务恢复到 `pending_transaction`，启动必须进入 `TransactionReview`，不能默认为无事务。
+- 保存前先验证候选状态；只把验证通过的旧正式状态原子写入备份。损坏正式状态不会覆盖有效备份，损坏输入保留到 `recovery/`。
+- `SharedState.commit/update` 是唯一共享提交入口：先完成持久化，成功后才发布新内存快照；兼容的 `ApplicationServices.close(state=None)` 忽略旧调用者副本并保存当前最新快照。
+- 旧 `%LOCALAPPDATA%/DesktopPetV21` 文件仅在新目标缺失时复制迁移，不删除、不改写、不覆盖旧文件；普通日志采用 2 MiB、5 备份轮转并脱敏完整路径。

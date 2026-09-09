@@ -26,7 +26,7 @@ def require(path: str, snippets: tuple[str, ...], *, python: bool = True) -> Non
 
 def main() -> int:
     require("src/desktop_pet/main.py", (
-        "create_application_services(build_info)", "services.store.load",
+        "create_application_services(build_info)", "services.load_state()",
         "services=services", "notify_existing_instance(build_info)",
     ))
     require("src/desktop_pet/window.py", (
@@ -38,6 +38,12 @@ def main() -> int:
     require("src/desktop_pet/foundation/services.py", (
         "OleInitialize", "RegisterDragDrop", "RevokeDragDrop",
         'schema="desktop-pet-v2.1"', "SystemTimeSource()", "SystemRandomSource()",
+        'base / "DesktopPet"', 'root / "state.backup.json"',
+        "SharedState", "RotatingFileHandler", "migrate_legacy_data",
+    ))
+    require("src/desktop_pet/foundation/persistence.py", (
+        "Recover in strict order: primary, valid backup", "recover_pending",
+        "temporary state read-back validation failed", "_preserve_corrupt",
     ))
     require("src/desktop_pet/animation.py", ("playback_id", "self._finished_with_id(action, outcome.playback_id)"))
     require("desktop_pet_v21_core.spec", (

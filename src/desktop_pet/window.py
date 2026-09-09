@@ -1175,15 +1175,23 @@ class PetWindow:
         self.animation.stop()
         self.bubble.destroy()
         if self.services is not None:
-            self._persisted_state["window"] = {
+            window_state = {
                 "x": self._window_rect.x,
                 "y": self._window_rect.y,
                 "height": self.display_height,
             }
             try:
-                self.services.close(self._persisted_state)
-            except (OSError, RuntimeError):
+                self.services.update_state(
+                    lambda state: state.__setitem__("window", window_state),
+                    durable=True,
+                )
+            except (OSError, RuntimeError, ValueError):
                 pass
+            finally:
+                try:
+                    self.services.close()
+                except (OSError, RuntimeError, ValueError):
+                    pass
         try:
             self.root.destroy()
         except tk.TclError:
