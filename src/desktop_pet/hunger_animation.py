@@ -62,6 +62,7 @@ class HungerAnimationController:
         previous = self._health
         self._health = level
         self._started = None
+        self._suspended = False
         # Only downward entry into Hungry/Severe starts immediately. Crossing
         # several boundaries handles final state only. Upward transitions never play it.
         if self._rank(level) > self._rank(previous) and level in (HungerLevel.HUNGRY, HungerLevel.SEVERE_HUNGRY):

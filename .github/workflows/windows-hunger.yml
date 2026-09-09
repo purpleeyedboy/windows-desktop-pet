@@ -29,11 +29,11 @@ jobs:
           if ($exes[0].Name -ne '桌面宠物_修复饥饿衰减与张嘴流泪.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
-          "UNTESTED candidate; BLOCKED pending PR5 foundation integration, then user Windows validation." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "UNTESTED candidate; shared foundation integrated; waiting for user Windows validation." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Size: $($exes[0].Length) bytes; SHA-256: $($hash.Hash)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-v2-1-hunger-REPAIR-BLOCKED-PENDING-PR5
+          name: desktop-pet-v2-1-hunger-REPAIR-UNTESTED
           path: dist-hunger/桌面宠物_修复饥饿衰减与张嘴流泪.exe
           retention-days: 7
           if-no-files-found: error

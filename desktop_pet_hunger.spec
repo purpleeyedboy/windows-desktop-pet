@@ -15,7 +15,7 @@ datas = [
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
-    (str(ROOT / "build_metadata.json"), "."),
+    (str(ROOT / "build_identity.json"), "."),
 ]
 datas.extend((str(EYE_SOURCE / name), EYE_RUNTIME) for name in EYE_FILES)
 

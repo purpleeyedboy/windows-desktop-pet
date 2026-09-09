@@ -20,6 +20,10 @@ art.  The replaceable layer/anchor contract is documented in
 
 `run_desktop_pet.py` → `desktop_pet.main.main` → PR5 `create_application_services` → shared UTC/StateStore/ActivityCoordinator → `HungerService.snapshot` → `HungerRuntime._tick` → coordinator token/version validation → `PetWindow.present_hunger` → `compose_hunger_effect` → `LayeredWindowRenderer.render`.
 
-## Current integration gate
+## Current integration status
 
-`foundation_commit=PENDING_PR5`; `build_hunger.ps1` intentionally refuses packaging until the approved PR5 foundation module exists and the same foundation commit is recorded. This prevents an old-cat or parallel-state candidate from being published as complete.
+The runnable entry point creates one `ApplicationServices`, adapts its one
+`AtomicJsonStore` through `SharedHungerStatePort`, and uses its `RuntimeContext`
+and `ActivityCoordinator`. The source handoff identity is recorded as
+`e178f371bd2da1c0b4e892609acfdf79bfcab450`; this records provenance and does
+not claim that commit as a Git ancestor of this branch.

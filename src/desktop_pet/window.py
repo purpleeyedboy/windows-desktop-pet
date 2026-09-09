@@ -28,6 +28,9 @@ from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
 from .hunger_animation import HungerAnimationFrame, HungerVisual
 from .hunger_effect import compose_hunger_effect
+from .foundation.runtime import Activity, ActivityToken
+from .foundation.services import ApplicationServices
+from .foundation.platform import Rect as FoundationRect
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -245,6 +248,8 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        services: ApplicationServices | None = None,
+        persisted_state: dict[str, object] | None = None,
     ) -> None:
         if legacy_mode:
             if (
@@ -297,8 +302,15 @@ class PetWindow:
             self.display_height,
         )
         self._hunger_runtime: object | None = None
-        self._activity_coordinator: object | None = None
+        self._services = services
+        self._persisted_state = persisted_state
+        self._activity_coordinator = None if services is None else services.runtime.coordinator
+        self._active_activity_token: ActivityToken | None = None
+        self._drag_activity_token: ActivityToken | None = None
+        self._menu_activity_token: ActivityToken | None = None
+        self._runtime_timer: object | None = None
         self._hunger_frame: HungerAnimationFrame | None = None
+        self._last_hunger_level: object | None = None
         self._last_hunger_presentation: HungerVisual | None = None
 
         try:
@@ -363,6 +375,9 @@ class PetWindow:
                 self._show_window()
 
             self._constructing = False
+            if self._services is not None:
+                self._services.runtime.bind("body.request", self._handle_body_request)
+                self._schedule_runtime_drain()
             if self._pending_runtime_failure:
                 self._report_runtime_failure_once()
         except Exception:
@@ -537,6 +552,12 @@ class PetWindow:
         self._current_image = source_image
         self._resized_image = resized_image
         self._window_rect = rect
+        if self._services is not None:
+            self._services.regions.update_pose(
+                window=FoundationRect(rect.x, rect.y, rect.width, rect.height),
+                source_size=(source_image.width, source_image.height),
+                alpha=resized_image.getchannel("A"),
+            )
         self.display_height = display_height
         self._presentation_snapshot = _PresentationSnapshot(
             source_image,
@@ -714,6 +735,21 @@ class PetWindow:
             self.eye_session.request_idle_tilt(mode)
 
     def _trigger_action(self, action: str | None) -> None:
+        if self._services is not None:
+            self._services.runtime.post(
+                "body.request",
+                source="pet-window",
+                action=action,
+            )
+            self._services.runtime.drain()
+            return
+        self._trigger_action_direct(action)
+
+    def _handle_body_request(self, event: object) -> None:
+        payload = getattr(event, "payload", {})
+        self._trigger_action_direct(payload.get("action"))
+
+    def _trigger_action_direct(self, action: str | None) -> None:
         if (
             self._closed
             or not self._rendering_available
@@ -783,6 +819,12 @@ class PetWindow:
 
     def _animation_finished(self, action: str) -> None:
         self._active_animation_action = None
+        if self._active_activity_token is not None and self._activity_coordinator is not None:
+            self._activity_coordinator.complete(
+                self._active_activity_token,
+                animation_id=action,
+            )
+            self._active_activity_token = None
         if self._hunger_runtime is not None:
             self._hunger_runtime.resume()
         if self._closed or self._legacy_fallback or self.eye_session is None:
@@ -790,50 +832,85 @@ class PetWindow:
         self.eye_session.animation_finished(action)
 
     def _play_action(self, action: str) -> bool:
+        if self._activity_coordinator is not None:
+            token = self._activity_coordinator.request_activity(
+                Activity.BODY_ACTION,
+                animation_id=action,
+                timeout_seconds=30.0,
+            )
+            if token is None:
+                return False
+            self._active_activity_token = token
         try:
             accepted = self.animation.play(action)
         except Exception:
+            if self._active_activity_token is not None and self._activity_coordinator is not None:
+                self._activity_coordinator.cancel_and_recover(self._active_activity_token)
+                self._active_activity_token = None
             if not self.animation.busy:
                 self._active_animation_action = None
             raise
         if accepted is not True and not self.animation.busy:
             self._active_animation_action = None
+            if self._active_activity_token is not None and self._activity_coordinator is not None:
+                self._activity_coordinator.cancel_and_recover(self._active_activity_token)
+                self._active_activity_token = None
         elif accepted is True:
             if self._hunger_runtime is None:
                 raise RuntimeError("hunger runtime is not attached")
+            if self._active_activity_token is not None and self._activity_coordinator is not None:
+                self._activity_coordinator.attach_recovery(
+                    self._active_activity_token,
+                    lambda value=action: self._recover_body_animation(value),
+                )
             self._hunger_runtime.interrupt()
         return accepted
 
-    def attach_hunger_runtime(self, runtime: object, activity: object) -> None:
+    def _recover_body_animation(self, action: str) -> None:
+        self.animation.cancel_current(action)
+        self._active_animation_action = None
+        self._active_activity_token = None
+
+    def attach_hunger_runtime(self, runtime: object) -> None:
         self._hunger_runtime = runtime
-        self._activity_coordinator = activity
 
     def _input_allowed(self, operation: str) -> bool:
         if self._activity_coordinator is None or self._hunger_runtime is None:
             return False
-        health = self._hunger_runtime.service.snapshot().level
-        return bool(self._activity_coordinator.input_allowed(operation, health))
+        level = self._hunger_runtime.service.snapshot().level
+        if operation in {"Body", "Blink"} and level.value in {"SevereHungry", "CriticalHungry"}:
+            return False
+        activity = Activity.BLINK if operation == "Blink" else Activity.BODY_ACTION
+        return bool(self._activity_coordinator.permits(activity))
 
     def add_hunger_menus(self, runtime: object, utc_clock: object, metadata: dict[str, object]) -> None:
         """One Debug top-level item with a directly scrollable second level."""
         if metadata["test_build"] is True:
-            debug = tk.Menu(self.menu, tearoff=False)
             for label, units in (
                 ("饥饿值 100%", 100_000), ("饥饿值 20%", 20_000),
                 ("饥饿值 19.9%", 19_900), ("饥饿值 10%", 10_000),
                 ("饥饿值 9.9%", 9_900), ("饥饿值 1%", 1_000),
                 ("饥饿值 0.9%", 900), ("饥饿值 0%", 0),
             ):
-                debug.add_command(label=label, command=lambda value=units: runtime.set_debug_units(value))
-            debug.add_separator()
+                self._services.debug.register(
+                    label,
+                    lambda value=units: runtime.set_debug_units(value),
+                )
             for label, seconds in (("时间 +30 分钟", 1_800), ("时间 +60 分钟", 3_600), ("时间 +120 分钟", 7_200)):
-                debug.add_command(label=label, command=lambda value=seconds: utc_clock.advance(value))
-            debug.add_command(label="重播当前饥饿动画", command=runtime.replay)
-            debug.add_command(
-                label="显示内部运行状态",
-                command=lambda: messagebox.showinfo("V2.1-HUNGER 运行状态", runtime.status_text(), parent=self.root),
+                self._services.debug.register(
+                    label,
+                    lambda value=seconds: utc_clock.advance(value),
+                )
+            self._services.debug.register("重播当前饥饿动画", runtime.replay)
+            self._services.debug.register(
+                "显示内部运行状态",
+                lambda: messagebox.showinfo(
+                    "V2.1-HUNGER 运行状态",
+                    runtime.status_text(),
+                    parent=self.root,
+                ),
             )
-            self.menu.add_cascade(label="调试", menu=debug)
+            self.menu.add_command(label="调试", command=self._show_debug_commands)
         identity = (
             f"V{metadata['version']}  Git {metadata['git_short_hash']}\n"
             f"Foundation {metadata['foundation_commit']}  Baseline {metadata['baseline_commit']}\n"
@@ -843,6 +920,48 @@ class PetWindow:
             label="关于/运行版本",
             command=lambda: messagebox.showinfo("桌面宠物版本", identity, parent=self.root),
         )
+
+    def _show_debug_commands(self) -> None:
+        if self._services is None:
+            raise RuntimeError("shared application services are unavailable")
+        commands = self._services.debug.commands()
+        panel = tk.Toplevel(self.root)
+        panel.title("调试")
+        panel.transient(self.root)
+        panel.attributes("-topmost", True)
+        scrollbar = tk.Scrollbar(panel, orient="vertical")
+        choices = tk.Listbox(
+            panel,
+            yscrollcommand=scrollbar.set,
+            height=min(14, max(1, len(commands))),
+            width=32,
+            exportselection=False,
+        )
+        scrollbar.configure(command=choices.yview)
+        choices.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        for name, _command, enabled in commands:
+            choices.insert("end", name)
+            if not enabled:
+                choices.itemconfigure("end", foreground="#888888")
+
+        def invoke(_event: object | None = None) -> None:
+            selection = choices.curselection()
+            if not selection:
+                return
+            _name, command, enabled = commands[selection[0]]
+            if enabled:
+                command()
+
+        choices.bind("<Double-Button-1>", invoke)
+        choices.bind("<Return>", invoke)
+        choices.bind("<Escape>", lambda _event: panel.destroy())
+        choices.bind("<Home>", lambda _event: choices.selection_set(0))
+        choices.bind("<End>", lambda _event: choices.selection_set("end"))
+        choices.bind("<MouseWheel>", lambda event: choices.yview_scroll(-1 if event.delta > 0 else 1, "units"))
+        if commands:
+            choices.selection_set(0)
+        choices.focus_set()
 
     def show_build_identity(self, metadata: dict[str, object]) -> None:
         self.root.title(f"桌面宠物 V{metadata['version']} {metadata['git_short_hash']}")
@@ -854,6 +973,15 @@ class PetWindow:
         """Render effects every phase; reserve the bubble for level transitions."""
         if self._closed:
             return
+        if frame.health is not self._last_hunger_level:
+            phrase = {
+                "Hungry": "肚子好饿……",
+                "SevereHungry": "已经很饿了……",
+                "CriticalHungry": "真的非常饿了……",
+            }.get(frame.health.value)
+            if phrase is not None:
+                self._present_phrase(phrase)
+            self._last_hunger_level = frame.health
         self._hunger_frame = frame
         if self._presentation_snapshot is not None:
             try:
@@ -877,7 +1005,16 @@ class PetWindow:
         cancelled = self.animation.cancel_current(action)
         if cancelled is True:
             self._active_animation_action = None
+            if self._active_activity_token is not None and self._activity_coordinator is not None:
+                self._activity_coordinator.cancel_and_recover(self._active_activity_token)
+                self._active_activity_token = None
         return cancelled
+
+    def _schedule_runtime_drain(self) -> None:
+        if self._closed or self._services is None:
+            return
+        self._services.runtime.drain()
+        self._runtime_timer = self.root.after(16, self._schedule_runtime_drain)
 
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
@@ -993,6 +1130,9 @@ class PetWindow:
         if self._closed:
             return
         self._closed = True
+        if self._runtime_timer is not None:
+            self._cancel_after(self._runtime_timer)
+            self._runtime_timer = None
         stop_hunger = getattr(self._hunger_runtime, "stop", None)
         if callable(stop_hunger):
             stop_hunger()
@@ -1000,6 +1140,9 @@ class PetWindow:
             self.eye_session.stop()
         self.animation.stop()
         self.bubble.destroy()
+        if self._services is not None and self._persisted_state is not None:
+            self._services.close(self._persisted_state)
+            self._services = None
         try:
             self.root.destroy()
         except tk.TclError:
@@ -1007,6 +1150,16 @@ class PetWindow:
 
     def _on_left_press(self, event: tk.Event) -> None:
         self._hunger_runtime.interrupt()
+        if (
+            self._activity_coordinator is not None
+            and self._hunger_runtime.service.snapshot().level.value
+            not in {"SevereHungry", "CriticalHungry"}
+        ):
+            self._drag_activity_token = self._activity_coordinator.request_activity(
+                Activity.DRAG_PREVIEW,
+                animation_id="pointer-drag",
+                timeout_seconds=30.0,
+            )
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
@@ -1016,7 +1169,7 @@ class PetWindow:
     def _on_left_motion(self, event: tk.Event) -> None:
         if self._press_pointer is None or self._press_window is None:
             return
-        if not self._input_allowed("Body"):
+        if self._drag_activity_token is None and not self._input_allowed("Body"):
             return
         delta_x = event.x_root - self._press_pointer[0]
         delta_y = event.y_root - self._press_pointer[1]
@@ -1032,6 +1185,9 @@ class PetWindow:
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
     def _on_left_release(self, event: tk.Event) -> None:
+        if self._drag_activity_token is not None and self._activity_coordinator is not None:
+            self._activity_coordinator.cancel_and_recover(self._drag_activity_token)
+            self._drag_activity_token = None
         if self._press_pointer is not None:
             self.handle_left_release(
                 self._press_pointer,
@@ -1043,10 +1199,22 @@ class PetWindow:
 
     def _on_context_menu(self, event: tk.Event) -> None:
         self._hunger_runtime.interrupt()
+        if self._activity_coordinator is not None:
+            self._menu_activity_token = self._activity_coordinator.request_activity(
+                Activity.CONTEXT_MENU_OPEN,
+                animation_id="context-menu",
+                timeout_seconds=30.0,
+            )
         try:
             self.menu.tk_popup(event.x_root, event.y_root)
         finally:
             self.menu.grab_release()
+            if self._menu_activity_token is not None and self._activity_coordinator is not None:
+                self._activity_coordinator.complete(
+                    self._menu_activity_token,
+                    animation_id="context-menu",
+                )
+                self._menu_activity_token = None
             self._hunger_runtime.resume()
 
     def _on_wheel(self, event: tk.Event) -> None:

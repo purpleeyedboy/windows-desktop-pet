@@ -1,77 +1,63 @@
-"""Adapter boundary required from PR5; this feature never owns shared activity state."""
+"""Narrow hunger adapters over the authoritative V2.1 foundation services."""
 from __future__ import annotations
-import importlib
-from dataclasses import dataclass
-from typing import Protocol
-from .hunger import HungerLevel, HungerStatePort
 
-class ActivityCoordinatorPort(Protocol):
-    def publish_health(self, health: HungerLevel, units: int) -> int: ...
-    def begin(self, activity: str, priority: str, animation_id: int,
-              state_version: int) -> object | None: ...
-    def is_current(self, activity: str, animation_id: int, state_version: int,
-                   token: object) -> bool: ...
-    def complete(self, activity: str, animation_id: int, state_version: int,
-                 token: object) -> bool: ...
-    def cancel(self, token: object, recovery_anchor: str) -> None: ...
-    def input_allowed(self, operation: str, health: HungerLevel) -> bool: ...
-    def status_text(self) -> str: ...
+from copy import deepcopy
+from typing import Any
+
+from .foundation.persistence import AtomicJsonStore
+from .hunger import HungerStatePort, default_hunger_state
 
 
-class UtcClockPort(Protocol):
-    def utc_seconds(self) -> int: ...
+class SharedHungerStatePort(HungerStatePort):
+    """Project hunger fields into the one shared state envelope/store.
 
+    The caller-owned ``shared_state`` dictionary is updated in place only after
+    ``AtomicJsonStore.save`` succeeds.  This also keeps the state later supplied
+    to ``ApplicationServices.close`` current, avoiding an old startup snapshot
+    overwriting a successful hunger transaction.
+    """
 
-class FoundationServicesPort(Protocol):
-    activity: ActivityCoordinatorPort
-    utc_clock: UtcClockPort
-    state_store: HungerStatePort
-    foundation_commit: str
+    def __init__(
+        self,
+        store: AtomicJsonStore,
+        shared_state: dict[str, Any],
+    ) -> None:
+        self.store = store
+        self.shared_state = shared_state
 
+    def load_hunger(self, now_utc: int) -> tuple[dict[str, object], str]:
+        if "HungerAnchorUnits" not in self.shared_state:
+            return default_hunger_state(now_utc), "first-launch"
+        state = {
+            "StateVersion": self.shared_state.get("HungerStateVersion", 2),
+            "HungerAnchorUnits": self.shared_state["HungerAnchorUnits"],
+            "HungerAnchorUtc": self.shared_state.get(
+                "HungerAnchorUtc",
+                self.shared_state.get("hunger_anchor_utc_seconds", now_utc),
+            ),
+            "HungerDecayRemainder": self.shared_state.get("HungerDecayRemainder", 0),
+            "FirstLaunchUtc": self.shared_state.get("FirstLaunchUtc", now_utc),
+            "LastFeedUtc": self.shared_state.get("LastFeedUtc"),
+            "AppliedOperationIds": list(
+                self.shared_state.get("recent_operation_ids", ())
+            ),
+        }
+        return state, "ok"
 
-@dataclass(frozen=True)
-class _FoundationView:
-    activity: object
-    utc_clock: object
-    state_store: object
-    foundation_commit: str
-
-def load_application_services() -> FoundationServicesPort:
-    """Load PR5's documented public factory; never construct parallel services."""
-    try:
-        module = importlib.import_module("desktop_pet.foundation.services")
-        application_type = getattr(module, "ApplicationServices")
-        factory = getattr(module, "create_application_services")
-        services = factory()
-    except (ImportError, AttributeError, TypeError) as error:
-        raise RuntimeError(
-            "V2.1-HUNGER requires PR5 foundation API: "
-            "desktop_pet.foundation.services.create_application_services()"
-        ) from error
-    if not isinstance(services, application_type):
-        raise RuntimeError("PR5 create_application_services returned the wrong type")
-    # Field names below are isolated in this one adapter so they can be matched
-    # exactly when the fetched PR5 source is available; feature modules never
-    # import foundation internals directly.
-    services = _FoundationView(
-        activity=services.activity_coordinator,
-        utc_clock=services.clock,
-        state_store=services.state_store,
-        foundation_commit=str(services.foundation_commit),
-    )
-    required = ("publish_health", "begin", "is_current", "complete", "cancel", "input_allowed", "status_text")
-    for name in required:
-        if not callable(getattr(services.activity, name, None)):
-            raise RuntimeError(f"PR5 ActivityCoordinator is missing {name}()")
-    if not callable(getattr(services.utc_clock, "utc_seconds", None)):
-        raise RuntimeError("PR5 foundation UTC clock is missing utc_seconds()")
-    if not callable(getattr(services.state_store, "load_hunger", None)) or not callable(
-        getattr(services.state_store, "commit_hunger", None)
-    ):
-        raise RuntimeError("PR5 StateStore hunger adapter is missing")
-    normalized_path = str(getattr(services.state_store, "path", "")).replace("\\", "/").lower()
-    if not normalized_path.endswith("/desktoppet/state.json"):
-        raise RuntimeError("PR5 StateStore must own %LOCALAPPDATA%/DesktopPet/state.json")
-    if getattr(services.state_store, "atomic_commits", False) is not True:
-        raise RuntimeError("PR5 StateStore must guarantee atomic commits")
-    return services
+    def commit_hunger(self, state: dict[str, object]) -> None:
+        staged = deepcopy(self.shared_state)
+        staged.update(
+            {
+                "HungerStateVersion": int(state["StateVersion"]),
+                "HungerAnchorUnits": int(state["HungerAnchorUnits"]),
+                "HungerAnchorUtc": int(state["HungerAnchorUtc"]),
+                "hunger_anchor_utc_seconds": int(state["HungerAnchorUtc"]),
+                "HungerDecayRemainder": int(state.get("HungerDecayRemainder", 0)),
+                "FirstLaunchUtc": int(state["FirstLaunchUtc"]),
+                "LastFeedUtc": state.get("LastFeedUtc"),
+                "recent_operation_ids": list(state.get("AppliedOperationIds", ())),
+            }
+        )
+        self.store.save(staged, durable=True)
+        self.shared_state.clear()
+        self.shared_state.update(staged)

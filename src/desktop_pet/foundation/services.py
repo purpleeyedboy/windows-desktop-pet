@@ -282,7 +282,7 @@ class ApplicationServices:
 def create_application_services(build_info: BuildInfo, state_root: Path | None = None) -> ApplicationServices:
     clock = SystemTimeSource()
     runtime = RuntimeContext(clock)
-    root = state_root or Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DesktopPetV21"
+    root = state_root or Path(os.environ.get("LOCALAPPDATA", Path.home())) / "DesktopPet"
     store = AtomicJsonStore(root / "state.json", schema="desktop-pet-v2.1", version=1, validator=valid_v21_state)
     logger = logging.getLogger("desktop_pet")
     log_path = root / "desktop-pet.log"
