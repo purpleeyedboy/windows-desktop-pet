@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "source_size": [
+    1024,
+    1536
+  ],
+  "sources": {
+    "color": {
+      "sha256": "ba65bc204a76af8f21fc1c1250eb98e9df69edd6553df8e8b17c5671da45ece5"
+    },
+    "mask": {
+      "sha256": "5b1d87426305fe457dcf6be2d5dae290db646b991119f18ca6b7687cd37468ff"
+    }
+  },
+  "poses": [
+    "half_open",
+    "wide_open",
+    "puffed_closed",
+    "wide_open_repeat",
+    "upper_lip_lick",
+    "corner_lick"
+  ],
+  "canonical": {
+    "canvas": [
+      672,
+      768
+    ],
+    "subject_height": 524,
+    "feet_y": 736,
+    "center_x": 336,
+    "original_offset": [
+      80,
+      0
+    ],
+    "original_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
+  },
+  "source_bundle": "feed-sources.base64.txt"
+}

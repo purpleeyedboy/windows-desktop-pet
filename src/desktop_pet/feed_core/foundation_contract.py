@@ -87,13 +87,22 @@ def foundation_feed_ready(services) -> bool:
         has_handler("FeedDrop", "V2.1-FEED-CORE")
     )
 
-def load_foundation_services():
-    """Load PR5's public API when that exact shared foundation is present."""
+def load_foundation_services(build_info):
+    """Create services through the public entry point published by codex-od26j1."""
     try:
-        from desktop_pet.foundation.api import get_services
+        from desktop_pet.foundation.services import create_application_services
     except ImportError:
         return None
-    return get_services()
+    return create_application_services(build_info)
+
+
+def load_runtime_context_type():
+    """Return the published runtime integration type, or fail closed when absent."""
+    try:
+        from desktop_pet.foundation.runtime import RuntimeContext
+    except ImportError:
+        return None
+    return RuntimeContext
 
 
 class FoundationFeedInputAdapter:

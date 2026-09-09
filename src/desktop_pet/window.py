@@ -16,6 +16,7 @@ from .animation import AnimationController
 from .bubble import BubbleWindow
 from .dialogue import DialogueChooser, load_phrase_pools
 from .eye_follow import CursorProvider
+from .feed_animation import FeedAnimationPlayer
 from .eye_runtime import (
     ActionFailure,
     Compositor,
@@ -239,6 +240,7 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        feed_frames: Sequence[Image.Image] | None = None,
     ) -> None:
         if legacy_mode:
             if (
@@ -274,6 +276,7 @@ class PetWindow:
             runtime_failure_reporter or self._show_runtime_failure
         )
         self._neutral_center_frame: object | None = None
+        self._latest_pose_frame: object = self._current_image
         self.eye_session: RuntimeEyeSession | None = None
         self._eye_interaction_boxes: tuple[tuple[int, int, int, int], ...] = ()
         self._eye_source_size: tuple[int, int] = (0, 0)
@@ -308,6 +311,17 @@ class PetWindow:
                 self._show_animation_frame,
                 self._animation_finished,
                 cancel=self._cancel_after,
+            )
+            self.feed_animation = (
+                FeedAnimationPlayer(
+                    feed_frames,
+                    self._schedule_animation,
+                    self._cancel_after,
+                    self._display_feed_frame,
+                    lambda: self._latest_pose_frame,
+                )
+                if feed_frames is not None
+                else None
             )
             self._topmost_var = tk.BooleanVar(root, value=True)
             self.menu = self._create_menu()
@@ -369,6 +383,11 @@ class PetWindow:
             menu.add_command(
                 label=label,
                 command=lambda value=mode: self.trigger_idle_tilt(value),
+            )
+        if self.feed_animation is not None:
+            menu.add_command(
+                label="进食动画调试（不回收文件）",
+                command=self.play_feed_success,
             )
         menu.add_separator()
         for label, height in SIZE_PRESETS.items():
@@ -751,6 +770,8 @@ class PetWindow:
     def _show_animation_frame(self, action: str, index: int) -> None:
         if self._closed or not self._rendering_available:
             raise RuntimeError("pet rendering is unavailable")
+        if self.feed_animation is not None and self.feed_animation.busy:
+            return
         self._active_animation_action = action
         if self._legacy_fallback or self.eye_session is None:
             image = self.frames[action][index]
@@ -790,6 +811,9 @@ class PetWindow:
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
+        self._latest_pose_frame = frame
+        if self.feed_animation is not None and self.feed_animation.busy:
+            return
         self._apply_image(frame, self._anchor())
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
@@ -799,6 +823,17 @@ class PetWindow:
             except Exception as error:
                 self._startup_presentation_error = error
                 raise
+
+    def _display_feed_frame(self, frame: object) -> None:
+        if not isinstance(frame, Image.Image):
+            raise TypeError("feed frame must be a Pillow image")
+        self._apply_image(frame, self._anchor())
+
+    def play_feed_success(self) -> bool:
+        """Play real FEED art; the shared foundation owns when this is called."""
+        if self._closed or not self._rendering_available or self.feed_animation is None:
+            return False
+        return self.feed_animation.play()
 
     def _present_phrase(self, phrase: str) -> None:
         if self._closed:
@@ -900,6 +935,9 @@ class PetWindow:
     def close(self) -> None:
         if self._closed:
             return
+        feed_animation = getattr(self, "feed_animation", None)
+        if feed_animation is not None:
+            feed_animation.interrupt()
         self._closed = True
         if self.eye_session is not None:
             self.eye_session.stop()

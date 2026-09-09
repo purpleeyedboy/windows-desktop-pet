@@ -27,6 +27,28 @@ def runtime_frame_root() -> Path:
     return asset_path("assets", "keyframes")
 
 
+def runtime_feed_frame_root() -> Path:
+    if getattr(sys, "_MEIPASS", None):
+        return asset_path("assets", "feed", "v1", "frames")
+    return Path(__file__).resolve().parents[2] / "assets/generated/work/feed/v1"
+
+
+def load_feed_frames(root: Path | None = None) -> tuple[Image.Image, ...]:
+    frame_root = root or runtime_feed_frame_root()
+    paths = sorted(frame_root.glob("*.png"))
+    if tuple(path.name for path in paths) != tuple(f"{i:02d}.png" for i in range(6)):
+        raise RuntimeError("feed animation must contain exactly 00.png through 05.png")
+    frames = []
+    for path in paths:
+        with Image.open(path) as image:
+            if image.mode != "RGBA" or image.size != (672, 768):
+                raise RuntimeError(f"{path.name} must be 672x768 RGBA")
+            if image.getchannel("A").getextrema() != (0, 255):
+                raise RuntimeError(f"{path.name} has invalid alpha")
+            frames.append(image.copy())
+    return tuple(frames)
+
+
 def neutral_eye_source_probe_root() -> Path:
     """Return the source-checkout-only neutral-eye authoring directory."""
     return (

@@ -67,3 +67,13 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 在现有 foundation adapter 上新增 FEED 业务 handler/ports：定点奖励计价、Prepared 持久化前置、确认后 FILE_ID_INFO 重验、元数据变化重新确认、可信凭据后 RecycleConfirmed、原子奖励与 Completed、缺证据 NeedsReview。
 - 新增非阻塞拥有窗 30 秒确认 adapter、Windows 句柄 FILE_ID_INFO 检查 adapter，以及严格组合 PostDeleteItem/PerformOperations/aborted/new-item 证据的凭据 assembler。
 - 尚缺实际 PR5 API 适配、PR6 HungerService、PR11 期待层、COM IFileOperationProgressSink vtable/消息泵接线和嘴/舌素材动画；构建继续 fail-closed，不发布候选。
+
+## FEED-ANIMATION-RECOVERY-20260909 状态
+
+- 本轮附件彩色源（1024×1536 RGB，SHA-256 `ba65bc204a76af8f21fc1c1250eb98e9df69edd6553df8e8b17c5671da45ece5`）与遮罩源（1024×1536 RGB，SHA-256 `5b1d87426305fe457dcf6be2d5dae290db646b991119f18ca6b7687cd37468ff`）现合并为唯一无损文本源 `assets/feed/v1/source/feed-sources.base64.txt`；每行不超过 120 字符，解码后先校验原 PNG SHA。未跟踪 PNG、逐帧输出、GIF 或联系表。
+- 构建工具按遮罩六个大连通主体而非机械 3×2 等格定位，隔离相邻主体，统一到 672×768 RGBA、猫高 524、脚底 y=736、中心 x=336；原 512×768 canonical 的 `(80,0)` 偏移及 SHA-256 `48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7` 写入精简 manifest。
+- 成功表现使用实际全幅猫帧：半张嘴、三次大口开合、眯眼舔上唇、眯眼舔嘴角，然后恢复最新头眼姿态；播放期间眼睛/头部刷新只更新恢复候选而不覆盖动作，中断亦恢复。未加入吞咽、几何嘴形或旧 jump 替代。
+- 事务触发边界未新建状态机或饥饿系统：改用公共入口 `desktop_pet.foundation.services.create_application_services(build_info)`，并要求 `desktop_pet.foundation.runtime.RuntimeContext`；共享 InputRouter/ActivityCoordinator/HungerService/StateStore、可信 IFileOperationProgressSink 回执和原子幂等奖励仍决定正式动画触发。菜单另有明确标注“不回收文件”的独立动画调试入口，它不提交 FeedDrop、不给奖励，也不伪造成功。
+- 本地对象库没有 `30393b441360518ac07137ce31852b171fb8a6cb`、`856171c` 或公共基础 `e178f371`；Git HTTPS 读取仍被代理 403 拒绝。当前检出直接缺少 `src/desktop_pet/foundation/services.py` 和 `src/desktop_pet/foundation/runtime.py`（以及它们在 `e178f371` 中的同包传递依赖），构建门禁保持 fail-closed；未再等待或引用不存在的 `foundation/api.py`。
+- 独立 Windows 候选名改为 `桌面宠物_文件进食动画恢复候选.exe`。Windows Actions 构建、归档内六帧核验、EXE SHA-256、真实 Windows 回收/COM 行为和用户桌面视觉验收均待执行；Linux 预览不等同 Windows 或用户验收。
+- 远端待提取实现基线为 `878b384`，本轮修复提交为 `c1b2733`。聚焦 Linux 自动检查为 71 通过、3 跳过；编译、业务/恢复脚本、确定性重建、base64 行宽、解码源素材 SHA、JSON 与 `git diff --check` 通过。黑/白/棋盘底联系表已从实际生成帧写入忽略目录并人工检查，未再见相邻主体碎片；最终 Windows 桌面视觉接受仍为待用户验收。
