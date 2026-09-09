@@ -179,10 +179,10 @@ def main() -> int:
     verify_unapproved_idle()
     assert (ROOT / 'src/desktop_pet/foundation/services.py').is_file(), 'groom entrypoint lacks the actual public shared-state services'
     import hashlib, json
-    manifest=json.loads((ROOT/'docs/groom-foundation-source.json').read_text())
+    manifest=json.loads((ROOT/'docs/groom-foundation-source.json').read_text(encoding='utf-8'))
     for name, expected in manifest['exact_files'].items():
         assert hashlib.sha256((ROOT/name).read_text(encoding='utf-8').encode('utf-8')).hexdigest()==expected, f'public foundation diverged: {name}'
-    entry=(ROOT/'src/desktop_pet/main.py').read_text()
+    entry=(ROOT/'src/desktop_pet/main.py').read_text(encoding='utf-8')
     assert entry.count('services = create_application_services(build_info)')==1
     assert 'services=services' in entry and 'persisted_state=state' in entry
     verify_runtime()
