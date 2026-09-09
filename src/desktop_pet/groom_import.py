@@ -84,6 +84,63 @@ def combine_delivered_sheets(color_path: Path, alpha_path: Path) -> Image.Image:
     return color
 
 
+def _largest_component(alpha: Image.Image) -> tuple[list[tuple[int, int]], tuple[int, int]]:
+    mask = alpha.convert("L").point(lambda value: 255 if value >= 128 else 0)
+    pixels = mask.load()
+    width, height = mask.size
+    seen = bytearray(width * height)
+    largest: list[tuple[int, int]] = []
+    for y in range(height):
+        for x in range(width):
+            offset = y * width + x
+            if seen[offset] or not pixels[x, y]:
+                continue
+            seen[offset] = 1
+            pending = [(x, y)]
+            component: list[tuple[int, int]] = []
+            while pending:
+                px, py = pending.pop()
+                component.append((px, py))
+                for nx, ny in ((px - 1, py), (px + 1, py), (px, py - 1), (px, py + 1)):
+                    if 0 <= nx < width and 0 <= ny < height:
+                        neighbor = ny * width + nx
+                        if not seen[neighbor] and pixels[nx, ny]:
+                            seen[neighbor] = 1
+                            pending.append((nx, ny))
+            if len(component) > len(largest):
+                largest = component
+    return largest, (width, height)
+
+
+def primary_subject_box(alpha: Image.Image) -> tuple[int, int, int, int] | None:
+    """Return the largest opaque connected component, excluding adjacent-cell debris."""
+    largest, (width, height) = _largest_component(alpha)
+    if not largest:
+        return None
+    left = max(0, min(x for x, _ in largest) - 2)
+    top = max(0, min(y for _, y in largest) - 2)
+    right = min(width, max(x for x, _ in largest) + 3)
+    bottom = min(height, max(y for _, y in largest) + 3)
+    return left, top, right, bottom
+
+
+def isolate_primary_subject(cell: Image.Image) -> Image.Image:
+    """Clear every neighboring sprite fragment outside the selected subject."""
+    largest, (width, height) = _largest_component(cell.getchannel("A"))
+    if not largest:
+        raise ValueError("approved grooming cell is empty")
+    core = Image.new("L", (width, height), 0)
+    core_pixels = core.load()
+    for x, y in largest:
+        core_pixels[x, y] = 255
+    keep = core.filter(ImageFilter.MaxFilter(5))
+    clean = cell.copy()
+    clean.putalpha(Image.composite(cell.getchannel("A"), Image.new("L", cell.size), keep))
+    box = primary_subject_box(clean.getchannel("A"))
+    assert box is not None
+    return clean.crop(box)
+
+
 def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Image, ...]:
     manifest_path = Path(manifest_path)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -119,10 +176,7 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
                 (column + 1) * cell_width,
                 (row + 1) * cell_height,
             ))
-            box = cell.getchannel("A").getbbox()
-            if box is None:
-                raise ValueError(f"approved grooming cell {index} is empty")
-            subject = cell.crop(box)
+            subject = isolate_primary_subject(cell)
             target_height = canonical_box[3] - canonical_box[1]
             scale = target_height / subject.height
             size = (max(1, round(subject.width * scale)), target_height)
@@ -136,5 +190,3 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
         frames.append(runtime)
         runtime.save(output_dir / f"{index:02d}.png", optimize=True, compress_level=9)
     return tuple(frames)
-
-

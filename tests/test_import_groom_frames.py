@@ -13,6 +13,7 @@ from tools.import_groom_frames import (
     RUNTIME_SIZE,
     build_alpha,
     import_groom_frames,
+    primary_subject_box,
 )
 
 
@@ -59,3 +60,12 @@ def test_import_is_byte_deterministic(tmp_path: Path) -> None:
     assert [p.read_bytes() for p in sorted(first.glob("*.png"))] == [
         p.read_bytes() for p in sorted(second.glob("*.png"))
     ]
+
+
+def test_each_action_uses_one_grounded_primary_subject_without_neighbor_feet(tmp_path: Path) -> None:
+    frames = import_groom_frames(ROOT / "assets/groom/v2.1/manifest.json", tmp_path)
+    for index, frame in enumerate(frames[1:11], 1):
+        box = primary_subject_box(frame.getchannel("A"))
+        assert box is not None
+        assert box[3] >= 733, f"frame {index:02d} primary subject is not grounded: {box}"
+        assert box[3] - box[1] >= 515, f"frame {index:02d} was shrunk by cell-edge debris: {box}"

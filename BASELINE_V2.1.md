@@ -37,3 +37,4 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 保留范围：canonical idle SHA 保持 `48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7`；未修改已认可头身眼素材、转头角度或 minimum-jerk。
 - 远端事实：当前仓库未配置 remote/remote refs，不能把本地提交或 `make_pr` 元数据记录视为已推送。
 - 待完成门：Windows Actions 构建、候选实际大小/SHA-256 与用户 Windows 实机视觉验收。Linux 容器不替代这些门；不合并。
+- Windows run `34304052388` 构建成功，实际 EXE SHA-256 为 `712bdfbbf38ab9adabe4899a414f66c5cdebdf5eaf1b28012ed6e8eaf1ab4be5ff`，但因 `04.png` 缩小及脚部碎片被视觉拒收；本地已按每格主体连通域修复，等待新 Windows artifact 复核。

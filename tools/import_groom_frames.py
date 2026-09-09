@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from desktop_pet.groom_import import (ART_SIZE, RUNTIME_OFFSET, RUNTIME_SIZE, build_alpha, combine_delivered_sheets, import_groom_frames)
+from desktop_pet.groom_import import (ART_SIZE, RUNTIME_OFFSET, RUNTIME_SIZE, build_alpha, combine_delivered_sheets, import_groom_frames, primary_subject_box)
 
 def main() -> int:
     import argparse
