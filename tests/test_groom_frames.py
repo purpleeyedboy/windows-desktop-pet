@@ -17,7 +17,7 @@ class Rng:
 
 def frames() -> tuple[Image.Image, ...]:
     return tuple(
-        Image.new("RGBA", (672, 768), (0 if index == 11 else index, 0, 0, 255))
+        Image.new("RGBA", (640, 768), (0 if index == 11 else index, 0, 0, 255))
         for index in range(12)
     )
 
@@ -64,7 +64,7 @@ def test_explicit_interaction_interrupts_and_restarts_true_idle() -> None:
 
 def test_rejects_noncanonical_or_wrong_canvas_frames() -> None:
     bad = list(frames())
-    bad[-1] = Image.new("RGBA", (672, 768), (99, 0, 0, 255))
+    bad[-1] = Image.new("RGBA", (640, 768), (99, 0, 0, 255))
     try:
         GroomFramePlayer(tuple(bad), rng=Rng())
     except ValueError as error:

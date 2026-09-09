@@ -11,7 +11,7 @@ FRAME_SECONDS = 0.075
 EXPLICIT_IDLE_SECONDS = 60.0
 WAIT_MIN_SECONDS = 90.0
 WAIT_MAX_SECONDS = 300.0
-RUNTIME_SIZE = (672, 768)
+RUNTIME_SIZE = (640, 768)
 
 
 class GroomRandom(Protocol):
@@ -28,7 +28,7 @@ class GroomFramePlayer:
             raise ValueError("groom animation requires exactly twelve frames")
         copied = tuple(frame.convert("RGBA") for frame in frames)
         if any(frame.size != RUNTIME_SIZE for frame in copied):
-            raise ValueError("groom frames must use the 672x768 runtime canvas")
+            raise ValueError("groom frames must use the 640x768 runtime canvas")
         if copied[0].tobytes() != copied[-1].tobytes():
             raise ValueError("groom first and last frames must be the same canonical idle")
         self._frames = copied

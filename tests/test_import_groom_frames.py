@@ -45,7 +45,15 @@ def test_approved_sheet_rebuilds_twelve_anchored_runtime_frames(tmp_path: Path) 
     assert len(frames) == 12
     assert all(frame.mode == "RGBA" and frame.size == RUNTIME_SIZE for frame in frames)
     assert ART_SIZE == (512, 768)
-    assert RUNTIME_OFFSET == (80, 0)
+    assert RUNTIME_OFFSET == (64, 0)
+    # Check the real following compositor so an internally consistent but
+    # wider animation cannot resize/clamp the pet window at screen edges.
+    from desktop_pet.assets import load_head_neck_compositor
+    from desktop_pet.head_neck_deformation import HeadPose
+    compositor = load_head_neck_compositor()
+    neutral = compositor.compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    assert frames[0].size == neutral.size
+    assert frames[0].tobytes() == neutral.tobytes()
     assert frames[0].tobytes() == frames[-1].tobytes()
     assert len({hashlib.sha256(frame.tobytes()).hexdigest() for frame in frames[1:-1]}) >= 7
     for index in range(12):

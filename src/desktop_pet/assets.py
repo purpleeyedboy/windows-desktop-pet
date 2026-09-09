@@ -148,8 +148,8 @@ def load_groom_frames() -> tuple[Image.Image, ...]:
         if tuple(path.name for path in paths) != expected:
             raise RuntimeError("packaged grooming action must contain exactly 12 ordered frames")
         frames = tuple(Image.open(path).convert("RGBA") for path in paths)
-        if any(frame.size != (672, 768) for frame in frames):
-            raise RuntimeError("packaged grooming frames must be 672x768 RGBA")
+        if any(frame.size != (640, 768) for frame in frames):
+            raise RuntimeError("packaged grooming frames must be 640x768 RGBA")
         if frames[0].tobytes() != frames[-1].tobytes():
             raise RuntimeError("packaged grooming endpoints must be canonical idle")
         return frames

@@ -17,8 +17,8 @@ GRID = (4, 3)
 # some ear tips and hindquarters cross a cell boundary by up to three pixels.
 CELL_BLEED = 8
 ART_SIZE = (512, 768)
-RUNTIME_SIZE = (672, 768)
-RUNTIME_OFFSET = (80, 0)
+RUNTIME_SIZE = (640, 768)
+RUNTIME_OFFSET = (64, 0)
 CANONICAL_SHA256 = "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
 
 
@@ -189,6 +189,13 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
     if sheet.size != SHEET_SIZE:
         raise ValueError("approved grooming source must be 1448x1086")
     canonical_image = Image.open(canonical).convert("RGBA")
+    # The approved runtime has neutral-eye layers that differ from the older
+    # flat canonical image. Restore the actual following renderer at endpoints.
+    from .assets import load_head_neck_compositor
+    from .head_neck_deformation import HeadPose
+    neutral = load_head_neck_compositor().compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    if neutral.size != RUNTIME_SIZE:
+        raise ValueError("groom canvas must match the actual following renderer")
     canonical_box = opaque_subject_box(canonical_image)
     subjects = tuple(extract_sheet_subject(sheet, index) for index in range(12))
     reference_box = opaque_subject_box(subjects[0])
@@ -214,6 +221,8 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
             art.alpha_composite(subject, (x, y))
         runtime = Image.new("RGBA", RUNTIME_SIZE)
         runtime.alpha_composite(art, RUNTIME_OFFSET)
+        if index in (0, 11):
+            runtime = neutral.copy()
         frames.append(runtime)
         runtime.save(output_dir / f"{index:02d}.png", optimize=True, compress_level=9)
     return tuple(frames)
