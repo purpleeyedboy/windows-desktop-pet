@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$CandidatePath = "dist-idle-lick/桌面宠物_舔手逐帧动画恢复.exe")
+param([string]$CandidatePath = "dist-idle-lick/桌面宠物_双侧舔手与中断恢复.exe")
 $ErrorActionPreference = "Stop"
 $candidate = (Resolve-Path -LiteralPath $CandidatePath).Path
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("groom-startup-" + [guid]::NewGuid().ToString("N"))
@@ -64,6 +64,7 @@ try {
     }
     # Isolate the application's per-user mutex as well as its filesystem state.
     $start.Environment["USERNAME"] = "GroomCI-" + [guid]::NewGuid().ToString("N")
+    $start.Environment["DESKTOP_PET_GROOM_SMOKE_CHECK"] = "1"
     $candidateProcess = [Diagnostics.Process]::Start($start)
     $ownedIds.Add($candidateProcess.Id) | Out-Null
     $timer = [Diagnostics.Stopwatch]::StartNew()
@@ -80,6 +81,16 @@ try {
     if (-not @($windows | Where-Object { $_ -eq 'TkTopLevel|桌面宠物 V2.1-LICK 调试候选' }).Count) {
         throw "No identified visible Tk candidate window in the launched process tree: $($windows -join ', ')"
     }
+    $marker = Join-Path $testRoot "Local/DesktopPet/groom-smoke-ready.json"
+    if (-not (Test-Path -LiteralPath $marker)) { throw "Candidate did not report actual bilateral grooming readiness" }
+    $ready = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    if (-not $ready.ready -or -not $ready.same_runtime) { throw "Grooming did not attach to the displayed shared runtime" }
+    if ($ready.sides.left.frame_count -ne 12 -or $ready.sides.right.frame_count -ne 12) { throw "Both actual loaded grooming clips must contain 12 frames" }
+    if ($ready.sides.left.rgba_sha256 -eq $ready.sides.right.rgba_sha256) { throw "Left and right grooming clips must contain different authored pixels" }
+    if (@($ready.debug_targets).Count -ne 2 -or 'left' -notin $ready.debug_targets -or 'right' -notin $ready.debug_targets) { throw "Both explicit grooming debug targets must be mounted" }
+    if ($ready.source_head_sha -notmatch '^[0-9a-f]{40}$') { throw "Missing actual source head identity" }
+    if ($env:SOURCE_HEAD_SHA -and $ready.source_head_sha -ne $env:SOURCE_HEAD_SHA) { throw "Grooming source identity differs from this workflow head" }
+    ($ready | ConvertTo-Json -Depth 5) | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
     "Isolated candidate process tree displayed its identified Tk window after seven seconds; pending user visual acceptance." |
         Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
 } finally {

@@ -1,0 +1,80 @@
+{
+  "schema": "desktop-pet-v2.1-approved-groom-sheet-v1",
+  "side": "cat-right-paw",
+  "source": "source/groom-right-approved.png.b64",
+  "delivered_color_sha256": "d0241556bdb3ab2c0def893b1a7c08f54972a4d1d49342ccd8c49ee201cb1e56",
+  "delivered_alpha_sha256": "a1b58e4e492739b024088e74a50dda47123fca0092abb72d327629cf41bfacaa",
+  "sheet_size": [
+    1180,
+    1333
+  ],
+  "grid": [
+    4,
+    3
+  ],
+  "frame_order": [
+    "default",
+    "raise",
+    "near-mouth",
+    "tongue-out",
+    "lick-1",
+    "lick-2",
+    "lick-3",
+    "tongue-in",
+    "withdraw",
+    "lower-1",
+    "lower-2",
+    "default"
+  ],
+  "art_canvas": [
+    512,
+    768
+  ],
+  "runtime_canvas": [
+    640,
+    768
+  ],
+  "runtime_offset": [
+    64,
+    0
+  ],
+  "canonical_idle_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+  "source_encoding": "base64-lines-max-120",
+  "decoded_png_sha256": "929b3889e128f2f5968b87d70afdb76a1bfd84057bf122d93910afeb906b5f37",
+  "visual_side": "screen-right orange forearm raised; screen-left white forepaw grounded; no whole-cat mirroring",
+  "decoded_rgba_sha256": "78b9ba6dc972e1bcbf6338e8177d721f7014dc0013b6a4d6283a5e4a94319849",
+  "alpha_recovery": "supplied silhouette, color-confirmed magenta gaps and local edge unmatting; no whole-mask erosion",
+  "composition": {
+    "mode": "right-local-limb-and-mouth-v1",
+    "neutral_rgba_sha256": "e02f052cb970d2ebed4946ad0f09038adbce4d41da3a730e09e56783054e5eb0",
+    "source_translation": [
+      -44,
+      0
+    ],
+    "underbelly": {
+      "source": "source/groom-right-underbelly.png.b64",
+      "decoded_png_sha256": "dbbf3382056f0cdc25832efcad1678d45b3a4c5bfacdf4c2d66e75e4ac698ed4",
+      "decoded_rgba_sha256": "454d8cb45a27becf8588bae549c2dad4d98eac2031e807e6dcbdd3c974bd0c68",
+      "generated_input_sha256": "58b4a5c48257c0c29639b58c0db3f935a85bbc81a42070f653ba7efcf46867fe",
+      "generated_input_size": [
+        1145,
+        1374
+      ],
+      "uniform_resize": [
+        640,
+        768
+      ],
+      "translation": [
+        0,
+        22
+      ],
+      "crop": [
+        232,
+        606,
+        423,
+        762
+      ]
+    },
+    "description": "Actual neutral head, ears, back and hindquarters remain fixed. Generated mouth and lifted orange forelimb replace the old limb. One generated inner-leg repair fills its revealed body; never mirror or stretch the whole cat."
+  }
+}

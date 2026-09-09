@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+import hashlib
+
+from typing import Mapping, Protocol, Sequence
 
 from PIL import Image
 
@@ -19,11 +21,13 @@ class GroomRandom(Protocol):
 
     def randint(self, low: int, high: int) -> int: ...
 
+    def choice(self, values: tuple[str, ...]) -> str: ...
+
 
 class GroomFramePlayer:
     """Select approved frames without owning a timer, listener, or event queue."""
 
-    def __init__(self, frames: Sequence[Image.Image], *, rng: GroomRandom) -> None:
+    def __init__(self, frames: Sequence[Image.Image], *, rng: GroomRandom, other_sides: Mapping[str, Sequence[Image.Image]] | None = None) -> None:
         if len(frames) != 12:
             raise ValueError("groom animation requires exactly twelve frames")
         copied = tuple(frame.convert("RGBA") for frame in frames)
@@ -31,6 +35,16 @@ class GroomFramePlayer:
             raise ValueError("groom frames must use the 640x768 runtime canvas")
         if copied[0].tobytes() != copied[-1].tobytes():
             raise ValueError("groom first and last frames must be the same canonical idle")
+        self._clips = {"left": copied}
+        for side, supplied in (other_sides or {}).items():
+            if side != "right" or len(supplied) != 12:
+                raise ValueError("groom extra clip must be twelve separately authored right frames")
+            alternate = tuple(frame.convert("RGBA") for frame in supplied)
+            if any(frame.size != RUNTIME_SIZE for frame in alternate):
+                raise ValueError("groom right frames must use the 640x768 runtime canvas")
+            if any(frame.tobytes() != copied[0].tobytes() for frame in (alternate[0],alternate[-1])):
+                raise ValueError("groom right endpoints must match the actual left neutral")
+            self._clips[side] = alternate
         self._frames = copied
         self._rng = rng
         self._active = False
@@ -43,15 +57,30 @@ class GroomFramePlayer:
     def active(self) -> bool:
         return self._active
 
+    @property
+    def available_sides(self) -> tuple[str, ...]:
+        return tuple(self._clips)
+
+    def clip_summaries(self) -> dict[str, dict[str, object]]:
+        summaries = {}
+        for side, frames in self._clips.items():
+            digest = hashlib.sha256()
+            for frame in frames:
+                digest.update(frame.tobytes())
+            summaries[side] = {"frame_count": len(frames), "canvas": list(RUNTIME_SIZE), "rgba_sha256": digest.hexdigest()}
+        return summaries
+
+    def choose_side(self) -> str:
+        sides = self.available_sides
+        side = sides[0] if len(sides) == 1 else self._rng.choice(sides)
+        if side not in self._clips:
+            raise ValueError("groom RNG selected an unavailable side")
+        return side
+
     def sample(self, now: float) -> Image.Image | None:
         current = float(now)
-        if self._last_interaction is None:
-            self._restart_idle(current)
         if not self._active:
-            if self._next_idle_at is None or current + 1e-9 < self._next_idle_at:
-                return None
-            count = self._validated_count()
-            self._begin(current, count)
+            return None
         index = int(max(0.0, current - self._started_at) / FRAME_SECONDS + 1e-9)
         if index >= len(self._sequence):
             self._active = False
@@ -59,9 +88,18 @@ class GroomFramePlayer:
             return None
         return self._frames[self._sequence[index]]
 
-    def trigger(self, now: float, *, repetitions: int) -> bool:
-        if self._active or not 3 <= repetitions <= 20:
+    def idle_due(self, now: float) -> bool:
+        if self._last_interaction is None:
+            self._restart_idle(float(now))
+        return not self._active and self._next_idle_at is not None and now + 1e-9 >= self._next_idle_at
+
+    def choose_repetitions(self) -> int:
+        return self._validated_count()
+
+    def trigger(self, now: float, *, repetitions: int, side: str = "left") -> bool:
+        if side not in self._clips or self._active or isinstance(repetitions, bool) or not isinstance(repetitions, int) or not 3 <= repetitions <= 20:
             return False
+        self._frames = self._clips[side]
         self._begin(float(now), repetitions)
         return True
 
