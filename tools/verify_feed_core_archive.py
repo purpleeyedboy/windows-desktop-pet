@@ -9,6 +9,8 @@ REQUIRED_MODULES = (
     "desktop_pet.feed_core.business",
     "desktop_pet.feed_core.progress_receipt",
     "desktop_pet.feed_core.confirmation",
+    "desktop_pet.feed_core.recovery",
+    "desktop_pet.feed_core.review",
     "desktop_pet.feed_core.windows_identity",
     "desktop_pet.feed_core.windows_recycle",
     "desktop_pet.feed_core.wiring",

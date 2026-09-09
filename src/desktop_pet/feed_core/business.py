@@ -80,6 +80,7 @@ class FeedStatePort(Protocol):
     def persist_cancelled(self, operation_id: str) -> None: ...
     def persist_recycle_confirmed(self, prepared: PreparedFeed, receipt: TrustedRecycleReceipt) -> None: ...
     def apply_reward_atomically(self, operation_id: str, units: int, utc_anchor: str) -> bool: ...
+    def persist_reward_applied(self, operation_id: str) -> None: ...
     def persist_completed(self, operation_id: str) -> None: ...
     def persist_needs_review(
         self, operation_id: str, reason: str, evidence: object | None = None
@@ -116,7 +117,7 @@ def quote_reward(size_bytes: int, current_units: int) -> RewardQuote:
 class FeedBusinessHandler:
     """Callback handler invoked by PR5's single serialized ActivityCoordinator."""
 
-    def __init__(self, identity, confirmation, recycler, state, activity, hunger, clock):
+    def __init__(self, identity, confirmation, recycler, state, activity, hunger, clock, recovery=None):
         self.identity = identity
         self.confirmation = confirmation
         self.recycler = recycler
@@ -124,10 +125,12 @@ class FeedBusinessHandler:
         self.activity = activity
         self.hunger = hunger
         self.clock = clock
+        self.recovery = recovery
         self._active: PreparedFeed | None = None
 
     def handle_drop(self, event) -> bool:
-        if self._active is not None or len(event.paths) != 1:
+        if (self._active is not None or len(event.paths) != 1 or
+                (self.recovery is not None and self.recovery.feed_blocked)):
             return False
         snapshot = self.identity.inspect(event.paths[0])
         quote = quote_reward(snapshot.size_bytes, self.hunger.value_units)
@@ -259,6 +262,7 @@ class FeedBusinessHandler:
             self.state.persist_needs_review(prepared.operation_id, "reward_atomic_commit_failed")
             self._active = None
             return
+        self.state.persist_reward_applied(prepared.operation_id)
         animation_started = self.activity.transition_feed_animation(
             prepared.activity_version, prepared.cancellation_token
         )

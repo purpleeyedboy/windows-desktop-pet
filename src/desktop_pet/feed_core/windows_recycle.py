@@ -6,6 +6,7 @@ validated ``PreparedFeed``.  There is no permanent-delete fallback.
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 import queue
 import threading
@@ -31,7 +32,7 @@ DWORD = ctypes.c_uint32
 BOOL = ctypes.c_int32
 PVOID = ctypes.c_void_p
 CALL = ctypes.WINFUNCTYPE if os.name == "nt" else ctypes.CFUNCTYPE
-S_OK, E_NOINTERFACE = 0, ctypes.c_long(0x80004002).value
+S_OK, E_NOINTERFACE = 0, ctypes.c_int32(0x80004002).value
 COINIT_APARTMENTTHREADED = 2
 CLSCTX_INPROC_SERVER = 1
 FOF_ALLOWUNDO = 0x0040
@@ -42,12 +43,14 @@ FOFX_RECYCLEONDELETE = 0x00080000
 FOFX_NOCOPYSECURITYATTRIBS = 0x00000800
 FOFX_EARLYFAILURE = 0x00100000
 FOFX_NOELEVATION = 0x10000000
+FOFX_ADDUNDORECORD = 0x20000000
 SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000
 
 CLSID_FILE_OPERATION = GUID.parse("3AD05575-8857-4850-9277-11B85BDB8E09")
 IID_IFILE_OPERATION = GUID.parse("947AAB5F-0A5C-4C13-B4D6-4BF7836FC9F8")
 IID_IFILE_OPERATION_PROGRESS_SINK = GUID.parse("04B0F1A7-9490-44BC-96E1-4296A31252E2")
 IID_ISHELL_ITEM = GUID.parse("43826D1E-E718-42EE-BC55-A1E261C37BFE")
+IID_IUNKNOWN = GUID.parse("00000000-0000-0000-C000-000000000046")
 
 
 def _method(pointer, index, restype, *argtypes):
@@ -87,6 +90,11 @@ class _ProgressSink:
         self.pointer = ctypes.cast(self._object, PVOID)
 
     def _query(self, _this, iid, out):
+        requested = ctypes.string_at(iid, ctypes.sizeof(GUID))
+        allowed = (bytes(IID_IUNKNOWN), bytes(IID_IFILE_OPERATION_PROGRESS_SINK))
+        if requested not in allowed:
+            out[0] = None
+            return E_NOINTERFACE
         out[0] = self.pointer
         self._addref(None)
         return S_OK
@@ -108,7 +116,9 @@ class _ProgressSink:
                          ctypes.POINTER(wintypes.LPWSTR))(
                              newly_created, SIGDN_DESKTOPABSOLUTEPARSING, ctypes.byref(value))
             if hr >= 0 and value.value:
-                self.new_item = value.value
+                # Preserve proof of a concrete psiNewlyCreated without putting a
+                # potentially sensitive parsing path into the transaction log.
+                self.new_item = hashlib.sha256(value.value.encode("utf-16le")).hexdigest()
                 ctypes.windll.ole32.CoTaskMemFree(value)
         return S_OK
 
@@ -138,7 +148,7 @@ def _perform(prepared) -> TrustedRecycleReceipt:
         if hr < 0: raise OSError("IFileOperation.Advise failed")
         flags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT |
                  FOFX_RECYCLEONDELETE | FOFX_NOCOPYSECURITYATTRIBS | FOFX_EARLYFAILURE |
-                 FOFX_NOELEVATION)
+                 FOFX_NOELEVATION | FOFX_ADDUNDORECORD)
         if _method(operation, 5, HRESULT, DWORD)(operation, flags) < 0:
             raise OSError("IFileOperation.SetOperationFlags failed")
         if _method(operation, 18, HRESULT, PVOID, PVOID)(operation, item, None) < 0:
@@ -168,14 +178,21 @@ class StaIFileOperationRecycler:
         self.timeout_seconds = timeout_seconds
         self._queue = queue.Queue(maxsize=1)
         self._closing = threading.Event()
+        self._busy = threading.Event()
+        self._submit_lock = threading.Lock()
         self._thread = threading.Thread(target=self._run, name="feed-ifileoperation-sta", daemon=True)
         self._thread.start()
 
     def submit(self, prepared, callback):
-        try:
-            self._queue.put_nowait((prepared, callback))
-        except queue.Full as error:
-            raise TimeoutError("recycle worker already has an operation") from error
+        with self._submit_lock:
+            if self._closing.is_set() or self._busy.is_set():
+                raise TimeoutError("recycle worker unavailable or operation already active")
+            self._busy.set()
+            try:
+                self._queue.put_nowait((prepared, callback))
+            except queue.Full as error:
+                self._busy.clear()
+                raise TimeoutError("recycle worker already has an operation") from error
 
     def close(self):
         self._closing.set()
@@ -185,7 +202,11 @@ class StaIFileOperationRecycler:
 
     def _run(self):
         while not self._closing.is_set():
-            job = self._queue.get()
+            try:
+                job = self._queue.get(timeout=0.05)
+            except queue.Empty:
+                self._pump_messages()
+                continue
             if job is None: return
             prepared, callback = job
             delivered = threading.Event()
@@ -207,5 +228,16 @@ class StaIFileOperationRecycler:
             timer.start()
             try: result = _perform(prepared)
             except Exception as error: result = error
-            finally: timer.cancel()
+            finally:
+                timer.cancel()
+                self._busy.clear()
             deliver(result)
+
+    @staticmethod
+    def _pump_messages():
+        """Dispatch pending window messages required by an STA apartment."""
+        msg = wintypes.MSG()
+        user32 = ctypes.windll.user32
+        while user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
