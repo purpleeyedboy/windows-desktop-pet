@@ -1119,10 +1119,14 @@ class PetWindow:
         if self._closed or not self._rendering_available:
             raise RuntimeError("pet rendering is unavailable")
         self._active_animation_action = action
+        source_anchor = self.animation.sequence(action).anchor
         if action not in ACTIONS or self._legacy_fallback or self.eye_session is None:
             image = self.frames[action][index]
         else:
             image = self.eye_session.logical_frame(action, index)
+            if index in (0, 5):
+                # Logical neutral frames use the wider eye compositor canvas.
+                source_anchor = (image.width // 2, image.height)
         if (
             index == 0
             and self._presentation_snapshot is not None
@@ -1132,7 +1136,7 @@ class PetWindow:
         self._apply_image(
             image,
             self._anchor(),
-            source_anchor=self.animation.sequence(action).anchor,
+            source_anchor=source_anchor,
         )
 
     def _animation_finished(self, action: str, playback_id: str) -> None:
