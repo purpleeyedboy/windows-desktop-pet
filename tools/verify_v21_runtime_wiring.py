@@ -28,12 +28,15 @@ def main() -> int:
     require("src/desktop_pet/main.py", (
         "create_application_services(build_info)", "services.load_state()",
         "services=services", "notify_existing_instance(build_info)",
+        "load_playback_sequences()", "animation_sequences=animation_sequences",
     ))
     require("src/desktop_pet/window.py", (
         'runtime.bind("input.action"', 'runtime.bind("input.context_menu"',
         'runtime.post(event_type, source="window"', "coordinator.request_activity",
         "coordinator.complete", "services.regions.update_pose",
         "services.dragdrop.register", "services.close", "finished_with_id=self._animation_finished",
+        "register_graphic_clip", "register_local_graphic_clip",
+        "pause_and_recenter", "resume_following", "_recover_body_channel",
     ))
     require("src/desktop_pet/foundation/services.py", (
         "OleInitialize", "RegisterDragDrop", "RevokeDragDrop",
@@ -46,6 +49,7 @@ def main() -> int:
         "temporary state read-back validation failed", "_preserve_corrupt",
     ))
     require("src/desktop_pet/animation.py", ("playback_id", "self._finished_with_id(action, outcome.playback_id)"))
+    require("src/desktop_pet/animation.py", ("class FrameStep", "class AnimationSequence", "duration_ms", "loop_start"))
     require("desktop_pet_v21_core.spec", (
         "desktop_pet_v21_core.manifest", "build_identity.json",
         "桌面宠物_公共基础接线与版本识别修复",

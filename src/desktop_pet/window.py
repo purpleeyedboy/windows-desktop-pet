@@ -8,11 +8,12 @@ from random import Random
 import time
 import tkinter as tk
 from tkinter import messagebox
-from typing import Callable, Protocol, Sequence
+from typing import Callable, Mapping, Protocol, Sequence
 
 from PIL import Image
 
 from .animation import AnimationController
+from .animation import AnimationSequence
 from .bubble import BubbleWindow
 from .dialogue import DialogueChooser, load_phrase_pools
 from .eye_follow import CursorProvider
@@ -244,6 +245,7 @@ class PetWindow:
         head_follow: bool = False,
         services: ApplicationServices | None = None,
         persisted_state: dict | None = None,
+        animation_sequences: Mapping[str, AnimationSequence] | None = None,
     ) -> None:
         if legacy_mode:
             if (
@@ -320,7 +322,8 @@ class PetWindow:
             self.renderer.set_topmost(True)
             self.bubble = BubbleWindow(root, renderer_factory=renderer_factory)
             self.animation = AnimationController(
-                {
+                animation_sequences
+                or {
                     action: len(action_frames)
                     for action, action_frames in frames.items()
                 },
@@ -417,6 +420,7 @@ class PetWindow:
     def _bind_runtime(self) -> None:
         runtime = self.services.runtime
         runtime.bind("input.action", self._consume_action)
+        runtime.bind("input.graphic-clip", self._consume_graphic_clip)
         runtime.bind("input.blink", self._consume_blink)
         runtime.bind("input.tilt", self._consume_tilt)
         runtime.bind("activity.timer-complete", self._consume_timed_activity_complete)
@@ -429,7 +433,7 @@ class PetWindow:
         runtime.bind("dragdrop.drop-rejected", self._consume_drag_end)
         self.services.animation.register(
             "body",
-            lambda action: self._trigger_action_direct(action),
+            self._play_registered_graphic,
             self._recover_body_channel,
         )
         config = self.services.build_info.feature_config
@@ -473,6 +477,100 @@ class PetWindow:
         if not accepted and self._activity_token is token:
             self.services.runtime.coordinator.cancel_and_recover(token)
             self._activity_token = None
+
+    def _consume_graphic_clip(self, event: RuntimeEvent) -> None:
+        name = str(event.payload["name"])
+        token = self.services.runtime.coordinator.request_activity(
+            Activity(event.payload["activity"]),
+            animation_id=name,
+        )
+        if token is None:
+            return
+        self._activity_token = token
+        if not self.services.animation.play("body", name, token):
+            self.services.runtime.coordinator.cancel_and_recover(token)
+            self._activity_token = None
+
+    def _play_registered_graphic(self, action: str | None) -> bool:
+        if action is None or action in ACTIONS:
+            return self._trigger_action_direct(action)
+        if self.eye_session is None or self._legacy_fallback:
+            return self._play_action(action)
+        result = self.eye_session.pause_and_recenter(lambda: self._play_action(action))
+        return result is SessionResult.ACCEPTED
+
+    def register_graphic_clip(
+        self,
+        name: str,
+        frames: Sequence[Image.Image],
+        sequence: AnimationSequence,
+        *,
+        _restored_local: bool = False,
+    ) -> None:
+        """Register validated real RGBA frames; no runtime geometry substitutes."""
+        from .assets import validate_runtime_graphic_frame
+
+        graphic_frames = tuple(frames)
+        if sequence.layer_mode == "local" and not _restored_local:
+            raise ValueError("local clips must provide per-frame restoration layers")
+        if not graphic_frames or any(frame.mode != "RGBA" for frame in graphic_frames):
+            raise ValueError("graphic clip frames must be RGBA")
+        if any(frame.size != graphic_frames[0].size for frame in graphic_frames):
+            raise ValueError("graphic clip frames must share one canvas")
+        if max(step.frame_index for step in sequence.steps) >= len(graphic_frames):
+            raise ValueError("graphic sequence references a missing frame")
+        if not (0 <= sequence.anchor[0] <= graphic_frames[0].width and 0 <= sequence.anchor[1] <= graphic_frames[0].height):
+            raise ValueError("graphic anchor is outside the canonical canvas")
+        expected_canvas = (
+            self._neutral_center_frame.size
+            if isinstance(self._neutral_center_frame, Image.Image)
+            else graphic_frames[0].size
+        )
+        for frame in graphic_frames:
+            validate_runtime_graphic_frame(frame, expected_canvas)
+        self.frames[name] = graphic_frames
+        self.animation.register_sequence(name, sequence)
+
+    def request_graphic_clip(self, name: str, activity: Activity) -> None:
+        if name not in self.frames:
+            raise ValueError("graphic clip is not registered")
+        self._post_and_drain("input.graphic-clip", name=name, activity=activity.value)
+
+    def register_local_graphic_clip(
+        self,
+        name: str,
+        layers: Sequence[Image.Image],
+        restorations: Sequence[Image.Image],
+        offsets: Sequence[tuple[int, int]],
+        sequence: AnimationSequence,
+    ) -> None:
+        """Compose local art over neutral only after restoring vacated body pixels."""
+        from .assets import compose_local_graphic_frame
+
+        if not (len(layers) == len(restorations) == len(offsets)):
+            raise ValueError("local clip layers, restorations and offsets must align")
+        if sequence.layer_mode != "local":
+            raise ValueError("local graphic clip requires local layer mode")
+        base = self._neutral_center_frame
+        if not isinstance(base, Image.Image):
+            raise RuntimeError("neutral graphic base is unavailable")
+        frames = tuple(
+            compose_local_graphic_frame(
+                base,
+                layer,
+                offset=offset,
+                restoration=restoration,
+            )
+            for layer, restoration, offset in zip(
+                layers, restorations, offsets, strict=True
+            )
+        )
+        self.register_graphic_clip(
+            name,
+            frames,
+            sequence,
+            _restored_local=True,
+        )
 
     def _consume_move(self, event: RuntimeEvent) -> None:
         self._move_to(int(event.payload["x"]), int(event.payload["y"]))
@@ -650,6 +748,7 @@ class PetWindow:
         anchor: tuple[int, int] | None = None,
         *,
         requested_height: int | None = None,
+        source_anchor: tuple[int, int] | None = None,
     ) -> None:
         if self._closed or not self._rendering_available:
             raise RuntimeError("pet rendering is unavailable")
@@ -662,8 +761,10 @@ class PetWindow:
         if anchor is None:
             x, y = self._window_rect.x, self._window_rect.y
         else:
-            x = anchor[0] - width // 2
-            y = anchor[1] - target_height
+            if source_anchor is None:
+                source_anchor = (image.width // 2, image.height)
+            x = anchor[0] - round(source_anchor[0] * width / image.width)
+            y = anchor[1] - round(source_anchor[1] * target_height / image.height)
         proposed = Rect(x, y, width, target_height)
         area = self.work_area_for(proposed)
         max_height_by_width = max(
@@ -680,8 +781,8 @@ class PetWindow:
         if fitted_height != target_height:
             width = max(1, round(image.width * fitted_height / image.height))
             if anchor is not None:
-                x = anchor[0] - width // 2
-                y = anchor[1] - fitted_height
+                x = anchor[0] - round(source_anchor[0] * width / image.width)
+                y = anchor[1] - round(source_anchor[1] * fitted_height / image.height)
             proposed = Rect(x, y, width, fitted_height)
         resized_image = image.convert("RGBA").resize(
             (width, fitted_height), Image.Resampling.LANCZOS
@@ -1002,7 +1103,7 @@ class PetWindow:
         if self._closed or not self._rendering_available:
             raise RuntimeError("pet rendering is unavailable")
         self._active_animation_action = action
-        if self._legacy_fallback or self.eye_session is None:
+        if action not in ACTIONS or self._legacy_fallback or self.eye_session is None:
             image = self.frames[action][index]
         else:
             image = self.eye_session.logical_frame(action, index)
@@ -1012,7 +1113,11 @@ class PetWindow:
             and image is self._current_image
         ):
             return
-        self._apply_image(image, self._anchor())
+        self._apply_image(
+            image,
+            self._anchor(),
+            source_anchor=self.animation.sequence(action).anchor,
+        )
 
     def _animation_finished(self, action: str, playback_id: str) -> None:
         self._active_animation_action = None
@@ -1023,7 +1128,10 @@ class PetWindow:
                 self._activity_token = None
         if self._closed or self._legacy_fallback or self.eye_session is None:
             return
-        self.eye_session.animation_finished(action)
+        if action in ACTIONS:
+            self.eye_session.animation_finished(action)
+        else:
+            self.eye_session.resume_following()
 
     def _play_action(self, action: str) -> bool:
         if self.services is not None:

@@ -57,3 +57,10 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 保存前先验证候选状态；只把验证通过的旧正式状态原子写入备份。损坏正式状态不会覆盖有效备份，损坏输入保留到 `recovery/`。
 - `SharedState.commit/update` 是唯一共享提交入口：先完成持久化，成功后才发布新内存快照；兼容的 `ApplicationServices.close(state=None)` 忽略旧调用者副本并保存当前最新快照。
 - 旧 `%LOCALAPPDATA%/DesktopPetV21` 文件仅在新目标缺失时复制迁移，不删除、不改写、不覆盖旧文件；普通日志采用 2 MiB、5 备份轮转并脱敏完整路径。
+
+## FRAME-CONTRACT-20260907 逐帧图形播放器增量
+
+- 撤销“不得新增动作素材”的错误门禁；默认认可素材仍按哈希锁定，但六个功能分支可新增真实 RGBA 全帧或带逐帧补洞层的局部帧。
+- 真实 `AnimationController → PetWindow` 播放链现读取 `AnimationSequence/FrameStep`：帧序、每帧毫秒、有限循环段、源画布锚点和 full/local 模式均显式声明；取消、超时或中断继续通过活动令牌恢复认可默认帧。
+- `assets/keyframes/playback.json` 已把现有 jump/squash/shake 图形帧接入新时序接口；它只证明公共播放器真实可达，绝不冒充舔手、耳朵、前肢、饥饿嘴部、进食或期待动作。
+- 公共播放器证据位于 `qa/v21-frame-player/`：18 帧联系表、连续 GIF 和逐帧 SHA/时长报告。六项新功能的正式动作帧当前仍缺失，必须由对应 PR 提供并经用户验收后才可报告动画完成。

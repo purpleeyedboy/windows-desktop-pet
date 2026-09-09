@@ -11,12 +11,29 @@ creates one `ApplicationServices` with `create_application_services()`, loads th
 V2.1 state envelope, and injects the services into `PetWindow`. The Tk thread is
 the sole event consumer and `ActivityCoordinator` is the sole state writer.
 
+The factory's real import path is
+`desktop_pet.foundation.services.create_application_services`. There is no
+`desktop_pet.foundation.api` module and no `get_services()` global accessor.
+Features receive the one application-owned `ApplicationServices` instance by
+constructor injection from `main()` through `PetWindow`; they must not create a
+second service container or hide one behind a process-global singleton.
+
 ```python
+from desktop_pet.foundation.config import BuildInfo
+from desktop_pet.foundation.services import create_application_services
+
 services = create_application_services(BuildInfo.load_embedded())
 state = services.load_state()
 window = PetWindow(root, frames, services=services, persisted_state=state, ...)
-services.runtime.post("feature.request", source="hunger", operation_id=operation_id)
+
+# A feature adapter is constructed with this same instance.
+feed = FeedAdapter(services=services)
+services.runtime.bind("feed.request", feed.on_request)
+services.runtime.post("feed.request", source="window", operation_id=operation_id)
 ```
+
+`FeedAdapter` above is an integration-shape example, not a class supplied by the
+foundation. The FEED branch owns that adapter and its UI/business implementation.
 
 ## Events and state
 
@@ -64,6 +81,55 @@ Head/eye following remains an independent existing channel. `DRAG_PREVIEW` keeps
 eye following active while hiding tears. `Health.CRITICAL` denies body/groom and
 normal-hunger activity but does not deny feed, menu, shutdown, or debug requests.
 
+### Real graphic frame contract (2026-09-07 increment)
+
+All character actions supplied by feature branches are ordered RGBA graphic
+frames—not runtime resize/squash, mesh motion, drawn geometry, or aliases to an
+old action. `30 FPS` is only a refresh target and does not prescribe the asset
+count. Timing and finite loop sections are explicit:
+
+```python
+sequence = AnimationSequence(
+    steps=(FrameStep(0, 66), FrameStep(1, 100), FrameStep(2, 133)),
+    anchor=(256, 768),
+    loop_start=1,
+    loop_end=2,
+    loop_count=1,
+    layer_mode="full",
+)
+window.register_graphic_clip("feature.action", frames, sequence)
+window.request_graphic_clip("feature.action", Activity.BODY_ACTION)
+```
+
+`AnimationController` is the actual window player and schedules every displayed
+frame with that frame's `duration_ms`. Its finite timeline expands only the
+declared loop segment. The existing runtime activity token/playback ID guards,
+cancel callback, and `_recover_body_channel()` return to the cached accepted
+neutral frame and prevent accumulated transforms or stale completion.
+
+Full frames must share the accepted neutral canvas, be RGBA, use one source-space
+anchor, and contain zero RGB under fully transparent Alpha. Local feature art must
+include one restoration/backfill layer per frame and uses:
+
+```python
+window.register_local_graphic_clip(
+    name, layers, restorations, offsets,
+    AnimationSequence(..., layer_mode="local"),
+)
+```
+
+The restoration is composited before the moved part so a vacated paw, ear, or
+mouth cannot leave a duplicate/transparent hole. The result is a full canonical
+frame before entering the same player. Feature branches must package their frame
+manifest and actual lossless frames (or a deterministically lossless text source)
+and provide frame contact sheet plus continuous preview.
+
+The current base executable wires the existing `jump`, `squash`, and `shake`
+graphic files through `assets/keyframes/playback.json` as a real invocation
+example. It does **not** claim that hand-licking, ear, forelimb, hunger-mouth,
+feeding, or anticipation art exists; those six frame sets remain required from
+their feature branches. The approved neutral/head/body/eye files remain immutable.
+
 ## Regions and coordinates
 
 ```python
@@ -109,6 +175,45 @@ without changing or overwriting the legacy source. `SharedState` persists a
 candidate before publishing it as the in-memory snapshot; `close()` ignores its
 legacy state argument so a stale startup copy cannot overwrite a committed reward.
 Normal logs rotate at 2 MiB with five backups and redact complete paths.
+
+## FEED integration responsibilities
+
+The common foundation already supplies these concrete, shared mechanisms:
+
+- the `FEED_CONFIRM`, `FEED_ANIMATION`, `FEED_PROCESSING`, and
+  `TRANSACTION_REVIEW` activities and their priority/cancellation rules;
+- one serial runtime event queue and one application-owned services instance;
+- validated persist-before-publish state commits, including
+  `pending_transaction` and `recent_operation_ids` fields;
+- a durable, path-sanitizing transaction journal with non-terminal recovery;
+- an OLE diagnostic drop target and a dedicated STA file-worker queue; and
+- startup transition to `TRANSACTION_REVIEW` when journal recovery leaves a
+  pending transaction.
+
+The common foundation deliberately does **not** claim a `feed_activity` boolean
+or a permanently true capability gate. Activity permission must be requested
+from `services.runtime.coordinator` at the moment of transition and may be denied
+or preempted. There is likewise no fake recycle/reward service in this package.
+
+The FEED branch remains responsible for all of the following:
+
+1. Interpret OLE/file candidates without logging a complete user path, present
+   confirmation, and post its inputs/results to the shared runtime queue.
+2. Implement and verify trusted Recycle Bin handling under ordinary-user
+   permissions. The foundation drop target currently rejects drops and does not
+   move, delete, or recycle a user file.
+3. Define transaction phases and append/flush the recovery record before each
+   irreversible boundary; then durably commit `pending_transaction` before file
+   work and durably clear it only after review/completion.
+4. Make rewards idempotent with stable `OperationId` values and the shared
+   `recent_operation_ids` ledger. A repeated operation must not grant a second
+   reward, including after restart or transaction review.
+5. Supply and register the real feeding frame assets and interaction UI. The
+   foundation only supplies the coordinated graphic-frame player contract.
+
+Until those FEED-owned items are implemented and exercised on Windows, the
+presence of the foundation activities, journal, or worker is not evidence that
+feeding, trusted recycling, or idempotent rewards are complete.
 
 ## OLE, workers, and debugging
 
