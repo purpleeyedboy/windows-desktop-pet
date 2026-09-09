@@ -12,6 +12,10 @@
 - Tears: two deterministic RGBA drop layers anchored below current-pose eye boxes.
 - Layers are recreated from the current approved compositor frame on every presentation frame; no accumulated transform or source-byte mutation occurs.
 
+These program-drawn layers remain a functional fallback, not accepted final
+art.  The replaceable layer/anchor contract is documented in
+`docs/hunger-local-art-contract.md`; no new binary asset is included here.
+
 ## Call chain
 
 `run_desktop_pet.py` → `desktop_pet.main.main` → PR5 `create_application_services` → shared UTC/StateStore/ActivityCoordinator → `HungerService.snapshot` → `HungerRuntime._tick` → coordinator token/version validation → `PetWindow.present_hunger` → `compose_hunger_effect` → `LayeredWindowRenderer.render`.

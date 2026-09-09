@@ -11,3 +11,4 @@
 - Windows workflow 不运行 pytest/旧自动测试；云端证据仅限语法、导入、临时状态演练和临时预览，不冒充 Windows 验收。
 - 2026-09-06 本容器执行 `git fetch https://github.com/purpleeyedboy/windows-desktop-pet.git codex-od26j1` 得到 `CONNECT tunnel failed, response 403`，浏览 raw/GitHub 入口亦返回 401；本地对象库不存在 `1a02fe9680f28dda07add8b96c78445e0b3c0f59`。因此不得声称该 SHA 或精确 API 已接入。
 - 嘴层审查：旧版确实是单色几何椭圆，不能作为已验收动作。本轮改为窄纵向开口、羽化 Alpha、内部纵向光影、独立舌层与高光，并按当前头姿态逐帧重建；它仍是程序局部层，最终观感明确等待用户 Windows 实机验收，不宣称已获视觉接受。
+- 精度：业务重锚点同时保存 `HungerDecayRemainder`，因此反复正常关闭不会因整数除法截断而延长 120 分钟满值到零的周期。

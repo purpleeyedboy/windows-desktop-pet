@@ -90,6 +90,10 @@ def default_hunger_state(now_utc: int) -> dict[str, object]:
         "StateVersion": 2,
         "HungerAnchorUnits": 100_000,
         "HungerAnchorUtc": now,
+        # Numerator remainder for exact 100000 / 7200 decay.  Keeping this in
+        # the same atomic record means repeated shutdown checkpoints cannot
+        # make a full-to-empty interval longer through integer truncation.
+        "HungerDecayRemainder": 0,
         "FirstLaunchUtc": now,
         "LastFeedUtc": None,
         "AppliedOperationIds": [],
@@ -123,6 +127,10 @@ class HungerService:
         self._state["HungerAnchorUnits"] = max(0, min(100_000, units))
         self._state["HungerAnchorUtc"] = max(0, anchor)
         self._state["FirstLaunchUtc"] = max(0, first)
+        remainder = int(self._state.get("HungerDecayRemainder", 0))
+        self._state["HungerDecayRemainder"] = max(
+            0, min(self.config.empty_after_seconds - 1, remainder)
+        )
         operations = self._state.get("AppliedOperationIds", [])
         if not isinstance(operations, list) or not all(isinstance(v, str) for v in operations):
             raise ValueError("AppliedOperationIds must be strings")
@@ -143,7 +151,11 @@ class HungerService:
         anchor_utc = int(self._state["HungerAnchorUtc"])
         anchor_units = int(self._state["HungerAnchorUnits"])
         elapsed = max(0, now - anchor_utc)  # rollback consumes zero and never rewrites anchor
-        consumed = min(anchor_units, elapsed * self.config.max_units // self.config.empty_after_seconds)
+        numerator = (
+            elapsed * self.config.max_units
+            + int(self._state.get("HungerDecayRemainder", 0))
+        )
+        consumed = min(anchor_units, numerator // self.config.empty_after_seconds)
         units = max(0, anchor_units - consumed)
         return HungerSnapshot(
             units, self.level_for(units), anchor_units, anchor_utc,
@@ -156,6 +168,7 @@ class HungerService:
         now = self.utc_clock() if now_utc is None else max(0, int(now_utc))
         self._state["HungerAnchorUnits"] = max(0, min(100_000, int(units)))
         self._state["HungerAnchorUtc"] = now
+        self._state["HungerDecayRemainder"] = 0
         self.store.commit_hunger(self._state)
         return self.snapshot(now)
 
@@ -170,6 +183,7 @@ class HungerService:
         current = self.snapshot(now)
         self._state["HungerAnchorUnits"] = min(100_000, current.units + int(units))
         self._state["HungerAnchorUtc"] = now
+        self._state["HungerDecayRemainder"] = 0
         self._state["LastFeedUtc"] = now
         applied.append(operation)
         self._state["AppliedOperationIds"] = applied[-self.config.max_operation_ids:]
@@ -181,6 +195,14 @@ class HungerService:
         now = self.utc_clock()
         # A shutdown is a necessary business checkpoint; rollback never writes an older anchor.
         if now >= current.anchor_utc:
+            elapsed = now - current.anchor_utc
+            numerator = (
+                elapsed * self.config.max_units
+                + int(self._state.get("HungerDecayRemainder", 0))
+            )
             self._state["HungerAnchorUnits"] = current.units
             self._state["HungerAnchorUtc"] = now
+            self._state["HungerDecayRemainder"] = (
+                0 if current.units == 0 else numerator % self.config.empty_after_seconds
+            )
             self.store.commit_hunger(self._state)
