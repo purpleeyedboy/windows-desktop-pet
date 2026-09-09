@@ -53,9 +53,9 @@
       "sha256": "7d13ef5d20a735c165af87a8027615f0c45334354a783144019d8ae5d6901e48"
     },
     "src/desktop_pet/window.py": {
-      "source_commit": "6af84461332787ee6eb16ffe945a56083bbd1d89",
-      "git_blob": "60b3660fc62a028ef830510652947885f0e5920e",
-      "sha256": "3301f51256cf9fe1a2d48b6fd598f317ceae0032eb4536dc6e866c276c0b9925"
+      "source_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf",
+      "git_blob": "655bdb282196e9e23a96c3ac11a30c53d0ed4b53",
+      "sha256": "2329f77fecb4701f785ed321340b98ac36b8e0ad5151dbb882477422c138ef67"
     },
     "src/desktop_pet/animation.py": {
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
@@ -77,5 +77,6 @@
       "git_blob": "515f8b51db3132913144c2b65c622678d25378c0",
       "sha256": "8bef5a8d36a6ae561387d2ea3befc654bc6ac8c43eace05500f836850b9f5e0c"
     }
-  }
+  },
+  "logical_center_anchor_fix_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf"
 }

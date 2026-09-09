@@ -17,7 +17,61 @@ from desktop_pet.assets import compose_local_graphic_frame, load_frames, load_pl
 from desktop_pet.foundation.animation import AnimationChannels
 from desktop_pet.foundation.runtime import Activity, RuntimeContext
 from desktop_pet.foundation.sources import FixedTimeSource
+from desktop_pet.eye_runtime import RuntimeEyeSession
+from desktop_pet.model import ACTIONS
 from desktop_pet.window import PetWindow
+
+
+def verify_logical_frame_anchors() -> None:
+    """Recenter frames use their own canvas; authored clip anchors stay intact."""
+    window = PetWindow.__new__(PetWindow)
+    window._closed = False
+    window._rendering_available = True
+    window._legacy_fallback = False
+    window._presentation_snapshot = None
+    center = Image.new("RGBA", (640, 768))
+    physical = Image.new("RGBA", (512, 768))
+    window._current_image = physical
+    window.frames = {action: (physical,) * 6 for action in ACTIONS}
+    window.frames["feature.custom"] = (center,) * 6
+    session = RuntimeEyeSession.__new__(RuntimeEyeSession)
+    session._state = "playing"
+    session._pending_action = None
+    session._center_frame = center
+    session._physical_frames = window.frames
+    window.eye_session = session
+    window._anchor = lambda: (400, 800)
+    sequence_anchors = {action: (256, 768) for action in ACTIONS}
+    sequence_anchors["feature.custom"] = (137, 701)
+    window.animation = SimpleNamespace(
+        sequence=lambda action: SimpleNamespace(anchor=sequence_anchors[action])
+    )
+    shown = []
+    window._apply_image = lambda image, _anchor, **kwargs: shown.append(
+        (image, kwargs["source_anchor"])
+    )
+    for action in ACTIONS:
+        session._active_action = action
+        shown.clear()
+        for index in (0, 1, 5):
+            window._show_animation_frame(action, index)
+        if shown != [(center, (320, 768)), (physical, (256, 768)), (center, (320, 768))]:
+            raise RuntimeError(f"{action} logical neutral frame used a physical-frame anchor")
+
+    for index in (0, 1, 5):
+        window._show_animation_frame("feature.custom", index)
+        if shown[-1] != (center, (137, 701)):
+            raise RuntimeError("shared graphic clip lost its authored anchor")
+
+    # Fallback frames remain authored physical frames, even at indices 0 and 5.
+    sequence_anchors["jump"] = (211, 739)
+    for legacy, eye_session in ((True, session), (False, None)):
+        window._legacy_fallback = legacy
+        window.eye_session = eye_session
+        for index in (0, 1, 5):
+            window._show_animation_frame("jump", index)
+            if shown[-1] != (physical, (211, 739)):
+                raise RuntimeError("fallback physical frame lost its authored anchor")
 
 
 def verify_feature_activity_playback() -> None:
@@ -133,6 +187,7 @@ def verify_feature_activity_playback() -> None:
 
 
 def main() -> int:
+    verify_logical_frame_anchors()
     verify_feature_activity_playback()
     frame_root = ROOT / "assets" / "keyframes"
     frames = load_frames(frame_root)
