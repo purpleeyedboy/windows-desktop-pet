@@ -29,6 +29,11 @@ class HungerWindow(PetWindow):
         self._critical_art = self._critical_frames[0]
         if self.services.build_info.feature_config.debug_menu_enabled:
             debug = self.services.debug
+            # The foundation has no unregister API; remove only its stale,
+            # disabled hunger placeholder after this feature is attached.
+            placeholder = debug._commands.get("饥饿（未接入）")
+            if placeholder is not None and not placeholder[1]:
+                debug._commands.pop("饥饿（未接入）")
             for label, units in (
                 ("饥饿值 100%", 100_000), ("饥饿值 20%", 20_000),
                 ("饥饿值 19.9%", 19_900), ("饥饿值 10%", 10_000),

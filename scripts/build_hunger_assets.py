@@ -9,8 +9,9 @@ import io
 import json
 from pathlib import Path
 import shutil
+import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops, ImageFilter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,64 @@ CANONICAL_SHA256 = "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2
 CANVAS = (512, 768)
 RUNTIME_CANVAS = (640, 768)
 RUNTIME_OFFSET = (64, 0)
+FIXED_BASE_RGBA_SHA256 = "e02f052cb970d2ebed4946ad0f09038adbce4d41da3a730e09e56783054e5eb0"
+MUTABLE_RUNTIME_REGIONS = ((138, 386, 224, 442), (128, 355, 166, 424), (211, 352, 254, 424))
+FACE_LANDMARKS = {
+    "hungry_open": ((202, 372), (175, 339), (261, 339)),
+    "severe_tears": ((201, 369), (175, 338), (261, 339)),
+    "critical_open": ((202, 363), (172, 330), (261, 333)),
+    "critical_closed": ((202, 371), (174, 338), (262, 341)),
+}
+
+
+def _fixed_runtime_base() -> Image.Image:
+    sys.path.insert(0, str(ROOT / "src"))
+    from desktop_pet.assets import load_head_neck_compositor
+    from desktop_pet.head_neck_deformation import HeadPose
+    base = load_head_neck_compositor().compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    if base.size != RUNTIME_CANVAS or _sha(base.tobytes()) != FIXED_BASE_RGBA_SHA256:
+        raise ValueError("actual accepted runtime neutral does not match the fixed composition base")
+    return base
+
+
+def _compose_local_expression(base: Image.Image, authored: Image.Image, name: str) -> Image.Image:
+    """Use only generated mouth/tear pixels, keeping the complete base alpha."""
+    source = Image.new("RGBA", RUNTIME_CANVAS, (0, 0, 0, 0))
+    source.alpha_composite(authored, RUNTIME_OFFSET)
+    result = base.copy()
+    solid_base = base.getchannel("A").point(lambda alpha: 255 if alpha == 255 else 0)
+
+    def apply_patch(source_point, target_point, box, y_scale=1.0):
+        transformed = source.transform(
+            RUNTIME_CANVAS, Image.Transform.AFFINE,
+            (1, 0, source_point[0] - target_point[0],
+             0, 1 / y_scale, source_point[1] - target_point[1] / y_scale),
+            Image.Resampling.BICUBIC,
+        )
+        mask = Image.new("L", RUNTIME_CANVAS, 0)
+        ImageDraw.Draw(mask).ellipse(box, fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(1.5))
+        mask = ImageChops.multiply(mask, solid_base)
+        mask = ImageChops.multiply(mask, transformed.getchannel("A"))
+        result.paste(transformed, (0, 0), mask)
+        result.putalpha(base.getchannel("A"))
+
+    nose, left_eye, right_eye = FACE_LANDMARKS[name]
+    if name != "critical_closed":
+        apply_patch(nose, (170, 383), (142, 390, 219, 437), 0.88)
+    if name != "hungry_open":
+        bottom = 391 if name == "severe_tears" else 419
+        apply_patch(left_eye, (143, 350), (132, 359, 161, bottom))
+        apply_patch(right_eye, (225, 349), (215, 356, 249, bottom))
+    # Keep the original frame-library format; adding its declared 64px padding
+    # reconstructs the true 640px base exactly, rather than canonical-idle.png.
+    authored_result = result.crop((64, 0, 576, 768))
+    repadded = Image.new("RGBA", RUNTIME_CANVAS)
+    repadded.alpha_composite(authored_result, RUNTIME_OFFSET)
+    if repadded.tobytes() != result.tobytes():
+        raise ValueError("fixed runtime composition cannot be represented by the declared padding")
+    return authored_result
+
 
 
 def _sha(data: bytes) -> str:
@@ -142,9 +201,15 @@ def build(runtime_root: Path, qa_root: Path | None) -> dict:
     if _sha(canonical_data) != CANONICAL_SHA256:
         raise ValueError("approved canonical idle hash does not match")
     source = _read_source(source_manifest)
-    poses = {
+    generated_poses = {
         pose["id"]: _normalize_pose(source, pose["cell"])
         for pose in source_manifest["poses"]
+    }
+    fixed_base = _fixed_runtime_base()
+    canonical_frame = fixed_base.crop((64, 0, 576, 768))
+    poses = {
+        name: _compose_local_expression(fixed_base, authored, name)
+        for name, authored in generated_poses.items()
     }
     staged = runtime_root.with_name(runtime_root.name + ".building")
     if staged.exists():
@@ -156,7 +221,7 @@ def build(runtime_root: Path, qa_root: Path | None) -> dict:
             sequences[sequence] = []
             for index, entry in enumerate(entries):
                 image = (
-                    Image.open(io.BytesIO(canonical_data)).convert("RGBA")
+                    canonical_frame
                     if entry["pose"] == "canonical"
                     else poses[entry["pose"]]
                 )
@@ -182,6 +247,10 @@ def build(runtime_root: Path, qa_root: Path | None) -> dict:
             "canonical_idle_sha256": CANONICAL_SHA256,
             "source_webp_sha256": source_manifest["source_webp_sha256"],
             "source_rgba_sha256": source_manifest["source_rgba_sha256"],
+            "composition": "fixed-runtime-neutral-with-local-generated-mouth-and-tears",
+            "fixed_base_rgba_sha256": FIXED_BASE_RGBA_SHA256,
+            "mutable_runtime_regions": [list(region) for region in MUTABLE_RUNTIME_REGIONS],
+            "alpha_policy": "identical-to-fixed-base",
             "sequences": sequences,
         }
         (staged / "manifest.json").write_text(
