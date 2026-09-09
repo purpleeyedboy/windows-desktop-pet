@@ -95,7 +95,7 @@ class HungerAnimationController:
         mouth = 0.0
         tears = self._health is HungerLevel.CRITICAL_HUNGRY
         intensity = 1.0 if tears else 0.0
-        phase_ms = int(now * 1000) % 1_000 if tears else 0
+        phase_ms = int(now * 1000) if tears else 0
         if self._started is not None:
             elapsed = max(0.0, now - self._started)
             phase_ms = int(elapsed * 1000)

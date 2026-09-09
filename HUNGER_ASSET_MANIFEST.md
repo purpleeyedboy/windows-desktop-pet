@@ -9,10 +9,15 @@
 
 - Runtime requires `assets/hunger/v1/manifest.json` plus its listed transparent
   PNG local frames for `hungry`, `severe`, and `critical` sequences.
-- Every frame must use the approved 640×768 canvas anchor and provide an explicit
+- Every decoded frame must use the approved 512×768 canvas and bottom-center
+  `[256,768]` anchor and provide an explicit
   `duration_ms`; the loader rejects missing, empty, or wrong-sized frames.
-- Frames are composed over the current approved head/eye pose and never transform
-  a prior output frame, so interruption returns to the current live default pose.
+- Runtime placement is the rig's explicit no-scale transform: the authored
+  512×768 frame is placed at `[64,0]` inside the 640×768 padded head-follow
+  canvas. No 512/640/672 width is treated as interchangeable.
+- Full frames replace the display during the expression so old and new mouths
+  cannot overlap. Interruption returns to the current live approved pose and
+  never transforms a prior output frame.
 
 The prior program-drawn ellipse/polygon mouth, tongue, and tear substitute has
 been removed from the runtime. The required authored frames are not present in
