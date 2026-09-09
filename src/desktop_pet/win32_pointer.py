@@ -35,6 +35,21 @@ class Win32CursorMovementService:
         if os.name != "nt" and user32 is None:
             raise OSError("Win32 cursor service requires Windows")
         self.user32 = user32 or ctypes.WinDLL("user32", use_last_error=True)
+        if user32 is None:
+            # HMONITOR is pointer-sized on x64; ctypes' implicit int return
+            # truncates it and can make GetMonitorInfoW reject every press.
+            self.user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+            self.user32.GetCursorPos.restype = wintypes.BOOL
+            self.user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+            self.user32.SetCursorPos.restype = wintypes.BOOL
+            self.user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+            self.user32.GetSystemMetrics.restype = ctypes.c_int
+            self.user32.MonitorFromPoint.argtypes = [POINT, wintypes.DWORD]
+            self.user32.MonitorFromPoint.restype = wintypes.HANDLE
+            self.user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+            self.user32.GetMonitorInfoW.restype = wintypes.BOOL
+            self.user32.GetClipCursor.argtypes = [ctypes.POINTER(RECT)]
+            self.user32.GetClipCursor.restype = wintypes.BOOL
 
     def position(self) -> PointerPoint:
         point = POINT()

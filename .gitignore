@@ -7,3 +7,8 @@ build/
 dist/
 assets/generated/work/
 qa/v2.1-paws/*.png
+
+# Reproducible V2.1 QA previews are local/generated evidence. Keep the text
+# report and its generator in Git; do not put binary preview output in PR diffs.
+qa/v21-frame-player/*.png
+qa/v21-frame-player/*.gif

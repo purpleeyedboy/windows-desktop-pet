@@ -20,8 +20,8 @@ def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
 
 def test_version_resource_contains_required_traceability():
     text = (ROOT / "version_info_paws.txt").read_text(encoding="utf-8")
-    for value in ("2.1.1.0", "BASE-001", "单侧前肢按压与有限光标推动", "修复候选版",
-                  "调试菜单", "BASELINE_V2.1.md", "2026-09-06", "pending-PR5"):
+    for value in ("2.1.2.0", "BASE-001", "单侧前肢按压与有限光标推动", "修复候选版",
+                  "调试菜单", "BASELINE_V2.1.md", "2026-09-09", "Foundation=4eda8964"):
         assert value in text
 
 
@@ -35,7 +35,7 @@ def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     assert EXE in text
     assert "Length" in text and "Get-FileHash" in text
     assert "actions/upload-artifact@" in text
-    assert "integration-blocked-repair-candidate" in text
+    assert "generated-frames-candidate" in text
     assert "pending user Windows acceptance" in text
     assert expected_name == EXE
     inline_powershell = text.split("run: |", 1)[1].split(

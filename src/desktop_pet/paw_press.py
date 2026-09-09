@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from bisect import bisect_right
 from enum import Enum
 from typing import Callable, Protocol
+
+from .foundation.runtime import Activity, ActivityCoordinator, ActivityToken
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,8 @@ class PawActivityService(Protocol):
     def validate_paw(self, approval: "ActivityApproval") -> bool: ...
     def complete_paw(self, approval: "ActivityApproval") -> None: ...
     def paw_allowed(self) -> bool: ...
+    def cancel_paw(self, approval: "ActivityApproval") -> None: ...
+    def attach_paw_recovery(self, approval: "ActivityApproval", recovery: Callable[[], None]) -> None: ...
 
 
 class LocalPawActivityAdapter:
@@ -95,8 +100,67 @@ class LocalPawActivityAdapter:
         if self._active == approval:
             self._active = None
 
+    def cancel_paw(self, approval: "ActivityApproval") -> None:
+        self.complete_paw(approval)
+
+    def attach_paw_recovery(self, approval, recovery) -> None:
+        pass
+
     def paw_allowed(self) -> bool:
         return self._active is None
+
+
+class FoundationPawActivityAdapter:
+    """Narrow PAWS port backed exclusively by the shared coordinator."""
+
+    def __init__(self, coordinator: ActivityCoordinator) -> None:
+        self._coordinator = coordinator
+
+    @staticmethod
+    def _token(approval: "ActivityApproval") -> ActivityToken | None:
+        token = approval.cancellation_token
+        return token if isinstance(token, ActivityToken) else None
+
+    def request_paw(self, side: "PawSide") -> "ActivityApproval | None":
+        animation_id = f"forepaw-{side.value}"
+        token = self._coordinator.request_activity(
+            Activity.BODY_ACTION,
+            animation_id=animation_id,
+            timeout_seconds=2.0,
+        )
+        if token is None:
+            return None
+        return ActivityApproval(animation_id, token.version, token)
+
+    def validate_paw(self, approval: "ActivityApproval") -> bool:
+        token = self._token(approval)
+        return bool(
+            token is not None
+            and self._coordinator.current_token == token
+            and token.version == approval.state_version
+            and token.animation_id == approval.animation_id
+        )
+
+    def complete_paw(self, approval: "ActivityApproval") -> None:
+        token = self._token(approval)
+        if token is not None:
+            self._coordinator.complete(token, animation_id=approval.animation_id)
+
+    def cancel_paw(self, approval: "ActivityApproval") -> None:
+        token = self._token(approval)
+        if token is not None:
+            self._coordinator.cancel_and_recover(token)
+
+    def attach_paw_recovery(
+        self, approval: "ActivityApproval", recovery: Callable[[], None]
+    ) -> None:
+        token = self._token(approval)
+        if token is None or not self.validate_paw(approval):
+            raise ValueError("cannot attach recovery to stale paw approval")
+        self._coordinator.attach_recovery(token, recovery)
+
+    def paw_allowed(self) -> bool:
+        return self._coordinator.permits(Activity.BODY_ACTION)
 
 
 @dataclass(frozen=True)
@@ -126,6 +190,7 @@ class PawPose:
     state: PawState
     left_y: float = 0.0
     right_y: float = 0.0
+    frame_index: int = 0
 
 
 @dataclass(frozen=True)
@@ -144,6 +209,8 @@ class PawMotionConfig:
 
 
 class PawPressController:
+    FRAME_TIMES_MS = (0, 40, 80, 120, 200, 240, 280, 320, 360,
+                      400, 440, 480, 520, 560, 600)
     def __init__(
         self,
         cursor: CursorMovementService,
@@ -152,11 +219,13 @@ class PawPressController:
         approval_validator: Callable[[ActivityApproval], bool],
         on_complete: Callable[[ActivityApproval], None] | None = None,
         config: PawMotionConfig = PawMotionConfig(),
+        on_cancel: Callable[[ActivityApproval], None] | None = None,
     ) -> None:
         self.cursor = cursor
         self.input_gate = input_gate
         self.approval_validator = approval_validator
         self.on_complete = on_complete or (lambda _approval: None)
+        self.on_cancel = on_cancel or self.on_complete
         self.config = config
         self.LIFT_END = config.lift_seconds
         self.PAUSE_END = self.LIFT_END + config.pause_seconds
@@ -179,6 +248,11 @@ class PawPressController:
             return False
         self.side, self._approval, self._started = side, approval, now
         self.state = PawState.LIFT
+        # Each click owns a fresh absolute trajectory. Reusing a prior action's
+        # origin either cancels this click or pulls toward an old cursor point.
+        self._press_start = None
+        self._expected = None
+        self._start_monitor = None
         self._cursor_cancelled = self.input_gate.pointer_interaction_blocked()
         self._cursor_failed = False
         try:
@@ -210,6 +284,9 @@ class PawPressController:
             amount = -self.config.lift_pixels + travel * _smooth(progress)
             self._move_cursor(progress)
         elif elapsed < self.RECOVER_END:
+            # A timer can skip the final press sample. Finish the absolute
+            # bounded trajectory once at recovery, unless the user took over.
+            self._move_cursor(1.0)
             self.state = PawState.RECOVER
             progress = (elapsed - self.PRESS_END) / (self.RECOVER_END - self.PRESS_END)
             amount = self.config.press_pixels * (1.0 - _smooth(progress))
@@ -223,16 +300,27 @@ class PawPressController:
             self.on_complete(approval)
             return PawPose(self.state)
         self._observe_takeover(elapsed)
-        return _pose(self.state, self.side, amount)
+        frame_index = max(0, min(len(self.FRAME_TIMES_MS) - 1,
+            bisect_right(self.FRAME_TIMES_MS, round(elapsed * 1000)) - 1))
+        return _pose(self.state, self.side, amount, frame_index)
 
-    def cancel(self) -> None:
+    def begin_presentation(self, now: float) -> bool:
+        """Start artwork timing after recentering; retain the click's cursor origin."""
+        if self.state is not PawState.LIFT or self._press_start is not None:
+            return False
+        if self._approval is None or not self.approval_validator(self._approval):
+            return False
+        self._started = now
+        return True
+
+    def cancel(self, *, notify: bool = True) -> None:
         if self.state is PawState.CLOSED:
             return
         approval = self._approval
         self.state, self.side, self._approval = PawState.IDLE, None, None
         self._cursor_cancelled = True
-        if approval is not None:
-            self.on_complete(approval)
+        if approval is not None and notify:
+            self.on_cancel(approval)
 
     def close(self) -> None:
         self.cancel()
@@ -308,9 +396,10 @@ def _smooth(value: float) -> float:
     return value * value * (3.0 - 2.0 * value)
 
 
-def _pose(state: PawState, side: PawSide | None, amount: float) -> PawPose:
+def _pose(state: PawState, side: PawSide | None, amount: float,
+          frame_index: int = 0) -> PawPose:
     if side is PawSide.LEFT:
-        return PawPose(state, left_y=amount)
+        return PawPose(state, left_y=amount, frame_index=frame_index)
     if side is PawSide.RIGHT:
-        return PawPose(state, right_y=amount)
-    return PawPose(state)
+        return PawPose(state, right_y=amount, frame_index=frame_index)
+    return PawPose(state, frame_index=frame_index)

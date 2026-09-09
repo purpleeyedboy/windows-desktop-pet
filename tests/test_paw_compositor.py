@@ -2,11 +2,13 @@ import json
 import hashlib
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from desktop_pet.model import Rect
 from desktop_pet.paw_compositor import PawCompositor
-from desktop_pet.assets import load_paw_compositor
+from desktop_pet.assets import load_head_neck_compositor, load_paw_compositor
+from desktop_pet.head_neck_deformation import HeadPose
+from desktop_pet.paw_compositor import load_rle_masks
 
 
 def mask(points):
@@ -30,30 +32,51 @@ def test_hit_testing_maps_the_same_alpha_pixel_at_different_dpi_scales():
     assert not compositor.hit_test("left", (-150, 255), Rect(-200, 200, 160, 160))
 
 
-def test_each_paw_moves_independently_and_outside_pixels_are_unchanged():
-    source = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
-    source.putpixel((1, 1), (255, 0, 0, 255)); source.putpixel((6, 1), (0, 0, 255, 255))
-    compositor = PawCompositor(mask([(1, 1)]), mask([(6, 1)]))
-    result = compositor.compose(source, left_offset=(0, 2), right_offset=(0, 1))
-    assert result.getpixel((1, 3)) == (255, 0, 0, 255)
-    assert result.getpixel((6, 2)) == (0, 0, 255, 255)
-    assert result.getpixel((1, 1))[3] == 0
-    assert result.getpixel((6, 1))[3] == 0
-    assert result.getpixel((4, 4)) == source.getpixel((4, 4))
+def test_all_authored_frames_restore_default_and_preserve_opposite_paw():
+    source = load_head_neck_compositor().compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    compositor = load_paw_compositor()
+    assert source.size == (640, 768)
+    for side in ("left", "right"):
+        assert len(compositor.frames[side]) == 15
+        other = "right" if side == "left" else "left"
+        opposite = Image.new("L", source.size)
+        semantic = compositor.masks[other].copy()
+        for y in range(768):
+            for x in range(512):
+                if (side == "left" and x > 208) or (side == "right" and x < 216):
+                    semantic.putpixel((x, y), 0)
+        opposite.paste(semantic, (64, 0))
+        for index in range(15):
+            result = compositor.compose_frame(source, side, index)
+            assert result.size == source.size and result.mode == "RGBA"
+            if index in (0, 14):
+                assert result.tobytes() == source.tobytes()
+            delta = ImageChops.difference(result, source)
+            # Raised limbs can cross the lower chest. The actual head and the
+            # fixed far side of the torso remain pixel-identical.
+            assert result.crop((0, 0, 640, 440)).tobytes() == source.crop((0, 0, 640, 440)).tobytes()
+            assert result.crop((425, 0, 640, 768)).tobytes() == source.crop((425, 0, 640, 768)).tobytes()
+            for channel in delta.split():
+                assert ImageChops.multiply(channel, opposite).getbbox() is None
+        assert compositor.compose_frame(source, side, 3).tobytes() != source.tobytes()
 
 
-def test_single_selected_paw_does_not_move_or_duplicate_the_other_paw():
-    source = Image.new("RGBA", (8, 8), (0, 0, 0, 0))
-    source.putpixel((1, 1), (255, 0, 0, 255))
-    source.putpixel((6, 1), (0, 0, 255, 255))
-    compositor = PawCompositor(mask([(1, 1)]), mask([(6, 1)]))
-
-    result = compositor.compose(source, left_offset=(0, 2))
-
-    assert result.getpixel((1, 1))[3] == 0
-    assert result.getpixel((1, 3)) == (255, 0, 0, 255)
-    assert result.getpixel((6, 1)) == (0, 0, 255, 255)
-    assert result.getpixel((6, 3))[3] == 0
+def test_selected_paw_does_not_leave_old_toes_below_raised_paw():
+    source = load_head_neck_compositor().compose(0.0, 0.0, HeadPose(0.0, 0.0))
+    compositor = load_paw_compositor()
+    for side in ("left", "right"):
+        paw = compositor.frames[side][3]
+        opposite = compositor.masks["right" if side == "left" else "left"]
+        raised = compositor.compose_frame(source, side, 3)
+        cleared = 0
+        for y in range(710, 750):
+            for x in range(512):
+                if (compositor.masks[side].getpixel((x, y))
+                        and not paw.getpixel((x, y))[3]
+                        and not opposite.getpixel((x, y))):
+                    assert raised.getpixel((x + 64, y))[3] == 0
+                    cleared += 1
+        assert cleared > 0
 
 
 def test_runtime_masks_are_reconstructed_from_reviewable_rle_text():
@@ -63,9 +86,9 @@ def test_runtime_masks_are_reconstructed_from_reviewable_rle_text():
     assert set(definition["decoded_alpha_sha256"]) == {"left", "right"}
     assert all(isinstance(run, list) and len(run) == 4
                for runs in definition["masks"].values() for run in runs)
-    compositor = load_paw_compositor()
+    masks = dict(zip(("left", "right"), load_rle_masks(Path("assets/paws/v1/authoring.json"))))
     for name in ("left", "right"):
-        mask = compositor.masks[name]
+        mask = masks[name]
         assert mask.mode == "L" and mask.size == (512, 768)
         assert mask.getbbox() is not None
         assert hashlib.sha256(mask.tobytes()).hexdigest() == (

@@ -59,6 +59,19 @@ def test_cursor_total_is_14_not_per_frame_and_x_never_changes():
     assert max(p.y for p in cursor.moves) - 20 == 14
 
 
+def test_next_paw_action_uses_its_own_cursor_start_after_cooldown():
+    cursor, gate = FakeCursor(), FakeGate()
+    controller = PawPressController(cursor, gate, approval_validator=valid)
+    assert controller.start(PawSide.LEFT, approval(), 0)
+    controller.sample(.20); controller.sample(.359); controller.sample(1.21)
+    cursor.point = PointerPoint(-200, 100)
+    cursor.moves.clear()
+    assert controller.start(PawSide.RIGHT, approval(), 2)
+    controller.sample(2.20); controller.sample(2.359)
+    assert cursor.point == PointerPoint(-200, 114)
+    assert all(point.x == -200 and 100 <= point.y <= 114 for point in cursor.moves)
+
+
 def test_pointer_height_scales_once_and_clamps_total_distance():
     for height, expected in ((16, 8), (64, 28), (0, 14)):
         cursor, gate = FakeCursor(pointer_height=height), FakeGate()
@@ -113,3 +126,26 @@ def test_cursor_failure_is_not_retried_and_animation_continues():
     c = PawPressController(cursor, gate, approval_validator=valid)
     c.start(PawSide.LEFT, approval(), 0); c.sample(.20); c.sample(.25); c.sample(.30)
     assert c.sample(.30).state is PawState.PRESS
+
+
+def test_recovery_finishes_skipped_press_endpoint_without_accumulating():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.RIGHT, approval(), 0)
+    c.sample(.20); c.sample(.28)
+    assert cursor.point.y < 34
+    c.sample(.40)
+    assert cursor.point.y == 34
+    moves = len(cursor.moves)
+    c.sample(.50); c.sample(.59)
+    assert len(cursor.moves) == moves
+
+
+def test_graphic_frame_sequence_and_recovery_are_time_based():
+    cursor, gate = FakeCursor(), FakeGate()
+    c = PawPressController(cursor, gate, approval_validator=valid)
+    c.start(PawSide.LEFT, approval(), 0)
+    for milliseconds, frame in ((0, 0), (39, 0), (40, 1), (120, 3),
+                                (199, 3), (200, 4), (360, 8), (600, 14)):
+        assert c.sample(milliseconds / 1000).frame_index == frame
+    assert c.sample(1.21).state is PawState.IDLE

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 import sys
@@ -9,15 +10,17 @@ from PIL import Image
 
 from .head_neck_deformation import ContinuousHeadNeckCompositor
 from .model import ACTIONS
+from .animation import AnimationSequence, FrameStep
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
-from .paw_compositor import PawCompositor, load_rle_masks
+from .paw_compositor import PawCompositor, load_generated_paw_frames, load_paw_frames, load_rle_masks
 from .paw_press import PawMotionConfig
 
 
 EXPECTED_SIZE = (512, 768)
 FRAME_COUNT = 6
 EXPECTED_NAMES = tuple(f"{index:02d}.png" for index in range(FRAME_COUNT))
+PLAYBACK_MANIFEST = "playback.json"
 HEAD_TILT_BACKPLATE_SHA256 = (
     "527eaad70a84c611f0839bc3898b5c00f41df383c191771c7e07a1af588e5ce8"
 )
@@ -98,7 +101,12 @@ def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
 
 def load_paw_compositor() -> PawCompositor:
     root = asset_path("assets", "paws", "v1")
-    return PawCompositor(*load_rle_masks(root / "authoring.json"))
+    return PawCompositor(
+        *load_rle_masks(root / "authoring.json"),
+        load_generated_paw_frames(
+            root / "generated-frames.json", source_sha256=HEAD_TILT_BACKPLATE_SHA256
+        ),
+    )
 
 
 def load_paw_motion_config() -> PawMotionConfig:
@@ -152,3 +160,61 @@ def load_frames(root: Path | None = None) -> dict[str, Sequence[Image.Image]]:
                 frames.append(image.copy())
         loaded[action] = tuple(frames)
     return loaded
+
+
+def load_playback_sequences(root: Path | None = None) -> dict[str, AnimationSequence]:
+    """Load frame order/timing without synthesizing or geometrically deforming art."""
+    frame_root = root or runtime_frame_root()
+    payload = json.loads((frame_root / PLAYBACK_MANIFEST).read_text(encoding="utf-8"))
+    if payload.get("version") != 1 or tuple(payload.get("canvas", ())) != EXPECTED_SIZE:
+        raise RuntimeError("invalid graphic animation playback manifest")
+    sequences: dict[str, AnimationSequence] = {}
+    for action in ACTIONS:
+        clip = payload.get("clips", {}).get(action)
+        if not isinstance(clip, dict):
+            raise RuntimeError(f"missing playback clip: {action}")
+        names = [frame["file"] for frame in clip.get("frames", ())]
+        if tuple(names) != EXPECTED_NAMES:
+            raise RuntimeError(f"{action} playback order must reference the six graphic frames")
+        steps = tuple(
+            FrameStep(int(Path(frame["file"]).stem), frame["duration_ms"])
+            for frame in clip["frames"]
+        )
+        loop = clip.get("loop")
+        sequences[action] = AnimationSequence(
+            steps=steps,
+            anchor=tuple(clip["anchor"]),
+            loop_start=loop["start"] if loop else None,
+            loop_end=loop["end"] if loop else None,
+            loop_count=loop["count"] if loop else 0,
+            layer_mode=clip.get("layer_mode", "full"),
+        )
+    return sequences
+
+
+def compose_local_graphic_frame(
+    base: Image.Image,
+    layer: Image.Image,
+    *,
+    offset: tuple[int, int],
+    restoration: Image.Image,
+) -> Image.Image:
+    """Restore vacated pixels before compositing a real local RGBA action layer."""
+    if base.mode != "RGBA" or restoration.mode != "RGBA" or layer.mode != "RGBA":
+        raise ValueError("graphic animation layers must be RGBA")
+    if base.size != EXPECTED_SIZE or restoration.size != EXPECTED_SIZE:
+        raise ValueError("base and restoration layers must use the canonical canvas")
+    x, y = offset
+    if x < 0 or y < 0 or x + layer.width > base.width or y + layer.height > base.height:
+        raise ValueError("local graphic layer exceeds the canonical canvas")
+    composed = Image.alpha_composite(base, restoration)
+    composed.alpha_composite(layer, dest=(x, y))
+    return composed
+
+
+def validate_runtime_graphic_frame(image: Image.Image, canvas: tuple[int, int]) -> None:
+    if image.mode != "RGBA" or image.size != canvas:
+        raise ValueError("full graphic frame must match the RGBA canonical canvas")
+    pixels = image.tobytes()
+    if any(pixels[index + 3] == 0 and any(pixels[index:index + 3]) for index in range(0, len(pixels), 4)):
+        raise ValueError("graphic frame has dirty RGB beneath transparent Alpha")

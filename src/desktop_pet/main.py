@@ -11,7 +11,11 @@ from .assets import (
     load_paw_compositor,
     load_paw_motion_config,
 )
+from .assets import load_playback_sequences
 from .eye_follow import Win32CursorProvider
+from .foundation.config import BuildInfo
+from .foundation.services import DEFAULT_STATE, ApplicationServices, create_application_services
+from .foundation.runtime import Activity
 from .window import PetWindow
 from .release_status import release_status_text
 from .win32_pointer import Win32ButtonState, Win32CursorMovementService
@@ -55,6 +59,47 @@ class SingleInstanceMutex:
         self._handle = None
 
 
+def notify_existing_instance(build_info: BuildInfo) -> None:
+    if os.name == "nt":
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+        user32.FindWindowW.restype = ctypes.c_void_p
+        user32.ShowWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+        user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        user32.GetWindowTextW.restype = ctypes.c_int
+        hwnd = user32.FindWindowW(None, "桌面宠物")
+        existing = "未知旧实例"
+        if not hwnd:
+            found: list[int] = []
+            callback_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            user32.EnumWindows.argtypes = [callback_type, ctypes.c_void_p]
+            user32.EnumWindows.restype = ctypes.c_bool
+
+            def visit(candidate, _parameter):
+                buffer = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(candidate, buffer, len(buffer))
+                if buffer.value.startswith("桌面宠物 V2.1-CORE"):
+                    found.append(int(candidate))
+                    return False
+                return True
+
+            user32.EnumWindows(callback_type(visit), None)
+            hwnd = found[0] if found else None
+        if hwnd:
+            buffer = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, buffer, len(buffer))
+            existing = buffer.value or existing
+            user32.ShowWindow(hwnd, 9)
+            user32.SetForegroundWindow(hwnd)
+        message = (
+            f"桌面宠物已在运行：{existing}\n"
+            f"请求版本：{build_info.product_version} ({build_info.git_short_hash})\n"
+            "本次新版本未启动。"
+        )
+        user32.MessageBoxW(None, message, "桌面宠物正在运行", 0x40)
+
+
 def enable_per_monitor_dpi_awareness() -> bool:
     if os.name != "nt":
         return False
@@ -85,23 +130,25 @@ def show_fatal_error(message: str, root: tk.Tk | None = None) -> None:
 
 def main() -> int:
     enable_per_monitor_dpi_awareness()
+    build_info = BuildInfo.load_embedded()
     mutex = SingleInstanceMutex(build_mutex_name())
     root: tk.Tk | None = None
     pet_window: PetWindow | None = None
+    services: ApplicationServices | None = None
+    state = dict(DEFAULT_STATE)
     try:
         if not mutex.acquire():
-            if os.name == "nt":
-                ctypes.windll.user32.MessageBoxW(
-                    None,
-                    "已有桌面宠物实例正在运行；本次版本未启动。\n\n"
-                    + release_status_text(),
-                    "桌面宠物版本冲突",
-                    0x40,
-                )
+            notify_existing_instance(build_info)
             return 0
+        services = create_application_services(build_info)
+        state = services.load_state()
+        if state.get("pending_transaction") is not None:
+            services.runtime.post("transaction.review", source="startup")
+            services.runtime.drain()
         root = tk.Tk()
         root.withdraw()
         frames = load_frames()
+        animation_sequences = load_playback_sequences()
         compositor = load_head_neck_compositor()
         cursor_provider = Win32CursorProvider()
         pet_window = PetWindow(
@@ -114,9 +161,10 @@ def main() -> int:
             button_state_factory=lambda _hwnd: Win32ButtonState(),
             paw_compositor=load_paw_compositor(),
             paw_motion_config=load_paw_motion_config(),
+            services=services,
+            persisted_state=state,
+            animation_sequences=animation_sequences,
         )
-        if os.name == "nt":
-            pet_window.show_release_status()
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:
@@ -128,12 +176,18 @@ def main() -> int:
                 pet_window.close()
             except tk.TclError:
                 pass
-        elif root is not None:
-            try:
-                if root.winfo_exists():
-                    root.destroy()
-            except tk.TclError:
-                pass
+        else:
+            if services is not None:
+                try:
+                    services.close()
+                except (OSError, RuntimeError):
+                    pass
+            if root is not None:
+                try:
+                    if root.winfo_exists():
+                        root.destroy()
+                except tk.TclError:
+                    pass
         mutex.close()
 
 

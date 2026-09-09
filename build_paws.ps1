@@ -25,8 +25,8 @@ foreach ($relativeTarget in @('build', 'dist')) {
     }
 }
 
-# This candidate deliberately skips all automated test suites.
-# Acceptance is performed by the user on a real Windows desktop.
+# Focused runtime/frame gates run in Actions. The legacy full suite is not
+# claimed as passed; visual acceptance remains a real Windows desktop check.
 & $python -m PyInstaller --noconfirm desktop_pet_paws.spec
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller 构建失败' }
 
@@ -45,7 +45,7 @@ if (-not [System.IO.Path]::GetFullPath($exeFiles[0].FullName).Equals(
 }
 
 $result = [PSCustomObject]@{
-    Candidate = 'UNTESTED - pending user Windows acceptance'
+    Candidate = 'pending user Windows acceptance'
     FullName = $exeFiles[0].FullName
     Length = $exeFiles[0].Length
     SHA256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $expectedExe).Hash

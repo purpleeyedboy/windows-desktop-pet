@@ -1,11 +1,11 @@
-name: Windows V2.1 PAWS untested candidate
+name: Windows V2.1 PAWS generated frames candidate
 on:
   workflow_dispatch:
   pull_request:
 permissions:
   contents: read
 jobs:
-  build-untested-candidate:
+  build-candidate:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -20,7 +20,9 @@ jobs:
           "Pillow>=11,<12"
           "fonttools>=4.59,<5"
           "PyInstaller>=6,<7"
-      - name: Build untested candidate
+      - name: Verify shared forepaw runtime and immutable baseline assets
+        run: python tools/verify_paws_runtime.py
+      - name: Build independent candidate
         shell: powershell
         run: .\build_paws.ps1
       - name: Verify sole candidate name, size and SHA-256
@@ -31,13 +33,16 @@ jobs:
           $expectedName = (Get-Content -LiteralPath 'paws_exe_name.txt' -Encoding UTF8 -Raw).Trim()
           if ($exes[0].Name -cne $expectedName) { throw "Unexpected EXE name" }
           [PSCustomObject]@{
-            Candidate = 'UNTESTED - pending user Windows acceptance'
+            Candidate = 'pending user Windows acceptance'
             Name = $exes[0].Name
             Length = $exes[0].Length
             SHA256 = (Get-FileHash -Algorithm SHA256 $exes[0].FullName).Hash
           } | Format-List
+      - name: Check identified Tk startup in isolated profile
+        shell: pwsh
+        run: ./tools/smoke_test_paws_candidate.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v2.1-paws-integration-blocked-repair-candidate
+          name: v2.1-paws-generated-frames-candidate
           path: dist/桌面宠物_双前肢按压鼠标_20260906修复候选.exe
           if-no-files-found: error

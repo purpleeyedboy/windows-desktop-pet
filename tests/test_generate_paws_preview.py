@@ -10,5 +10,5 @@ def test_preview_is_generated_only_at_requested_temporary_path(tmp_path):
     generate_preview(output)
     with Image.open(output) as image:
         assert image.mode == "RGBA"
-        assert image.size == (2048, 768)
+        assert image.size == (1600, 2304)
     assert not Path("qa/v2.1-paws/paw-press-preview.png").exists()

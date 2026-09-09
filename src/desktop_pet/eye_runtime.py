@@ -86,6 +86,7 @@ class RuntimeEyeSession:
         head_follow: bool = False,
         blink_motion: NaturalBlinkMotion | None = None,
         idle_tilt_motion: IdleHeadTiltMotion | None = None,
+        on_ambient_blink_due: Callable[[], None] | None = None,
     ) -> None:
         self._compositor = compositor
         self._head_follow = bool(head_follow)
@@ -107,6 +108,8 @@ class RuntimeEyeSession:
             else NaturalBlinkMotion() if self._blink_supported else None
         )
         self._blink_closure = 0.0
+        self._coordinated_blink_active = False
+        self._on_ambient_blink_due = on_ambient_blink_due
         if idle_tilt_motion is not None and not self._head_follow:
             raise ValueError("idle head tilt requires head following")
         self._idle_tilt_motion = (
@@ -339,6 +342,7 @@ class RuntimeEyeSession:
             return SessionResult.REJECTED
         try:
             self._blink_motion.trigger(self._clock())
+            self._coordinated_blink_active = True
         except Exception:
             self._blink_motion = None
             self._blink_closure = 0.0
@@ -354,6 +358,24 @@ class RuntimeEyeSession:
                 head_pose,
             )
         return SessionResult.ACCEPTED
+
+    def cancel_blink(self) -> SessionResult:
+        """Cancel blink output while preserving cursor/head following."""
+        if self._terminal or self._state != "following" or self._blink_motion is None:
+            return SessionResult.REJECTED
+        try:
+            self._blink_motion.reset(self._clock())
+        except Exception:
+            return SessionResult.REJECTED
+        self._blink_closure = 0.0
+        self._coordinated_blink_active = False
+        pose = self._last_displayed_pose or (0.0, 0.0)
+        head_pose = self._last_displayed_head_pose or (0.0, 0.0)
+        return (
+            SessionResult.ACCEPTED
+            if self._try_display_pose(pose, self._lifecycle_epoch, "following", head_pose)
+            else SessionResult.REJECTED
+        )
 
     def interrupt_idle(self) -> SessionResult:
         """Cancel a tilt and restart its cooldown for click or drag priority."""
@@ -381,6 +403,20 @@ class RuntimeEyeSession:
             "following",
             head_pose,
         ):
+            return SessionResult.REJECTED
+        return SessionResult.ACCEPTED
+
+    def cancel_for_recovery(self) -> SessionResult:
+        """Invalidate pending work and resume following from the exact neutral pose."""
+        if self._terminal or self._state == "disabled":
+            return SessionResult.REJECTED
+        try:
+            self._invalidate_recenter()
+            if self._state in {"recentering", "playing"}:
+                self._abandon_action_request()
+            self.cancel_blink()
+            self.interrupt_idle()
+        except Exception:
             return SessionResult.REJECTED
         return SessionResult.ACCEPTED
 
@@ -521,7 +557,24 @@ class RuntimeEyeSession:
         changed = False
         if self._blink_motion is not None:
             try:
-                closure = self._blink_motion.sample(now)
+                if (
+                    not self._coordinated_blink_active
+                    and self._blink_motion.next_blink_at is not None
+                    and now >= self._blink_motion.next_blink_at
+                    and self._on_ambient_blink_due is not None
+                ):
+                    self._blink_motion.reset(now)
+                    self._on_ambient_blink_due()
+                    closure = 0.0
+                else:
+                    closure = self._blink_motion.sample(now)
+                    if (
+                        self._coordinated_blink_active
+                        and closure == 0.0
+                        and self._blink_motion.next_blink_at is not None
+                        and self._blink_motion.next_blink_at > now
+                    ):
+                        self._coordinated_blink_active = False
             except Exception:
                 self._blink_motion = None
                 closure = 0.0
