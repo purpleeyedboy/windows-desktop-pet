@@ -12,7 +12,7 @@ def main() -> int:
     if not sources:
         raise RuntimeError("foundation source record is empty")
     required = {str(path.relative_to(ROOT)).replace("\\", "/") for path in (ROOT / "src/desktop_pet/foundation").glob("*.py")}
-    required.update({"src/desktop_pet/window.py", "src/desktop_pet/animation.py", "src/desktop_pet/assets.py"})
+    required.update({"src/desktop_pet/window.py", "src/desktop_pet/animation.py", "src/desktop_pet/assets.py", "src/desktop_pet/eye_runtime.py", "src/desktop_pet/layered_window.py"})
     if not required.issubset(sources):
         raise RuntimeError(f"foundation source files missing: {required - set(sources)}")
     for name, record in sources.items():

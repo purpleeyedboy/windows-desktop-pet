@@ -27,12 +27,15 @@ jobs:
           $testRoot = Join-Path $env:RUNNER_TEMP ("hunger-startup-" + [guid]::NewGuid().ToString("N"))
           $previousLocal = $env:LOCALAPPDATA
           $previousRoaming = $env:APPDATA
+          $previousDiagnostics = $env:DESKTOP_PET_STARTUP_DIAGNOSTICS
+          $diagnosticPath = Join-Path $testRoot "startup-error.txt"
           $candidateProcess = $null
           $candidateChildren = @()
           try {
             New-Item -ItemType Directory -Path $testRoot | Out-Null
             $env:LOCALAPPDATA = Join-Path $testRoot "Local"
             $env:APPDATA = Join-Path $testRoot "Roaming"
+            $env:DESKTOP_PET_STARTUP_DIAGNOSTICS = $diagnosticPath
             $candidatePath = (Resolve-Path "dist-hunger/桌面宠物_饥饿真实帧与公共基础接入.exe").Path
             $candidateProcess = Start-Process -FilePath $candidatePath -PassThru
             Start-Sleep -Seconds 7
@@ -50,6 +53,9 @@ jobs:
             }
             "Isolated candidate startup survived seven seconds; this is not visual acceptance." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } finally {
+            if (Test-Path -LiteralPath $diagnosticPath) {
+              Get-Content -LiteralPath $diagnosticPath -Raw | Write-Host
+            }
             foreach ($child in $candidateChildren) {
               if (-not $child.HasExited) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
             }
@@ -59,6 +65,7 @@ jobs:
             }
             $env:LOCALAPPDATA = $previousLocal
             $env:APPDATA = $previousRoaming
+            $env:DESKTOP_PET_STARTUP_DIAGNOSTICS = $previousDiagnostics
             if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
           }
       - name: Verify unique EXE, size, and SHA-256

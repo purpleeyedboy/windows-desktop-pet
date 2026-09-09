@@ -66,6 +66,16 @@
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
       "git_blob": "5d50566f37e601d2b00357725cf42d0690b6db88",
       "sha256": "5343302408be6c41be01b75a9adc509c3bc3b2cbdb6fdd08a76eff01a0205c87"
+    },
+    "src/desktop_pet/eye_runtime.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "9f3da79dd28b6c0ad6342f6d33c63894da8bdc8b",
+      "sha256": "05e5e706c1bd618d3b47d452b37addb2d1f688034dd23e15117f1de85f034f11"
+    },
+    "src/desktop_pet/layered_window.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "515f8b51db3132913144c2b65c622678d25378c0",
+      "sha256": "8bef5a8d36a6ae561387d2ea3befc654bc6ac8c43eace05500f836850b9f5e0c"
     }
   }
 }
