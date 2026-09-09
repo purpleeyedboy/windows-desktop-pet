@@ -30,7 +30,8 @@ try {
         foundation_git_short_hash = $FoundationHash
         automated_tests = "automated_tests=false"
         acceptance_status = "acceptance_status=awaiting-user-windows-validation"
-        debug_menu = "debug_menu=false"
+        test_build = $true
+        debug_menu = $true
         document_baseline = "V2.1_LICK_BUILD.md"
     } | ConvertTo-Json | Set-Content -LiteralPath "$Metadata\build-info.json" -Encoding UTF8
 

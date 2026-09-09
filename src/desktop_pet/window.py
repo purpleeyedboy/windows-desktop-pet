@@ -295,7 +295,7 @@ class PetWindow:
         )
 
         try:
-            root.title("桌面宠物")
+            root.title("桌面宠物 V2.1-LICK 调试候选" if self._groom_debug_menu else "桌面宠物")
             root.overrideredirect(True)
             root.configure(cursor="hand2")
             root.attributes("-topmost", True)
@@ -371,13 +371,15 @@ class PetWindow:
             )
         menu.add_command(label="眨眼", command=self.trigger_blink)
         if self._groom_debug_menu:
-            menu.add_command(
-                label="调试：舔手逐帧动画（3次）",
+            debug_menu = tk.Menu(menu, tearoff=False)
+            debug_menu.add_command(
+                label="左前爪舔手（3次）",
                 command=lambda: (
                     self.eye_session.request_groom_debug(3)
                     if self.eye_session is not None else None
                 ),
             )
+            menu.add_cascade(label="调试", menu=debug_menu)
         for label, mode in TILT_MENU_ITEMS:
             menu.add_command(
                 label=label,

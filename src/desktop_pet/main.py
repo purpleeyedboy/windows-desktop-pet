@@ -1,16 +1,33 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 
 from .assets import load_frames, load_groom_frames, load_head_neck_compositor
 from .eye_follow import Win32CursorProvider
+from .paths import asset_path
 from .window import PetWindow
 
 
 ERROR_ALREADY_EXISTS = 183
+
+
+def load_groom_debug_enabled(path: Path | None = None) -> bool:
+    """Only an explicitly marked test build exposes the grooming test command."""
+    try:
+        data = json.loads((path or asset_path("build-info.json")).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(data, dict)
+        and data.get("version") == "2.1-LICK"
+        and data.get("test_build") is True
+        and data.get("debug_menu") is True
+    )
 
 
 def build_mutex_name() -> str:
@@ -96,6 +113,7 @@ def main() -> int:
             cursor_provider=cursor_provider,
             head_follow=True,
             groom_frames=load_groom_frames(),
+            groom_debug_menu=load_groom_debug_enabled(),
         )
         root.mainloop()
         return 0
