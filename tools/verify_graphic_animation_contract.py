@@ -2,9 +2,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 from PIL import Image
+
+# Build verification must inspect this checkout, never a previously installed wheel.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from desktop_pet.animation import AnimationController, AnimationSequence, FrameStep
 from desktop_pet.assets import compose_local_graphic_frame, load_frames, load_playback_sequences, validate_runtime_graphic_frame
@@ -91,8 +97,9 @@ def verify_feature_activity_playback() -> None:
 
 def main() -> int:
     verify_feature_activity_playback()
-    frames = load_frames()
-    sequences = load_playback_sequences()
+    frame_root = ROOT / "assets" / "keyframes"
+    frames = load_frames(frame_root)
+    sequences = load_playback_sequences(frame_root)
     scheduled: list[tuple[int, object]] = []
     shown: list[tuple[str, int]] = []
 

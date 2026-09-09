@@ -3,16 +3,18 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
+
+# Keep source checks and imported runtime code on the same checkout in CI.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from desktop_pet.foundation.config import BuildInfo
 from desktop_pet.foundation.runtime import Activity, RuntimeContext
 from desktop_pet.foundation.services import DEFAULT_STATE, create_application_services
 from desktop_pet.foundation.sources import SystemTimeSource
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def require(path: str, snippets: tuple[str, ...], *, python: bool = True) -> None:
