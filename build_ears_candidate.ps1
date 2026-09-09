@@ -85,11 +85,14 @@ try {
     Clear-CandidateOutputs
     New-Item -ItemType Directory -Path $WorkDirectory | Out-Null
     $BuildDate = Get-Date -Format 'yyyy-MM-dd'
-    $GitShortHash = (git rev-parse --short HEAD).Trim()
+    $SourceHead = if ($env:SOURCE_HEAD_SHA) { $env:SOURCE_HEAD_SHA } else { (git rev-parse HEAD).Trim() }
+    if ($SourceHead -notmatch '^[0-9a-fA-F]{40}$') { throw "Invalid source head SHA." }
+    $GitShortHash = $SourceHead.Substring(0, 7)
     $BuildMetadata = @{
         product_version = "2.1.1-test"
         build_date = $BuildDate
         git_short_hash = $GitShortHash
+        source_head_sha = $SourceHead
         baseline = "BASE-001"
         foundation_commit = $FoundationCommit
         enabled_features = @("common-foundation", "ears")
