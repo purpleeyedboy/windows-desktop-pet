@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from copy import deepcopy
 from typing import Callable
 
 
@@ -25,7 +26,7 @@ class HungerConfig:
     severe_below: int = 10_000
     critical_below: int = 1_000
     schema_version: int = 2
-    max_operation_ids: int = 512
+    max_operation_ids: int = 32
 
     def __post_init__(self) -> None:
         if self.max_units != 100_000 or self.empty_after_seconds != 7_200:
@@ -166,10 +167,12 @@ class HungerService:
 
     def set_units(self, units: int, *, now_utc: int | None = None) -> HungerSnapshot:
         now = self.utc_clock() if now_utc is None else max(0, int(now_utc))
-        self._state["HungerAnchorUnits"] = max(0, min(100_000, int(units)))
-        self._state["HungerAnchorUtc"] = now
-        self._state["HungerDecayRemainder"] = 0
-        self.store.commit_hunger(self._state)
+        staged = deepcopy(self._state)
+        staged["HungerAnchorUnits"] = max(0, min(100_000, int(units)))
+        staged["HungerAnchorUtc"] = now
+        staged["HungerDecayRemainder"] = 0
+        self.store.commit_hunger(staged)
+        self._state = staged
         return self.snapshot(now)
 
     def apply_reward(self, operation_id: str, units: int, *, now_utc: int | None = None) -> tuple[HungerSnapshot, bool]:
@@ -181,13 +184,18 @@ class HungerService:
             return self.snapshot(now_utc), False
         now = self.utc_clock() if now_utc is None else max(0, int(now_utc))
         current = self.snapshot(now)
-        self._state["HungerAnchorUnits"] = min(100_000, current.units + int(units))
-        self._state["HungerAnchorUtc"] = now
-        self._state["HungerDecayRemainder"] = 0
-        self._state["LastFeedUtc"] = now
+        staged = deepcopy(self._state)
+        staged["HungerAnchorUnits"] = min(100_000, current.units + int(units))
+        staged["HungerAnchorUtc"] = now
+        staged["HungerDecayRemainder"] = 0
+        staged["LastFeedUtc"] = now
         applied.append(operation)
-        self._state["AppliedOperationIds"] = applied[-self.config.max_operation_ids:]
-        self.store.commit_hunger(self._state)  # reward, operation id and new anchor are one replace
+        staged["AppliedOperationIds"] = applied[-self.config.max_operation_ids:]
+        # Do not publish staged state in memory until the single atomic store
+        # transaction succeeds.  A failed write can therefore be retried with
+        # the same operation id without either losing or duplicating reward.
+        self.store.commit_hunger(staged)
+        self._state = staged
         return self.snapshot(now), True
 
     def close(self) -> None:
@@ -200,9 +208,11 @@ class HungerService:
                 elapsed * self.config.max_units
                 + int(self._state.get("HungerDecayRemainder", 0))
             )
-            self._state["HungerAnchorUnits"] = current.units
-            self._state["HungerAnchorUtc"] = now
-            self._state["HungerDecayRemainder"] = (
+            staged = deepcopy(self._state)
+            staged["HungerAnchorUnits"] = current.units
+            staged["HungerAnchorUtc"] = now
+            staged["HungerDecayRemainder"] = (
                 0 if current.units == 0 else numerator % self.config.empty_after_seconds
             )
-            self.store.commit_hunger(self._state)
+            self.store.commit_hunger(staged)
+            self._state = staged
