@@ -1,15 +1,11 @@
-# REPAIR-20260906-V21-HUNGER
+# V2.1 饥饿真实帧与公共基础接入候选版
 
-- 版本：V2.1-HUNGER 返工测试版；日期：2026-09-06。
-- 饥饿单位：`0..100000`；`1000 = 1%`，从满值严格按真实 UTC 经过 120 分钟归零。
-- Health 边界：Normal `20000..100000`、Hungry `10000..19999`、SevereHungry `1000..9999`、CriticalHungry `0..999`，无额外滞回。
-- 表现合同：Hungry/SevereHungry 使用 0.35 秒张嘴、1 秒保持、0.35 秒闭嘴的逐帧整幅 RGBA 姿态；Severe 保持段和 Critical 使用美术绘制的眼泪姿态。活动帧整幅替换显示以避免新旧嘴重叠，中断后恢复当前实时默认姿态；不修改确认素材。
-- 状态：唯一正式路径 `%LOCALAPPDATA%/DesktopPet/state.json`；旧 `hunger-v1.json` 只读迁移并保留原文件，不双写。奖励、OperationId 与新锚点同一原子提交。
-- 调试：一级“调试”菜单，直接二级包含 100/20/19.9/10/9.9/1/0.9/0%、时间 +30/+60/+120 分钟、重播和内部状态。调试时钟为真实 UTC 加进程内正偏移，不修改系统时间。
-- 公共基础入口使用真实 `desktop_pet.foundation.services.create_application_services(BuildInfo)` / `ApplicationServices`。`SharedHungerStatePort` 只投影共享状态字典并调用同一个 `AtomicJsonStore.save`，不创建第二套队列、Clock 或正式状态文件；饥饿活动使用同一个 `RuntimeContext` / `ActivityCoordinator`。
-- 当前状态：公共基础已按源码交接接入。旧程序几何嘴舌/泪滴已从运行路径移除；真实逐帧素材尚缺，因此当前构建脚本会明确拒绝打包，不能作为候选 EXE。素材接入后仍须标记为未自动测试并等待用户 Windows 实机验收。
-- Windows workflow 不运行 pytest/旧自动测试；云端证据仅限语法、导入、临时状态演练和临时预览，不冒充 Windows 验收。
-- 公共基础源码交接来源标识为 `e178f371bd2da1c0b4e892609acfdf79bfcab450`；这是逐文件 blob 已核验的来源记录，不伪称为当前分支 Git 祖先。
-- 嘴层审查：旧版程序椭圆/多边形实现已删除。`HungerFrameLibrary` 只接受带逐帧阶段、时长与 SHA-256 的真实 RGBA 整幅 PNG 序列；没有素材时启动/打包均可见失败，不再显示几何替代品或旧跳跃。
-- 精度：业务重锚点同时保存 `HungerDecayRemainder`，因此反复正常关闭不会因整数除法截断而延长 120 分钟满值到零的周期。
-- 喂食接口：`HungerService.apply_reward(operation_id: str, units: int, *, now_utc: int | None = None) -> tuple[HungerSnapshot, bool]`。奖励、锚点、`LastFeedUtc` 与最近 32 个 `OperationId` 先在副本中组装，再由一次 `commit_hunger` 原子提交；提交失败不发布内存状态，可用同一 ID 安全重试。
+- 饥饿单位 `0..100000`，满值按真实 UTC 在 120 分钟归零；20%、10%、1% 分界保持不变。重锚点保留整数衰减余数。
+- `main()` 只创建一个 `ApplicationServices`，随后向公共 `PetWindow` 和饥饿模块注入同一个实例。`HungerService` 是饥饿业务 owner；持久化经过 `SharedHungerState` 写入 `services.state` 的 `hunger` 字段，不另建文件或存储器。
+- `hunger` 内部记录 `StateVersion`、`HungerAnchorUnits`、`HungerAnchorUtc`、`HungerDecayRemainder`、`FirstLaunchUtc`、`LastFeedUtc`、`AppliedOperationIds`。同次提交更新公共 `hunger_anchor_utc_seconds` 和 `recent_operation_ids`，保留最新窗口、待处理事务等其他字段。
+- 奖励接口仍为 `HungerService.apply_reward(operation_id, units) -> (snapshot, applied)`。喂食模块必须注入同一个服务；不能绕过 owner 直接改锚点。写入成功才更新内存，重复 ID 不加奖，失败可重试。
+- 公共基础来自 `f617765b1aeb1be9cf9d73ce1dd04f5f4e426421`；逐帧活动与菜单优先级修复最终来自 `6af84461332787ee6eb16ffe945a56083bbd1d89`（包括 e361579 的活动播放修复）。`docs/hunger-foundation-provenance.json` 保存逐文件真实 Git blob 与 SHA-256，构建前逐项核验。
+- 嘴部与眼泪表现使用恢复任务产生的真实 RGBA 图形帧。普通/严重饥饿分别使用 `NORMAL_HUNGER_ANIMATION` / `SEVERE_HUNGER_ANIMATION`，由公共窗口、通道与逐帧播放器播放。程序绘制嘴形的旧路径不接入此入口。
+- 极度饥饿表情只在空闲时显示；拖放期待、右键菜单和喂食抢占后隐藏。Critical 不允许身体/舔手动作，继续保留喂食、菜单和退出权限。
+- 退出先保存饥饿 checkpoint，再让公共基础关闭 worker/OLE 与保存最新共享状态。公共基础忽略旧启动快照，防止覆盖已经提交的奖励或事务。
+- 构建只运行本次必需的来源核验、隔离临时状态演练和公共逐帧播放检查，不运行旧整套测试。Windows EXE 构建成功仍不等于素材视觉验收通过。

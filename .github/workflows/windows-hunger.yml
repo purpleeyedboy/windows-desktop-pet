@@ -21,19 +21,59 @@ jobs:
       - run: python -m pip install . "PyInstaller>=6,<7"
       - run: .\build_hunger.ps1
         shell: pwsh
+      - name: Verify isolated candidate startup survives seven seconds
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP ("hunger-startup-" + [guid]::NewGuid().ToString("N"))
+          $previousLocal = $env:LOCALAPPDATA
+          $previousRoaming = $env:APPDATA
+          $candidateProcess = $null
+          $candidateChildren = @()
+          try {
+            New-Item -ItemType Directory -Path $testRoot | Out-Null
+            $env:LOCALAPPDATA = Join-Path $testRoot "Local"
+            $env:APPDATA = Join-Path $testRoot "Roaming"
+            $candidatePath = (Resolve-Path "dist-hunger/桌面宠物_饥饿真实帧与公共基础接入.exe").Path
+            $candidateProcess = Start-Process -FilePath $candidatePath -PassThru
+            Start-Sleep -Seconds 7
+            $candidateProcess.Refresh()
+            $candidateChildren = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($candidateProcess.Id)" | ForEach-Object {
+              Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+            })
+            if ($candidateProcess.HasExited) { throw "Candidate exited during startup: $($candidateProcess.ExitCode)" }
+            $titles = @(@($candidateProcess) + $candidateChildren | ForEach-Object { $_.Refresh(); $_.MainWindowTitle })
+            if (@($titles | Where-Object { $_ -like '*无法启动*' -or $_ -like '*Fatal error*' }).Count) {
+              throw "Candidate displayed a startup failure window: $($titles -join ', ')"
+            }
+            if (-not @($titles | Where-Object { $_ -like '桌面宠物 V2.1-HUNGER*' }).Count) {
+              throw "Candidate did not display its identified pet window: $($titles -join ', ')"
+            }
+            "Isolated candidate startup survived seven seconds; this is not visual acceptance." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } finally {
+            foreach ($child in $candidateChildren) {
+              if (-not $child.HasExited) { Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue }
+            }
+            if ($null -ne $candidateProcess -and -not $candidateProcess.HasExited) {
+              Stop-Process -Id $candidateProcess.Id -Force
+              $candidateProcess.WaitForExit(5000) | Out-Null
+            }
+            $env:LOCALAPPDATA = $previousLocal
+            $env:APPDATA = $previousRoaming
+            if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
+          }
       - name: Verify unique EXE, size, and SHA-256
         shell: pwsh
         run: |
           $exes = @(Get-ChildItem -LiteralPath dist-hunger -Filter *.exe -File)
           if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
-          if ($exes[0].Name -ne '桌面宠物_修复饥饿衰减与张嘴流泪.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          if ($exes[0].Name -ne '桌面宠物_饥饿真实帧与公共基础接入.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
-          "UNTESTED candidate; shared foundation integrated; waiting for user Windows validation." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Candidate: verified foundation integration; pending user Windows visual acceptance." | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Size: $($exes[0].Length) bytes; SHA-256: $($hash.Hash)" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-v2-1-hunger-REPAIR-UNTESTED
-          path: dist-hunger/桌面宠物_修复饥饿衰减与张嘴流泪.exe
+          name: desktop-pet-v2-1-hunger-real-frames-candidate
+          path: dist-hunger/桌面宠物_饥饿真实帧与公共基础接入.exe
           retention-days: 7
           if-no-files-found: error

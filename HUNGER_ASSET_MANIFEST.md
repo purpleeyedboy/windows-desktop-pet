@@ -5,33 +5,21 @@
 - `assets/rig/v1/source/eye-neutral-v1/{authoring.json,body-backplate.png,eye-left-mask.png,eye-left.png,eye-right-mask.png,eye-right.png,head-cutout.png,underlay.png}` packaged at `assets/rig/v1/runtime/eye-neutral-v1`.
 - Existing `assets/keyframes`, `assets/bubble`, `assets/fonts`, and `assets/dialogue` trees.
 
-## Required authored local-frame asset set
+## New runtime-only local layers (no binary asset files)
 
-- Runtime requires `assets/hunger/v1/manifest.json` plus its listed transparent
-  PNG local frames for `hungry`, `severe`, and `critical` sequences.
-- Every decoded frame must use the approved 512×768 canvas and bottom-center
-  `[256,768]` anchor and provide an explicit
-  `duration_ms`; the loader rejects missing, empty, or wrong-sized frames.
-- Runtime placement is the rig's explicit no-scale transform: the authored
-  512×768 frame is placed at `[64,0]` inside the 640×768 padded head-follow
-  canvas. No 512/640/672 width is treated as interchangeable.
-- Full frames replace the display during the expression so old and new mouths
-  cannot overlap. Interruption returns to the current live approved pose and
-  never transforms a prior output frame.
+- Mouth interior: deterministic RGBA ellipse anchored below the current-pose eye midpoint.
+- Tongue: deterministic lower-mouth RGBA ellipse.
+- Tears: two deterministic RGBA drop layers anchored below current-pose eye boxes.
+- Layers are recreated from the current approved compositor frame on every presentation frame; no accumulated transform or source-byte mutation occurs.
 
-The prior program-drawn ellipse/polygon mouth, tongue, and tear substitute has
-been removed from the runtime. The required authored frames are not present in
-this commit because this execution environment has no image-generation tool;
-the build script now refuses to package until validated frames are supplied.
+These program-drawn layers remain a functional fallback, not accepted final
+art.  The replaceable layer/anchor contract is documented in
+`docs/hunger-local-art-contract.md`; no new binary asset is included here.
 
 ## Call chain
 
 `run_desktop_pet.py` → `desktop_pet.main.main` → PR5 `create_application_services` → shared UTC/StateStore/ActivityCoordinator → `HungerService.snapshot` → `HungerRuntime._tick` → coordinator token/version validation → `PetWindow.present_hunger` → `compose_hunger_effect` → `LayeredWindowRenderer.render`.
 
-## Current integration status
+## Current integration gate
 
-The runnable entry point creates one `ApplicationServices`, adapts its one
-`AtomicJsonStore` through `SharedHungerStatePort`, and uses its `RuntimeContext`
-and `ActivityCoordinator`. The source handoff identity is recorded as
-`e178f371bd2da1c0b4e892609acfdf79bfcab450`; this records provenance and does
-not claim that commit as a Git ancestor of this branch.
+`foundation_commit=PENDING_PR5`; `build_hunger.ps1` intentionally refuses packaging until the approved PR5 foundation module exists and the same foundation commit is recorded. This prevents an old-cat or parallel-state candidate from being published as complete.

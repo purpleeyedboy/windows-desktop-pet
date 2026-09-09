@@ -10,13 +10,15 @@ EYE_FILES = (
     "head-cutout.png", "underlay.png",
 )
 datas = [
+    (str(ROOT / "assets/hunger/v1"), "assets/hunger/v1"),
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
     (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
-    (str(ROOT / "assets" / "hunger" / "v1"), "assets/hunger/v1"),
     (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
+    (str(ROOT / "build_metadata.json"), "."),
     (str(ROOT / "build_identity.json"), "."),
+    (str(ROOT / "docs/hunger-foundation-provenance.json"), "docs"),
 ]
 datas.extend((str(EYE_SOURCE / name), EYE_RUNTIME) for name in EYE_FILES)
 
@@ -30,7 +32,7 @@ a = Analysis(
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name="桌面宠物_修复饥饿衰减与张嘴流泪", version=str(ROOT / "version_info_hunger.txt"),
+    name="桌面宠物_饥饿真实帧与公共基础接入", version=str(ROOT / "version_info_hunger.txt"),
     debug=False, bootloader_ignore_signals=False, strip=False, upx=True,
     upx_exclude=[], runtime_tmpdir=None, console=False,
     disable_windowed_traceback=False, argv_emulation=False, target_arch=None,
