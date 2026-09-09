@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import base64
 import json
+from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageDraw
+from desktop_pet.groom_import import extract_sheet_subject, opaque_subject_box
 
 from tools.import_groom_frames import (
     ART_SIZE,
@@ -69,3 +71,23 @@ def test_each_action_uses_one_grounded_primary_subject_without_neighbor_feet(tmp
         assert box is not None
         assert box[3] >= 733, f"frame {index:02d} primary subject is not grounded: {box}"
         assert box[3] - box[1] >= 515, f"frame {index:02d} was shrunk by cell-edge debris: {box}"
+        assert opaque_subject_box(frame)[3] == opaque_subject_box(frames[0])[3]
+    # The approved fifth pose has an extended ear silhouette (337 source pixels
+    # versus 329 in the default). It must retain that difference at a common
+    # scale, rather than being independently squeezed to the default's height.
+    default_box = opaque_subject_box(frames[0])
+    raised_box = opaque_subject_box(frames[4])
+    default_height = default_box[3] - default_box[1]
+    raised_height = raised_box[3] - raised_box[1]
+    assert abs(raised_height / default_height - 337 / 329) < 0.004
+
+
+def test_approved_atlas_subject_crossing_grid_line_keeps_ear_and_hindquarters() -> None:
+    encoded = (ROOT / "assets/groom/v2.1/source/groom-left-approved.png.b64").read_bytes()
+    sheet = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
+    fifth = extract_sheet_subject(sheet, 4)
+    box = opaque_subject_box(fifth)
+    # Measured against the complete approved sheet: x=96..363, y=359..695.
+    # A hard crop at x/y=362 loses both the right flank and the ear tip.
+    assert (box[2] - box[0], box[3] - box[1]) == (268, 337)
+    assert sum(value >= 128 for value in fifth.getchannel("A").getdata()) == 51923

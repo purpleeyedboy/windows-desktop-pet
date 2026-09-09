@@ -13,6 +13,9 @@ from PIL import Image, ImageFilter
 
 SHEET_SIZE = (1448, 1086)
 GRID = (4, 3)
+# The approved atlas is arranged visually, not clipped to mathematical cells:
+# some ear tips and hindquarters cross a cell boundary by up to three pixels.
+CELL_BLEED = 8
 ART_SIZE = (512, 768)
 RUNTIME_SIZE = (672, 768)
 RUNTIME_OFFSET = (80, 0)
@@ -141,6 +144,34 @@ def isolate_primary_subject(cell: Image.Image) -> Image.Image:
     return clean.crop(box)
 
 
+def extract_sheet_subject(sheet: Image.Image, index: int) -> Image.Image:
+    """Keep the complete sprite, including approved pixels across grid lines."""
+    if sheet.size != SHEET_SIZE or not 0 <= index < GRID[0] * GRID[1]:
+        raise ValueError("invalid approved grooming sheet or frame index")
+    width, height = sheet.size
+    cell_width, cell_height = width // GRID[0], height // GRID[1]
+    column, row = index % GRID[0], index // GRID[0]
+    cell = sheet.crop((
+        max(0, column * cell_width - CELL_BLEED),
+        max(0, row * cell_height - CELL_BLEED),
+        min(width, (column + 1) * cell_width + CELL_BLEED),
+        min(height, (row + 1) * cell_height + CELL_BLEED),
+    ))
+    largest, size = _largest_component(cell.getchannel("A"))
+    if not largest:
+        raise ValueError(f"approved grooming cell {index} is empty")
+    if any(x in (0, size[0] - 1) or y in (0, size[1] - 1) for x, y in largest):
+        raise ValueError(f"approved grooming cell {index} clips its primary subject")
+    return isolate_primary_subject(cell)
+
+
+def opaque_subject_box(image: Image.Image) -> tuple[int, int, int, int]:
+    box = image.getchannel("A").point(lambda value: 255 if value >= 128 else 0).getbbox()
+    if box is None:
+        raise ValueError("grooming subject has no opaque pixels")
+    return box
+
+
 def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Image, ...]:
     manifest_path = Path(manifest_path)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -158,10 +189,12 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
     if sheet.size != SHEET_SIZE:
         raise ValueError("approved grooming source must be 1448x1086")
     canonical_image = Image.open(canonical).convert("RGBA")
-    canonical_box = canonical_image.getchannel("A").getbbox()
-    assert canonical_box is not None
-    cell_width = SHEET_SIZE[0] // GRID[0]
-    cell_height = SHEET_SIZE[1] // GRID[1]
+    canonical_box = opaque_subject_box(canonical_image)
+    subjects = tuple(extract_sheet_subject(sheet, index) for index in range(12))
+    reference_box = opaque_subject_box(subjects[0])
+    # Use one scale for the entire action. Per-frame bbox normalization changes
+    # body size when ears or a lifted paw change a silhouette's extent.
+    scale = (canonical_box[3] - canonical_box[1]) / (reference_box[3] - reference_box[1])
     frames: list[Image.Image] = []
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -169,21 +202,15 @@ def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Im
         if index in (0, 11):
             art = canonical_image.copy()
         else:
-            column, row = index % GRID[0], index // GRID[0]
-            cell = sheet.crop((
-                column * cell_width,
-                row * cell_height,
-                (column + 1) * cell_width,
-                (row + 1) * cell_height,
-            ))
-            subject = isolate_primary_subject(cell)
-            target_height = canonical_box[3] - canonical_box[1]
-            scale = target_height / subject.height
-            size = (max(1, round(subject.width * scale)), target_height)
+            subject = subjects[index]
+            size = (max(1, round(subject.width * scale)), max(1, round(subject.height * scale)))
             subject = subject.resize(size, Image.Resampling.LANCZOS)
+            subject_box = opaque_subject_box(subject)
             art = Image.new("RGBA", ART_SIZE)
-            x = round((canonical_box[0] + canonical_box[2] - size[0]) / 2)
-            y = canonical_box[3] - size[1]
+            x = round((canonical_box[0] + canonical_box[2] - subject_box[0] - subject_box[2]) / 2)
+            # Anchor opaque feet, not the transparent crop padding or resampling
+            # fringe, to the default pose's ground line.
+            y = canonical_box[3] - subject_box[3]
             art.alpha_composite(subject, (x, y))
         runtime = Image.new("RGBA", RUNTIME_SIZE)
         runtime.alpha_composite(art, RUNTIME_OFFSET)
