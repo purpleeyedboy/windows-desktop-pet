@@ -101,6 +101,16 @@ window.register_graphic_clip("feature.action", frames, sequence)
 window.request_graphic_clip("feature.action", Activity.BODY_ACTION)
 ```
 
+Graphic playback retains the feature's real activity: `BODY_ACTION`, `GROOM`,
+`NORMAL_HUNGER_ANIMATION`, `SEVERE_HUNGER_ANIMATION`, or
+`FEED_ANIMATION`. Do not relabel feeding or grooming as `BODY_ACTION` to get a
+clip to play. Transaction processing/review and shutdown are not graphic
+activities. `DRAG_PREVIEW` also stays outside this body player because it must
+retain live eye following instead of pausing for a full-frame clip. A current
+activity token must match the clip name at playback and
+completion; stale completion cannot alter a replacement clip. Custom clips
+explicitly restore the accepted neutral frame before eye following resumes.
+
 `AnimationController` is the actual window player and schedules every displayed
 frame with that frame's `duration_ms`. Its finite timeline expands only the
 declared loop segment. The existing runtime activity token/playback ID guards,

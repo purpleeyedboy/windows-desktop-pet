@@ -43,6 +43,13 @@ TILT_MENU_ITEMS = (
     ("歪头：向右", "right"),
     ("歪头：左到右", "left_arc_right"),
 )
+GRAPHIC_ACTIVITIES = frozenset({
+    Activity.BODY_ACTION,
+    Activity.GROOM,
+    Activity.NORMAL_HUNGER_ANIMATION,
+    Activity.SEVERE_HUNGER_ANIMATION,
+    Activity.FEED_ANIMATION,
+})
 CLICK_THRESHOLD = 8
 MONITOR_DEFAULTTONEAREST = 2
 
@@ -480,8 +487,11 @@ class PetWindow:
 
     def _consume_graphic_clip(self, event: RuntimeEvent) -> None:
         name = str(event.payload["name"])
+        activity = Activity(event.payload["activity"])
+        if name not in self.frames or activity not in GRAPHIC_ACTIVITIES:
+            raise ValueError("graphic clip requires a registered clip and graphic activity")
         token = self.services.runtime.coordinator.request_activity(
-            Activity(event.payload["activity"]),
+            activity,
             animation_id=name,
         )
         if token is None:
@@ -534,6 +544,8 @@ class PetWindow:
     def request_graphic_clip(self, name: str, activity: Activity) -> None:
         if name not in self.frames:
             raise ValueError("graphic clip is not registered")
+        if activity not in GRAPHIC_ACTIVITIES:
+            raise ValueError("activity does not own graphic playback")
         self._post_and_drain("input.graphic-clip", name=name, activity=activity.value)
 
     def register_local_graphic_clip(
@@ -1120,12 +1132,17 @@ class PetWindow:
         )
 
     def _animation_finished(self, action: str, playback_id: str) -> None:
-        self._active_animation_action = None
         token = self._activity_token
-        if self.services is not None and token is not None and token.cancellation_id == playback_id:
+        if self.services is not None:
+            if token is None or token.cancellation_id != playback_id or token.animation_id != action:
+                return
             completed = self.services.animation.complete_current("body", action)
-            if completed == token:
-                self._activity_token = None
+            if completed != token:
+                return
+            self._activity_token = None
+        self._active_animation_action = None
+        if not self._closed and action not in ACTIONS and isinstance(self._neutral_center_frame, Image.Image):
+            self._apply_image(self._neutral_center_frame, self._anchor())
         if self._closed or self._legacy_fallback or self.eye_session is None:
             return
         if action in ACTIONS:
@@ -1136,7 +1153,7 @@ class PetWindow:
     def _play_action(self, action: str) -> bool:
         if self.services is not None:
             token = self.services.runtime.coordinator.current_token
-            if token is None or token.activity is not Activity.BODY_ACTION or token.animation_id != action:
+            if token is None or token.activity not in GRAPHIC_ACTIVITIES or token.animation_id != action:
                 return False
         try:
             token = self.services.runtime.coordinator.current_token if self.services is not None else None
