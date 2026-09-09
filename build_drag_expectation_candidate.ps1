@@ -16,7 +16,7 @@ $Python = if (Test-Path -LiteralPath $VirtualEnvPython) { $VirtualEnvPython } el
 $DistDirectory = Join-Path $RepositoryRoot "dist-drag-expectation-candidate"
 $WorkDirectory = Join-Path $RepositoryRoot "build-drag-expectation-candidate"
 $MetadataDirectory = Join-Path $RepositoryRoot "build-drag-expectation-candidate-metadata"
-$CandidateName = "桌面宠物_文件拖动期待反馈修复.exe"
+$CandidateName = "桌面宠物_期待逐帧与公共基础接入.exe"
 $MaxCandidateBytes = 52428800
 
 function Get-ValidatedChildPath([string]$ChildPath) {
@@ -81,7 +81,7 @@ try {
     Clear-CandidateOutputs
 
     New-Item -ItemType Directory -Path $MetadataDirectory | Out-Null
-    $GitShortHash = (& git rev-parse --short HEAD).Trim()
+    $GitShortHash = if ($env:SOURCE_HEAD_SHA) { $env:SOURCE_HEAD_SHA.Substring(0, 7) } else { (& git rev-parse --short HEAD).Trim() }
     if ($LASTEXITCODE -ne 0 -or [String]::IsNullOrWhiteSpace($GitShortHash)) {
         throw "Failed to resolve the candidate Git commit."
     }
@@ -106,6 +106,12 @@ try {
     $env:DESKTOP_PET_BUILD_INFO = $BuildInfoPath
     $env:DESKTOP_PET_VERSION_INFO = $VersionInfoPath
 
+    & $Python tools/build_expectation_assets.py
+    if ($LASTEXITCODE -ne 0) { throw "Expectation asset reconstruction failed." }
+    & $Python tools/verify_drag_runtime.py
+    if ($LASTEXITCODE -ne 0) { throw "Shared expectation runtime verification failed." }
+    & $Python tools/verify_graphic_animation_contract.py
+    if ($LASTEXITCODE -ne 0) { throw "Graphic playback verification failed." }
     & $Python -m PyInstaller --noconfirm --distpath dist-drag-expectation-candidate --workpath build-drag-expectation-candidate desktop_pet_drag_expectation.spec
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE." }
 

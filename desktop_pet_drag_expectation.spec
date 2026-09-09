@@ -21,6 +21,7 @@ EYE_FILES = (
 
 datas = [
     (str(BUILD_INFO), "."),
+    (str(ROOT / "assets" / "expectation" / "runtime"), "assets/expectation/runtime"),
     (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
     (str(ROOT / "assets" / "bubble"), "assets/bubble"),
     (str(ROOT / "assets" / "fonts"), "assets/fonts"),
@@ -49,7 +50,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_文件拖动期待反馈修复',
+    name='桌面宠物_期待逐帧与公共基础接入',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -1,19 +1,24 @@
 {
-  "version": "2.1-drag-repair-dev.1",
-  "date": "2026-09-06",
+  "version": "2.1-expect-frames.1",
+  "date": "2026-09-09",
   "git_short_hash": "BUILD_TIME_REQUIRED",
-  "foundation_commit": "NOT_INTEGRATED",
+  "foundation_commit": "f617765+6af8446",
   "baseline": "BASE-001 / V2.1",
   "enabled_features": [
-    "approved-v2.1-baseline"
+    "approved-v2.1-baseline",
+    "common-foundation",
+    "expectation-5-real-frames",
+    "shared-hunger-preview-gate"
   ],
-  "incomplete_features": ["file-drag-expectation-feedback-foundation-wiring"],
+  "incomplete_features": [
+    "feed-business-handoff-consumer-in-independent-candidate"
+  ],
   "test_build": true,
   "debug_menu": true,
   "documentation_baseline": "BASELINE_V2.1.md",
   "file_operations": "none",
-  "hunger_changes": "none",
+  "hunger_changes": "shared clock/persistence only; no reward",
   "visual_acceptance": "pending",
-  "automated_test_status": "not-run",
-  "candidate_status": "blocked-awaiting-pr5-foundation-integration"
+  "automated_test_status": "focused-shared-runtime-passed",
+  "candidate_status": "pending-windows-build-and-visual-review"
 }

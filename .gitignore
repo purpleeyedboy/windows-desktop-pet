@@ -7,3 +7,4 @@ build/
 dist/
 assets/generated/work/
 qa/drag-expectation/*.png
+assets/expectation/runtime/
