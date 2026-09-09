@@ -94,6 +94,43 @@ def verify_feature_activity_playback() -> None:
         else:
             raise RuntimeError(f"non-graphic activity {activity.value} was accepted as animation")
 
+    runtime.bind("input.context_menu", window._consume_context_menu)
+    menu_calls = []
+    recovered = []
+    window.menu = SimpleNamespace(
+        tk_popup=lambda x, y: menu_calls.append((x, y, runtime.snapshot().activity)),
+        grab_release=lambda: menu_calls.append("released"),
+    )
+    for activity in (
+        Activity.FEED_PROCESSING, Activity.TRANSACTION_REVIEW,
+        Activity.FEED_CONFIRM, Activity.SHUTTING_DOWN,
+    ):
+        token = runtime.coordinator.request_activity(activity)
+        window._activity_token = token
+        runtime.coordinator.attach_recovery(token, lambda: recovered.append("cancelled"))
+        snapshot = runtime.snapshot()
+        window._post_and_drain("input.context_menu", x=10, y=20)
+        if (
+            runtime.coordinator.current_token != token
+            or runtime.snapshot() != snapshot
+            or window._activity_token != token
+            or recovered or menu_calls
+        ):
+            raise RuntimeError(f"context menu displaced protected {activity.value} activity")
+        runtime.coordinator.cancel_and_recover(token)
+        recovered.clear()
+
+    window.request_graphic_clip("feature.test", Activity.GROOM)
+    window._post_and_drain("input.context_menu", x=10, y=20)
+    if (
+        menu_calls != [(10, 20, Activity.CONTEXT_MENU_OPEN), "released"]
+        or runtime.snapshot().activity is not Activity.IDLE
+        or runtime.coordinator.current_token is not None
+        or window._activity_token is not None
+        or window.animation.busy or scheduled or shown[-1] is not neutral
+    ):
+        raise RuntimeError("context menu did not recover grooming and complete normally")
+
 
 def main() -> int:
     verify_feature_activity_playback()

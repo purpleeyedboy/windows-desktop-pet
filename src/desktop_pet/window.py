@@ -635,6 +635,8 @@ class PetWindow:
             self.services.runtime.coordinator.cancel_and_recover(current)
 
     def _consume_context_menu(self, event: RuntimeEvent) -> None:
+        if not self.services.runtime.coordinator.permits(Activity.CONTEXT_MENU_OPEN):
+            return
         current = self.services.runtime.coordinator.current_token
         if current is not None and current.activity is not Activity.CONTEXT_MENU_OPEN:
             if self.animation.busy and self._active_animation_action is not None:
