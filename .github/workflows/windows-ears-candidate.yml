@@ -25,6 +25,9 @@ jobs:
           V21_FOUNDATION_COMMIT: e178f371bd2da1c0b4e892609acfdf79bfcab450
         run: .\build_ears_candidate.ps1
         shell: pwsh
+      - name: Verify isolated Windows candidate startup
+        run: .\tools\smoke_test_ears_candidate.ps1
+        shell: pwsh
       - name: Verify unique EXE, exact name, size and SHA-256
         shell: pwsh
         run: |

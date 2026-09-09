@@ -74,6 +74,8 @@ try {
     if (-not (Test-Path -LiteralPath $RuntimeApi -PathType Leaf)) {
         throw "PR5 docs/v21-runtime-api.md is unavailable; refusing to package without the real API."
     }
+    & $Python tools/verify_ears_runtime_wiring.py
+    if ($LASTEXITCODE -ne 0) { throw "Ear raster/runtime verification failed; refusing to package." }
     $basePrefix = & $Python -c "import sys; print(sys.base_prefix)"
     if ($LASTEXITCODE -ne 0) { throw "Failed to resolve Python base prefix; exit code $LASTEXITCODE." }
     $basePrefix = $basePrefix.Trim()

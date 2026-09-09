@@ -536,8 +536,20 @@ class ContinuousHeadNeckCompositor:
             else None
         )
         self._compose_base = compose
+        self._ear_keyframe: tuple[str, int] | None = None
         compose_blink = getattr(base_compositor, "compose_blink", None)
         self._compose_blink = compose_blink if callable(compose_blink) else None
+
+    def set_ear_keyframe(self, side: str | None, frame_index: int | None) -> None:
+        """Select an authored crop in neutral coordinates, before head movement."""
+        if side is None or frame_index is None:
+            self._ear_keyframe = None
+            return
+        from .ear_interaction import EAR_KEYFRAMES
+
+        if side not in EAR_KEYFRAMES or not 0 <= frame_index < len(EAR_KEYFRAMES[side].frames):
+            raise ValueError("invalid ear keyframe")
+        self._ear_keyframe = (side, frame_index)
 
     def hit_test_eye(self, point: tuple[float, float]) -> bool:
         """Test a padded point against eye boxes in rotating head coordinates."""
@@ -717,6 +729,10 @@ class ContinuousHeadNeckCompositor:
             raise ValueError("base compositor frame must use RGBA mode")
         if source.size != _CANVAS_SIZE:
             raise ValueError("base compositor frame must be 512x768")
+        if self._ear_keyframe is not None:
+            from .ear_interaction import apply_ear_keyframe
+
+            source = apply_ear_keyframe(source, *self._ear_keyframe)
         if pose.x == 0.0 and pose.y == 0.0:
             deformed = source
         else:
@@ -750,6 +766,17 @@ class ContinuousHeadNeckCompositor:
         assert self._padded_body_backplate is not None
         if self._uses_exact_head_alpha:
             alpha = self._head_layer_mask
+            if self._ear_keyframe is not None:
+                from .ear_interaction import EAR_KEYFRAMES
+
+                side, index = self._ear_keyframe
+                sequence = EAR_KEYFRAMES[side]
+                frame = sequence.frames[index]
+                if frame.frame_id not in {"neutral-start", "neutral-end"}:
+                    # Replace the original ear alpha as well, otherwise rotated
+                    # head poses clip the moved ear and retain its old outline.
+                    alpha = alpha.copy()
+                    alpha.paste(frame.image.getchannel("A"), sequence.roi[:2], frame.change_mask)
         else:
             alpha = ImageChops.multiply(
                 deformed.getchannel("A"),

@@ -200,6 +200,17 @@ class RuntimeEyeSession:
     def action_failure(self) -> tuple[str, ActionFailure] | None:
         return self._action_failure
 
+    def refresh_current_pose(self) -> bool:
+        """Redraw a changed local graphic without moving eyes or resetting tilt."""
+        if self._terminal or self._state != "following":
+            return False
+        return self._try_display_pose(
+            self._last_displayed_pose or (0.0, 0.0),
+            self._lifecycle_epoch,
+            "following",
+            self._last_displayed_head_pose or (0.0, 0.0),
+        )
+
     def start(self) -> SessionResult:
         if self._state == "disabled":
             return SessionResult.FALLBACK

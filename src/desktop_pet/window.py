@@ -21,9 +21,8 @@ from .ear_interaction import (
     EAR_ASSETS,
     EarFeatureAdapter,
     EarHitMasks,
-    EarPose,
+    EarRasterPose,
     EarSide,
-    render_ear_pose,
 )
 from .eye_follow import CursorProvider
 from .foundation.platform import Point, Rect as FoundationRect
@@ -196,6 +195,10 @@ class _CachedCenterCompositor:
         compose_head_blink = getattr(self._compositor, "compose_head_blink")
         return compose_head_blink(eye_x, eye_y, head_pose, closure)
 
+    def set_ear_keyframe(self, side: str | None, frame_index: int | None) -> None:
+        self._compositor.set_ear_keyframe(side, frame_index)
+        self.center_frame = None
+
     def hit_test_eye(self, point: tuple[float, float]) -> bool:
         hit_test = getattr(self._compositor, "hit_test_eye", None)
         if callable(hit_test):
@@ -316,9 +319,10 @@ class PetWindow:
         self._ear_press_candidate: EarSide | None = None
         self._ear_press_dragged = False
         self._latest_composed_frame: Image.Image | None = None
-        self._ear_pose = EarPose()
+        self._ear_pose = EarRasterPose()
         self._ear_context: ActivityToken | object | None = None
         self._ear_point_mapper_callback = None
+        self._ear_compositor = None
         self._clock = clock
         self._closed = False
         self._legacy_fallback = bool(legacy_mode)
@@ -390,6 +394,7 @@ class PetWindow:
                 self._eye_source_size = tuple(cached_compositor.source_size)
                 self._eye_hit_test = cached_compositor.hit_test_eye
                 self._ear_point_mapper_callback = cached_compositor.map_head_point
+                self._ear_compositor = cached_compositor
                 midpoint = tuple(int(round(value)) for value in cached_compositor.eye_midpoint)
                 self._region_anchors = {"eye-center": midpoint}
                 for index, box in enumerate(self._eye_interaction_boxes, start=1):
@@ -595,10 +600,16 @@ class PetWindow:
         return True
 
     def _recover_ear_channel(self) -> bool:
-        recovered = self._ear_adapter.cancel_active()
-        self._ear_pose = EarPose()
+        self._ear_adapter.cancel_active()
+        self._ear_pose = EarRasterPose()
         self._ear_context = None
-        return recovered
+        # A timeout may arrive after the adapter has become inactive. Clear the
+        # compositor independently so a failed/old action cannot retain a crop.
+        if self._ear_compositor is not None:
+            self._ear_compositor.set_ear_keyframe(None, None)
+            if self.eye_session is not None:
+                self.eye_session.refresh_current_pose()
+        return True
 
     def _consume_drag_enter(self, _event: RuntimeEvent) -> None:
         self.services.runtime.coordinator.request_activity(Activity.DRAG_PREVIEW)
@@ -1155,20 +1166,7 @@ class PetWindow:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
         self._latest_composed_frame = frame
-        displayed = frame
-        if self._ear_adapter.active and self._ear_context is not None:
-            animation_id = getattr(
-                self._ear_context,
-                "animation_id",
-                getattr(self._ear_context, "action_id", ""),
-            )
-            displayed = render_ear_pose(
-                frame,
-                animation_id.rsplit(":", 1)[-1],
-                self._ear_pose,
-                map_head_point=self._ear_point_mapper(),
-            )
-        self._apply_image(displayed, self._anchor())
+        self._apply_image(frame, self._anchor())
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
         if self._constructing and not self._window_shown:
@@ -1210,18 +1208,13 @@ class PetWindow:
 
         return self.root.after(delay_ms, guarded_callback)
 
-    def _display_ear_feedback(self, side: EarSide, pose: EarPose) -> None:
+    def _display_ear_feedback(self, side: EarSide, pose: EarRasterPose) -> None:
         self._ear_pose = pose
-        frame = self._latest_composed_frame
-        if frame is None or self._closed or not self._rendering_available:
+        if self._closed or not self._rendering_available or self._ear_compositor is None:
             return
-        displayed = render_ear_pose(
-            frame,
-            side,
-            pose,
-            map_head_point=self._ear_point_mapper(),
-        )
-        self._apply_image(displayed, self._anchor())
+        self._ear_compositor.set_ear_keyframe(side, pose.frame_index)
+        if self.eye_session is not None:
+            self.eye_session.refresh_current_pose()
 
     def _ear_point_mapper(self):
         return self._ear_point_mapper_callback
@@ -1251,8 +1244,12 @@ class PetWindow:
     def _ear_recovered(self, context: object, safe: bool) -> None:
         if context != self._ear_context or not safe:
             return
-        self._ear_pose = EarPose()
+        self._ear_pose = EarRasterPose()
         self._ear_context = None
+        if self._ear_compositor is not None:
+            self._ear_compositor.set_ear_keyframe(None, None)
+            if self.eye_session is not None:
+                self.eye_session.refresh_current_pose()
         if self.services is not None and isinstance(context, ActivityToken):
             self.services.animation.complete(
                 "ears", context, context.animation_id or ""

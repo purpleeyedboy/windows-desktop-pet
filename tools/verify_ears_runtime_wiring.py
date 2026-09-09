@@ -3,13 +3,22 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-
-from desktop_pet.ear_interaction import EAR_MOTION, EarFeatureAdapter, EarPose, sample_ear_pose
-from desktop_pet.foundation.animation import AnimationChannels
-from desktop_pet.foundation.runtime import Activity, Health, RuntimeContext
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
+from desktop_pet.ear_interaction import EAR_KEYFRAMES, EAR_MOTION, EarFeatureAdapter, EarRasterPose
+from desktop_pet.assets import load_frames, load_head_neck_compositor
+from desktop_pet.eye_follow import CursorPoint
+from desktop_pet.eye_runtime import RuntimeEyeSession, SessionResult
+from desktop_pet.foundation.platform import Rect
+from desktop_pet.foundation.animation import AnimationChannels
+from desktop_pet.foundation.runtime import Activity, Health, RuntimeContext
+from desktop_pet.head_neck_deformation import HeadPose
+from desktop_pet.idle_head_tilt import IdleTiltPose
+from desktop_pet.model import ActionCycle
+from desktop_pet.window import PetWindow, _CachedCenterCompositor
 
 class ManualClock:
     def __init__(self) -> None:
@@ -22,9 +31,11 @@ class ManualClock:
 class ManualScheduler:
     def __init__(self) -> None:
         self.pending: list[object] = []
+        self.history: list[int] = []
 
     def schedule(self, _delay_ms: int, callback) -> object:
         handle = object()
+        self.history.append(_delay_ms)
         self.pending.append((handle, callback))
         return handle
 
@@ -48,18 +59,116 @@ def require_source() -> None:
         'self.services.animation.recover("ears", self._ear_context)',
         'EarHitMasks.from_frame(frame, self._ear_point_mapper())',
         'system_drag_threshold(self.root.winfo_id())',
+        'self._ear_compositor.set_ear_keyframe(side, pose.frame_index)',
+        'self.eye_session.refresh_current_pose()',
     )
     missing = [item for item in required if item not in source]
     if missing:
         raise RuntimeError(f"ear runtime wiring missing: {missing}")
+    ear_source = (ROOT / "src/desktop_pet/ear_interaction.py").read_text(encoding="utf-8")
+    if "Image.Transform.MESH" in ear_source or "render_ear_pose" in source:
+        raise RuntimeError("runtime ear mesh path is still reachable")
+
+
+def require_current_pose_refresh() -> None:
+    """Use the real cache/session with fake cursor and scheduler; no desktop IO."""
+    clock = ManualClock()
+    scheduler = ManualScheduler()
+    compositor = _CachedCenterCompositor(load_head_neck_compositor())
+    rendered = []
+
+    class FixedCursor:
+        def position(self):
+            return CursorPoint(240, 350)
+
+    session = RuntimeEyeSession(
+        compositor=compositor,
+        cursor_provider=FixedCursor(),
+        rect_provider=lambda: Rect(0, 0, 640, 768),
+        display=rendered.append,
+        scheduler=scheduler.schedule,
+        cancel=scheduler.cancel,
+        clock=clock.monotonic,
+        on_disabled=lambda: None,
+        action_cycle=ActionCycle(),
+        physical_frames=load_frames(ROOT / "assets/keyframes"),
+        play_action=lambda _: True,
+        cancel_action=lambda _: True,
+        choose_phrase=lambda _: "",
+        present_phrase=lambda _: None,
+        on_action_failed=lambda *_: None,
+        head_follow=True,
+    )
+    if session.start() is not SessionResult.ACCEPTED:
+        raise RuntimeError("ear verification session could not start")
+    for pose, head, tilt in (((0.0, 0.0), (0.0, 0.0), 0.0), ((1.5, -1.0), (0.2, -0.1), 18.0)):
+        session._idle_tilt_pose = IdleTiltPose(tilt, 0.0)
+        session._try_display_pose(pose, session._lifecycle_epoch, "following", head)
+        neutral = rendered[-1].tobytes()
+        compositor.set_ear_keyframe("left", 8)
+        if not session.refresh_current_pose() or rendered[-1].tobytes() == neutral:
+            raise RuntimeError("ear frame hidden by center cache or refresh failure")
+        if session.last_displayed_pose != pose or session.last_displayed_head_pose != head:
+            raise RuntimeError("ear refresh moved the eye/head pose")
+        compositor.set_ear_keyframe(None, None)
+        if not session.refresh_current_pose() or rendered[-1].tobytes() != neutral:
+            raise RuntimeError("ear cancellation failed exact current-pose recovery")
+    session.stop()
+
+    # Recovery must clear the selected crop even if the timer/adapter already
+    # ended, so an inactive cancel result cannot strand a visible ear pose.
+    compositor.set_ear_keyframe(None, None)
+    neutral = compositor.compose_head(0.0, 0.0, HeadPose(0.0, 0.0)).tobytes()
+    compositor.set_ear_keyframe("left", 8)
+    window = object.__new__(PetWindow)
+    window._ear_adapter = EarFeatureAdapter(scheduler.schedule, scheduler.cancel,
+                                           clock.monotonic, lambda *_: None, lambda *_: None)
+    window._ear_compositor = compositor
+    window._ear_context = object()
+    window._ear_pose = EarRasterPose(8)
+    window.eye_session = session
+    if not window._recover_ear_channel() or window._ear_context is not None:
+        raise RuntimeError("inactive ear recovery retained action ownership")
+    restored = compositor.compose_head(0.0, 0.0, HeadPose(0.0, 0.0)).tobytes()
+    if restored != neutral:
+        raise RuntimeError("inactive ear recovery retained compositor selection")
+
+
+def require_stale_callback_rejected() -> None:
+    scheduler = ManualScheduler()
+    rendered = []
+    adapter = EarFeatureAdapter(scheduler.schedule, scheduler.cancel, lambda: 0.0,
+                                lambda *args: rendered.append(args), lambda *_: None)
+    adapter.start_approved("left", object())
+    stale = scheduler.pending[0][1]
+    adapter.cancel_active()
+    adapter.start_approved("right", object())
+    before = (len(rendered), len(scheduler.pending))
+    stale()
+    if (len(rendered), len(scheduler.pending)) != before:
+        raise RuntimeError("cancelled ear callback advanced a newer action")
+    adapter.cancel_active()
 
 
 def main() -> int:
     require_source()
+    require_current_pose_refresh()
+    require_stale_callback_rejected()
+    compositor = load_head_neck_compositor()
+    for degrees in (0.0, 18.0, -18.0):
+        pose = HeadPose(0.0, 0.0, degrees, 0.0)
+        compositor.set_ear_keyframe(None, None)
+        neutral = compositor.compose_head(1.5, -1.0, pose)
+        compositor.set_ear_keyframe("left", 8)
+        animated = compositor.compose_head(1.5, -1.0, pose)
+        compositor.set_ear_keyframe("left", 11)
+        restored = compositor.compose_head(1.5, -1.0, pose)
+        if animated.tobytes() == neutral.tobytes() or restored.tobytes() != neutral.tobytes():
+            raise RuntimeError(f"pre-deformation raster composition failed at {degrees} degrees")
     clock = ManualClock()
     runtime = RuntimeContext(clock)
     scheduler = ManualScheduler()
-    rendered: list[tuple[str, EarPose]] = []
+    rendered: list[tuple[str, EarRasterPose]] = []
     channels = AnimationChannels(runtime.coordinator)
     holder = {"token": None}
 
@@ -101,15 +210,22 @@ def main() -> int:
     if holder["token"] != first:
         raise RuntimeError("second ear click restarted the shared lock")
 
-    samples = [sample_ear_pose("left", EAR_MOTION.shake_seconds * i / 12).angle_degrees for i in range(13)]
-    direction_changes = sum((a < b > c) or (a > b < c) for a, b, c in zip(samples, samples[1:], samples[2:]))
-    if direction_changes < 5:
-        raise RuntimeError("three discernible shake cycles are absent")
+    frames = EAR_KEYFRAMES["left"].frames
+    shake_ids = [frame.frame_id for frame in frames[1:7]]
+    if shake_ids != [
+        "shake-1-out", "shake-1-in", "shake-2-out", "shake-2-in",
+        "shake-3-out", "shake-3-in",
+    ] or sum(frame.duration_ms for frame in frames) != 550:
+        raise RuntimeError("authored three-shake/timing sequence is invalid")
+    if frames[8].frame_id != "throw-maximum" or frames[-1].angle_degrees != 0.0:
+        raise RuntimeError("authored throw or exact neutral frame is absent")
 
     while adapter.active:
         clock.now += EAR_MOTION.frame_ms / 1000
         scheduler.step()
-    if runtime.snapshot().activity is not Activity.IDLE or rendered[-1][1] != EarPose():
+    if scheduler.history[:12] != [frame.duration_ms for frame in frames]:
+        raise RuntimeError("adapter did not play the authored per-frame durations")
+    if runtime.snapshot().activity is not Activity.IDLE or rendered[-1][1].frame_index != 11:
         raise RuntimeError("natural completion did not restore exact neutral")
 
     runtime.post("input.ear", source="probe", side="right")
@@ -123,7 +239,7 @@ def main() -> int:
     if token is None:
         raise RuntimeError("ear did not unlock after cooldown")
     higher = runtime.coordinator.request_activity(Activity.CONTEXT_MENU_OPEN)
-    if higher is None or adapter.active or rendered[-1][1] != EarPose():
+    if higher is None or adapter.active or rendered[-1][1] != EarRasterPose():
         raise RuntimeError("high-priority recovery did not cancel to neutral")
     holder["token"] = None
     runtime.coordinator.cancel_and_recover(higher)
