@@ -48,15 +48,15 @@ def test_timing_moves_only_selected_paw_and_cools_down():
     assert c.sample(1.21).state is PawState.IDLE
 
 
-def test_cursor_total_is_14_not_per_frame_and_x_never_changes():
+def test_cursor_total_is_35_not_per_frame_and_x_never_changes():
     cursor, gate = FakeCursor(), FakeGate()
     c = PawPressController(cursor, gate, approval_validator=valid)
     c.start(PawSide.RIGHT, approval(), 0)
     c.sample(.19); c.sample(.20); c.sample(.24); c.sample(.28); c.sample(.359)
     assert cursor.moves
     assert all(p.x == -100 for p in cursor.moves)
-    assert cursor.moves[-1].y == 34
-    assert max(p.y for p in cursor.moves) - 20 == 14
+    assert cursor.moves[-1].y == 55
+    assert max(p.y for p in cursor.moves) - 20 == 35
 
 
 def test_next_paw_action_uses_its_own_cursor_start_after_cooldown():
@@ -68,16 +68,22 @@ def test_next_paw_action_uses_its_own_cursor_start_after_cooldown():
     cursor.moves.clear()
     assert controller.start(PawSide.RIGHT, approval(), 2)
     controller.sample(2.20); controller.sample(2.359)
-    assert cursor.point == PointerPoint(-200, 114)
-    assert all(point.x == -200 and 100 <= point.y <= 114 for point in cursor.moves)
+    assert cursor.point == PointerPoint(-200, 135)
+    assert all(point.x == -200 and 100 <= point.y <= 135 for point in cursor.moves)
 
 
 def test_pointer_height_scales_once_and_clamps_total_distance():
-    for height, expected in ((16, 8), (64, 28), (0, 14)):
+    for height, expected in ((16, 20), (32, 35), (64, 70), (128, 70), (0, 35)):
         cursor, gate = FakeCursor(pointer_height=height), FakeGate()
         c = PawPressController(cursor, gate, approval_validator=valid)
         c.start(PawSide.LEFT, approval(), 0); c.sample(.20); c.sample(.359)
         assert cursor.point.y == 20 + expected
+
+
+def test_packaged_motion_config_uses_new_displacement():
+    from desktop_pet.assets import load_paw_motion_config
+    config = load_paw_motion_config()
+    assert (config.cursor_base_pixels, config.cursor_min_pixels, config.cursor_max_pixels) == (35, 20, 70)
 
 
 def test_user_motion_during_lift_cancels_only_cursor_not_animation():
@@ -133,9 +139,9 @@ def test_recovery_finishes_skipped_press_endpoint_without_accumulating():
     c = PawPressController(cursor, gate, approval_validator=valid)
     c.start(PawSide.RIGHT, approval(), 0)
     c.sample(.20); c.sample(.28)
-    assert cursor.point.y < 34
+    assert cursor.point.y < 55
     c.sample(.40)
-    assert cursor.point.y == 34
+    assert cursor.point.y == 55
     moves = len(cursor.moves)
     c.sample(.50); c.sample(.59)
     assert len(cursor.moves) == moves

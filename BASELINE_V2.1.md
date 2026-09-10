@@ -87,3 +87,9 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 自定义动作完成时先验证活动/版本/取消 ID/动画 ID，再恢复认可默认帧；迟到完成回调不得覆盖新动作，取消和超时同时恢复播放器与活动状态。
 - `verify_graphic_animation_contract.py` 新增真实窗口请求→串行队列→活动通道→逐帧播放器→完成/中断恢复门禁。修复前已复现功能活动被拒和默认帧未恢复；修复后两项现有 non-pytest 门禁通过。Windows 构建即使使用 `-SkipTests` 仍执行这两项轻量门禁，不运行旧 pytest 整套。
 - 此增量仅修公共播放链，不代表六项素材或 Windows EXE 视觉验收通过；Windows 构建与用户实机验收另记。
+# PAWS rework checkpoint 2026-09-10
+
+PR #10 follow-up: pointer displacement is now 2.5x (35 nominal, 20–70 bounds).
+Complete-cat frame import/runtime support has focused automated coverage.
+New art and Windows/user visual acceptance remain pending; existing animation
+art is unchanged. See `qa/v2.1-paws/rework-2026-09-10.md` for evidence and limits.

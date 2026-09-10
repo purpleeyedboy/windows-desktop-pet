@@ -22,7 +22,8 @@ class GeneratedPawFrames:
 
 def load_generated_paw_frames(path: Path, *, source_sha256: str) -> GeneratedPawFrames:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("encoding") != "generated-local-replacement-zlib-base85-v1":
+    full_cat = payload.get("encoding") == "generated-full-cat-zlib-base85-v1"
+    if not full_cat and payload.get("encoding") != "generated-local-replacement-zlib-base85-v1":
         raise ValueError("unsupported generated paw encoding")
     if payload.get("source_size") != [512, 768] or payload.get("source_sha256") != source_sha256:
         raise ValueError("generated paw source identity mismatch")
@@ -32,6 +33,27 @@ def load_generated_paw_frames(path: Path, *, source_sha256: str) -> GeneratedPaw
     layers, masks = {}, {}
     for side in ("left", "right"):
         definition = payload["sides"][side]
+        if full_cat:
+            # Complete images, including transparent pixels, replace the whole
+            # canonical canvas. Never cut/feather generated legs onto old fur.
+            images = []
+            for frame in definition["frames"]:
+                raw = zlib.decompress(base64.b85decode(frame["rgba_zlib_base85"]))
+                if len(raw) != 512 * 768 * 4 or hashlib.sha256(raw).hexdigest() != frame["rgba_sha256"]:
+                    raise ValueError("generated full-cat frame size or hash mismatch")
+                image = Image.frombytes("RGBA", (512, 768), raw)
+                alpha = image.getchannel("A")
+                box = alpha.getbbox()
+                if box is None or alpha.getextrema()[0] != 0:
+                    raise ValueError("full-cat frame requires a nonempty transparent background")
+                if box[0] == 0 or box[1] == 0 or box[2] == 512 or box[3] == 768:
+                    raise ValueError("full-cat frame touches canvas boundary")
+                images.append(image)
+            if any(index is not None and (type(index) is not int or not 0 <= index < len(images)) for index in frame_map):
+                raise ValueError("generated paw timeline references a missing pose")
+            layers[side] = tuple(Image.new("RGBA", (512, 768)) if index is None else images[index] for index in frame_map)
+            masks[side] = tuple(Image.new("L", (512, 768), 0 if index is None else 255) for index in frame_map)
+            continue
         left, top, right, bottom = definition["bbox"]
         if not (0 <= left < right <= 512 and 440 <= top < bottom <= 768):
             raise ValueError("paw patch crosses the locked head or canvas boundary")

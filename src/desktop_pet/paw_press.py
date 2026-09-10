@@ -202,9 +202,11 @@ class PawMotionConfig:
     cooldown_seconds: float = .60
     lift_pixels: float = 6.0
     press_pixels: float = 5.0
-    cursor_base_pixels: int = 14
-    cursor_min_pixels: int = 8
-    cursor_max_pixels: int = 28
+    # 2.5x the previously tested displacement. Scale the complete gesture,
+    # never each tick; monitor/clip bounds and user takeover remain authoritative.
+    cursor_base_pixels: int = 35
+    cursor_min_pixels: int = 20
+    cursor_max_pixels: int = 70
     takeover_tolerance_pixels: int = 4
 
 
