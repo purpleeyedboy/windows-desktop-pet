@@ -75,7 +75,7 @@ def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None
     assert "-SkipTests" not in workflow
     assert "未自动测试" in workflow
     assert 'if ($exes.Count -ne 1)' in workflow
-    assert "桌面宠物_双耳点击反馈_REPAIR-20260906.exe" in workflow
+    assert "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe" in workflow
     assert "Get-FileHash" in workflow
     assert "e178f371bd2da1c0b4e892609acfdf79bfcab450" in workflow
 

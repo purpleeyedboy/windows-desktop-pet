@@ -1,7 +1,7 @@
 """V2.1-EARS local feature adapter; shared coordination is supplied by PR5."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import base64
 from io import BytesIO
 import json
@@ -37,14 +37,14 @@ class EarActionContext:
 
 @dataclass(frozen=True)
 class EarMotionConfig:
-    total_seconds: float = 0.55
+    total_seconds: float = 1.0
     shake_seconds: float = 0.18
     throw_seconds: float = 0.12
     recovery_seconds: float = 0.25
     maximum_throw_degrees: float = 11.0
     shake_degrees: float = 2.8
     rebound_ratio: float = 0.05
-    cooldown_seconds: float = 0.5
+    cooldown_seconds: float = 0.0
     frame_ms: int = 16
 
 EAR_MOTION = EarMotionConfig()
@@ -103,7 +103,27 @@ def load_ear_keyframes(path: Path | None = None) -> dict[EarSide, EarRasterSeque
     return sequences
 
 
-EAR_KEYFRAMES = load_ear_keyframes()
+# Reuse the lossless source poses, but retire the three-shake choreography.
+# Fast recoil (160 ms to peak), then a single slower return. The source JSON
+# remains intact for provenance; these are the authoritative runtime timings.
+_TOUCH_TIMELINE = (
+    ("neutral-start", 20), ("shake-1-out", 60),
+    ("throw-approach", 80), ("throw-maximum", 120),
+    ("throw-approach", 150), ("recover-ease", 200),
+    ("shake-1-out", 200), ("neutral-end", 170),
+)
+
+
+def touch_recoil_sequence(source: EarRasterSequence) -> EarRasterSequence:
+    poses = {frame.frame_id: frame for frame in source.frames}
+    return EarRasterSequence(source.roi, tuple(
+        replace(poses[frame_id], duration_ms=duration)
+        for frame_id, duration in _TOUCH_TIMELINE
+    ))
+
+
+EAR_KEYFRAMES = {side: touch_recoil_sequence(sequence)
+                 for side, sequence in load_ear_keyframes().items()}
 
 
 def apply_ear_keyframe(source: Image.Image, side: EarSide, frame_index: int) -> Image.Image:
@@ -174,14 +194,13 @@ class EarFeatureAdapter:
         self._active: tuple[EarSide, object, float] | None = None
         self._timer = None
         self._frame_index = 0
-        self._cooldown_until = 0.0
 
     @property
     def active(self) -> bool:
         return self._active is not None
 
     def start_approved(self, side: EarSide, context: object) -> bool:
-        if self._active is not None or self._clock() < self._cooldown_until:
+        if self._active is not None:
             return False
         self._active = (side, context, self._clock())
         self._frame_index = 0
@@ -209,7 +228,6 @@ class EarFeatureAdapter:
         if self._frame_index >= len(EAR_KEYFRAMES[side].frames):
             self._active = None
             self._timer = None
-            self._cooldown_until = self._clock() + EAR_MOTION.cooldown_seconds
             self._complete(context, True)
             return
         self._show_current_frame()

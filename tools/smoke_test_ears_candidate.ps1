@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$CandidatePath = "dist-ears-candidate/桌面宠物_双耳点击反馈_REPAIR-20260906.exe")
+param([string]$CandidatePath = "dist-ears-candidate/桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe")
 $ErrorActionPreference = "Stop"
 $candidate = (Resolve-Path -LiteralPath $CandidatePath).Path
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("ears-startup-" + [guid]::NewGuid().ToString("N"))

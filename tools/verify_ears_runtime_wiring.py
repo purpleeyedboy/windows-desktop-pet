@@ -105,7 +105,7 @@ def require_current_pose_refresh() -> None:
         session._idle_tilt_pose = IdleTiltPose(tilt, 0.0)
         session._try_display_pose(pose, session._lifecycle_epoch, "following", head)
         neutral = rendered[-1].tobytes()
-        compositor.set_ear_keyframe("left", 8)
+        compositor.set_ear_keyframe("left", 3)
         if not session.refresh_current_pose() or rendered[-1].tobytes() == neutral:
             raise RuntimeError("ear frame hidden by center cache or refresh failure")
         if session.last_displayed_pose != pose or session.last_displayed_head_pose != head:
@@ -119,7 +119,7 @@ def require_current_pose_refresh() -> None:
     # ended, so an inactive cancel result cannot strand a visible ear pose.
     compositor.set_ear_keyframe(None, None)
     neutral = compositor.compose_head(0.0, 0.0, HeadPose(0.0, 0.0)).tobytes()
-    compositor.set_ear_keyframe("left", 8)
+    compositor.set_ear_keyframe("left", 3)
     window = object.__new__(PetWindow)
     window._ear_adapter = EarFeatureAdapter(scheduler.schedule, scheduler.cancel,
                                            clock.monotonic, lambda *_: None, lambda *_: None)
@@ -159,9 +159,9 @@ def main() -> int:
         pose = HeadPose(0.0, 0.0, degrees, 0.0)
         compositor.set_ear_keyframe(None, None)
         neutral = compositor.compose_head(1.5, -1.0, pose)
-        compositor.set_ear_keyframe("left", 8)
+        compositor.set_ear_keyframe("left", 3)
         animated = compositor.compose_head(1.5, -1.0, pose)
-        compositor.set_ear_keyframe("left", 11)
+        compositor.set_ear_keyframe("left", 7)
         restored = compositor.compose_head(1.5, -1.0, pose)
         if animated.tobytes() == neutral.tobytes() or restored.tobytes() != neutral.tobytes():
             raise RuntimeError(f"pre-deformation raster composition failed at {degrees} degrees")
@@ -211,33 +211,29 @@ def main() -> int:
         raise RuntimeError("second ear click restarted the shared lock")
 
     frames = EAR_KEYFRAMES["left"].frames
-    shake_ids = [frame.frame_id for frame in frames[1:7]]
-    if shake_ids != [
-        "shake-1-out", "shake-1-in", "shake-2-out", "shake-2-in",
-        "shake-3-out", "shake-3-in",
-    ] or sum(frame.duration_ms for frame in frames) != 550:
-        raise RuntimeError("authored three-shake/timing sequence is invalid")
-    if frames[8].frame_id != "throw-maximum" or frames[-1].angle_degrees != 0.0:
+    angles = [abs(frame.angle_degrees) for frame in frames]
+    if (sum(frame.duration_ms for frame in frames) != 1000
+            or angles[:4] != sorted(angles[:4])
+            or angles[3:] != sorted(angles[3:], reverse=True)):
+        raise RuntimeError("single recoil/return timing sequence is invalid")
+    if frames[3].frame_id != "throw-maximum" or frames[-1].angle_degrees != 0.0:
         raise RuntimeError("authored throw or exact neutral frame is absent")
 
     while adapter.active:
         clock.now += EAR_MOTION.frame_ms / 1000
         scheduler.step()
-    if scheduler.history[:12] != [frame.duration_ms for frame in frames]:
+    if scheduler.history[:8] != [frame.duration_ms for frame in frames]:
         raise RuntimeError("adapter did not play the authored per-frame durations")
-    if runtime.snapshot().activity is not Activity.IDLE or rendered[-1][1].frame_index != 11:
+    if runtime.snapshot().activity is not Activity.IDLE or rendered[-1][1].frame_index != 7:
         raise RuntimeError("natural completion did not restore exact neutral")
 
     runtime.post("input.ear", source="probe", side="right")
     runtime.drain()
-    if adapter.active:
-        raise RuntimeError("cooldown did not reject immediate replay")
-    clock.now += EAR_MOTION.cooldown_seconds
-    runtime.post("input.ear", source="probe", side="right")
-    runtime.drain()
+    if not adapter.active:
+        raise RuntimeError("completed ear action did not allow immediate replay")
     token = holder["token"]
     if token is None:
-        raise RuntimeError("ear did not unlock after cooldown")
+        raise RuntimeError("ear did not unlock immediately")
     higher = runtime.coordinator.request_activity(Activity.CONTEXT_MENU_OPEN)
     if higher is None or adapter.active or rendered[-1][1] != EarRasterPose():
         raise RuntimeError("high-priority recovery did not cancel to neutral")

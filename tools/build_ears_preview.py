@@ -24,7 +24,7 @@ def restored_frames(side: str) -> tuple[tuple[str, int, Image.Image], ...]:
 def build_preview(output: Path) -> Path:
     rows = {side: restored_frames(side) for side in ("left", "right")}
     thumb_size = (256, 384)
-    sheet = Image.new("RGBA", (thumb_size[0] * 12, thumb_size[1] * 2), (38, 38, 38, 255))
+    sheet = Image.new("RGBA", (thumb_size[0] * max(map(len, rows.values())), thumb_size[1] * 2), (38, 38, 38, 255))
     draw = ImageDraw.Draw(sheet)
     for row, side in enumerate(("left", "right")):
         for column, (frame_id, duration, frame) in enumerate(rows[side]):

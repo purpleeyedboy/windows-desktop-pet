@@ -11,7 +11,7 @@ $VirtualEnvPython = Join-Path $RepositoryRoot ".venv\Scripts\python.exe"
 $Python = if (Test-Path -LiteralPath $VirtualEnvPython) { $VirtualEnvPython } else { "python" }
 $DistDirectory = Join-Path $RepositoryRoot "dist-ears-candidate"
 $WorkDirectory = Join-Path $RepositoryRoot "build-ears-candidate"
-$CandidateName = "桌面宠物_双耳点击反馈_REPAIR-20260906.exe"
+$CandidateName = "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe"
 $MaxCandidateBytes = 52428800
 
 function Get-ValidatedChildPath([string]$ChildPath) {

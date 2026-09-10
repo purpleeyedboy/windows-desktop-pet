@@ -52,7 +52,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物_双耳点击反馈_REPAIR-20260906',
+    name='桌面宠物_耳朵防触摸系统_单次躲闪-20260910',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

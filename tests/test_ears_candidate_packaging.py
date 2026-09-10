@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE = "桌面宠物_双耳点击反馈_REPAIR-20260906.exe"
+EXE = "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe"
 
 
 def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> None:
@@ -10,7 +10,7 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     script = (ROOT / "build_ears_candidate.ps1").read_text(encoding="utf-8-sig")
     version = (ROOT / "version_info_ears.txt").read_text(encoding="utf-8")
 
-    assert "name='桌面宠物_双耳点击反馈_REPAIR-20260906'" in spec
+    assert "name='桌面宠物_耳朵防触摸系统_单次躲闪-20260910'" in spec
     assert "COLLECT(" not in spec
     assert "build_identity.json" in spec
     assert "desktop_pet_v21_core.manifest" in spec
@@ -19,7 +19,7 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "git rev-parse --short HEAD" in script
     assert "Get-Date -Format 'yyyy-MM-dd'" in script
     assert "BASE-001" in script
-    assert "双耳点击反馈" in script
+    assert "耳朵防触摸系统" in script
     assert "候选版" in script
     assert "Get-FileHash" in script
     assert "Candidate size:" in script
