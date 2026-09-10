@@ -1574,8 +1574,10 @@ class PetWindow:
         self._press_window = None
 
     def _on_pointer_leave(self, _event: tk.Event | None) -> None:
-        if self._ear_press_candidate is not None and not self._ear_press_dragged:
-            self._ear_press_candidate = None
+        self._cancel_ear_for_interruption()
+        self._ear_press_candidate = None
+        self._press_pointer = None
+        self._press_window = None
 
     def _on_focus_lost(self, _event: tk.Event | None) -> None:
         self._cancel_ear_for_interruption()
@@ -1584,6 +1586,13 @@ class PetWindow:
         self._press_window = None
 
     def _on_context_menu(self, event: tk.Event) -> None:
+        # Opening a native menu transfers pointer/focus ownership away from the
+        # pet. Recover first so neither a held candidate nor a rendered ear pose
+        # can survive that transfer, including in legacy mode.
+        self._cancel_ear_for_interruption()
+        self._ear_press_candidate = None
+        self._press_pointer = None
+        self._press_window = None
         if self.services is not None:
             self._post_and_drain("input.context_menu", x=event.x_root, y=event.y_root)
             return

@@ -1,8 +1,8 @@
 from __future__ import annotations
 from PIL import Image
 from desktop_pet.ear_interaction import (
-    EAR_ASSETS, EAR_MOTION, EarActionContext, EarFeatureAdapter,
-    EarHitMasks, EarPose, render_ear_pose, sample_ear_pose,
+    EAR_KEYFRAMES, EarActionContext, EarFeatureAdapter, EarHitMasks,
+    EarRasterPose, apply_ear_keyframe,
 )
 
 def test_cat_own_left_and_right_masks_intersect_current_alpha():
@@ -20,22 +20,22 @@ def test_dynamic_mapper_is_applied_before_alpha_intersection_and_dpi_mapping():
     masks = EarHitMasks.from_frame(image, lambda point: (point[0] + 64, point[1] + 12))
     assert masks.hit_display((142, 126), (320, 384)) == 'left'
 
-def test_motion_has_three_shakes_throw_ease_rebound_and_exact_neutral():
-    values = [sample_ear_pose('left', i / 1000).angle_degrees for i in range(551)]
-    shake = values[:181]
-    crossings = sum(a * b < 0 for a, b in zip(shake, shake[1:]))
-    assert crossings >= 5
-    assert max(values) == EAR_MOTION.maximum_throw_degrees
-    assert min(values[300:]) >= -EAR_MOTION.maximum_throw_degrees * EAR_MOTION.rebound_ratio
-    assert values[-1] == 0.0
+def test_each_raster_motion_reaches_one_peak_then_exact_neutral():
+    for sequence in EAR_KEYFRAMES.values():
+        angles = [abs(frame.angle_degrees) for frame in sequence.frames]
+        peak = angles.index(max(angles))
+        assert angles[:peak + 1] == sorted(angles[:peak + 1])
+        assert angles[peak:] == sorted(angles[peak:], reverse=True)
+        assert sequence.frames[-1].frame_id == 'neutral-end'
+        assert sum(frame.duration_ms for frame in sequence.frames) == 1000
 
-def test_local_texture_deformation_keeps_neutral_identity_and_opposite_ear_unchanged():
+def test_authored_raster_frame_keeps_neutral_identity_and_opposite_ear_unchanged():
     image = Image.new('RGBA', (512, 768), (0, 0, 0, 0))
     for y in range(190, 340):
         for x in range(20, 250):
             image.putpixel((x, y), (x % 256, y % 256, 60, 255))
-    assert render_ear_pose(image, 'left', EarPose()).tobytes() == image.tobytes()
-    changed = render_ear_pose(image, 'left', EarPose(8.0))
+    assert apply_ear_keyframe(image, 'left', 0).tobytes() == image.tobytes()
+    changed = apply_ear_keyframe(image, 'left', 3)
     assert changed.tobytes() != image.tobytes()
     assert changed.crop((20, 200, 110, 340)).tobytes() == image.crop((20, 200, 110, 340)).tobytes()
 
@@ -56,5 +56,5 @@ def test_adapter_ignores_other_ear_while_active_validates_context_and_cools_down
     assert not adapter.start_approved('right', other)
     assert not adapter.cancel_and_recover(other)
     assert adapter.cancel_and_recover(first)
-    assert h.frames[-1] == ('left', EarPose())
+    assert h.frames[-1] == ('left', EarRasterPose())
     assert h.completed == [(first, True)]

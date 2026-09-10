@@ -696,6 +696,82 @@ def test_headless_ear_pointer_leave_focus_loss_and_close_restore_neutral(monkeyp
     assert window._ear_adapter.active is False
 
 
+@pytest.mark.parametrize(
+    ("source_x", "expected_side"),
+    ((220, "left"), (50, "right")),
+)
+def test_headless_each_ear_requires_press_and_release_on_the_same_ear(
+    monkeypatch, source_x, expected_side
+):
+    window, root, _renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(source_x * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    assert window._ear_press_candidate == expected_side
+    assert compositor.ear_frames == []
+    window._on_left_release(point)
+
+    assert window._ear_adapter.active
+    assert compositor.ear_frames[0] == (expected_side, 0)
+    while window._ear_adapter.active:
+        root.run_next()
+    assert compositor.ear_frames[-1] == (None, None)
+
+
+def test_headless_ear_release_after_pointer_leave_is_ignored(monkeypatch):
+    window, _root, _renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    window._on_pointer_leave(None)
+    window._on_left_release(point)
+
+    assert not window._ear_adapter.active
+    assert compositor.ear_frames == []
+
+
+@pytest.mark.parametrize("interrupt", ("leave", "focus", "menu"))
+def test_headless_ear_animation_interruptions_restore_exact_neutral(
+    monkeypatch, interrupt
+):
+    window, _root, renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+    window._on_left_press(point)
+    window._on_left_release(point)
+    assert window._ear_adapter.active
+
+    if interrupt == "leave":
+        window._on_pointer_leave(None)
+    elif interrupt == "focus":
+        window._on_focus_lost(None)
+    else:
+        window._on_context_menu(SimpleNamespace(x_root=10, y_root=20))
+
+    assert not window._ear_adapter.active
+    assert window._ear_press_candidate is None
+    assert compositor.ear_frames[-1] == (None, None)
+    assert renderer.successes[-1][0].tobytes() == baseline
+
+
 def test_wheel_resize_preserves_foot_center(tk_root, loaded_frames):
     window, _renderer = make_window(tk_root, loaded_frames)
     before = window._anchor()
