@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 from tools.build_ears_preview import build_preview
+from desktop_pet.ear_interaction import EAR_KEYFRAMES
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +40,7 @@ def test_all_158_baseline_assets_keep_their_exact_git_blob_hashes() -> None:
         )
     }
     assert len(baseline) == 158
-    assert set(baseline) == {
+    assert set(baseline) | {"assets/keyframes/playback.json"} == {
         path.relative_to(ROOT).as_posix()
         for path in (ROOT / "assets").rglob("*")
         if path.is_file()
@@ -58,7 +59,7 @@ def test_preview_is_deterministic_temporary_output_not_a_tracked_png(tmp_path) -
     build_preview(second)
 
     assert first.read_bytes() == second.read_bytes()
-    assert Image.open(first).size == (4608, 768)
+    assert Image.open(first).size == (256 * max(len(s.frames) for s in EAR_KEYFRAMES.values()), 768)
     assert "qa/v21-ears-preview.png" not in _git("ls-files").splitlines()
     assert "/qa/v21-ears-preview.png" in (ROOT / ".gitignore").read_text(
         encoding="utf-8"
@@ -77,7 +78,7 @@ def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None
     assert 'if ($exes.Count -ne 1)' in workflow
     assert "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe" in workflow
     assert "Get-FileHash" in workflow
-    assert "e178f371bd2da1c0b4e892609acfdf79bfcab450" in workflow
+    assert "4eda8964ccee8ccd0bd0e2bddb9670618924f90e" in workflow
 
 
 def test_verified_pr5_source_manifest_and_runtime_wiring_are_present() -> None:

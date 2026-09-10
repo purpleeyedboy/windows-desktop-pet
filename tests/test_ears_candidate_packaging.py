@@ -16,7 +16,11 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "desktop_pet_v21_core.manifest" in spec
     assert "version_info_ears.txt" in spec
     assert EXE in script
-    assert "git rev-parse --short HEAD" in script
+    assert "$env:SOURCE_HEAD_SHA" in script
+    assert "git rev-parse HEAD" in script
+    assert "^[0-9a-fA-F]{40}$" in script
+    assert "$SourceHead.Substring(0, 7)" in script
+    assert "source_head_sha = $SourceHead" in script
     assert "Get-Date -Format 'yyyy-MM-dd'" in script
     assert "BASE-001" in script
     assert "耳朵防触摸系统" in script
@@ -33,7 +37,7 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "activity_coordinator import ActivityCoordinator" not in script
     assert "input_router import InputRouter" not in script
     assert "docs\\v21-runtime-api.md" in script
-    assert "e178f371bd2da1c0b4e892609acfdf79bfcab450" in script
+    assert "4eda8964ccee8ccd0bd0e2bddb9670618924f90e" in script
     assert script.index("Clear-CandidateOutputs") < script.index("-m PyInstaller")
     assert "filevers=(2, 1, 1, 0)" in version
     assert EXE in version

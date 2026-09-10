@@ -266,6 +266,10 @@ class HeadlessCompositor:
         self.calls: list[tuple[float, float]] = []
         self.fail_next = False
         self.events: list[str] | None = None
+        self.ear_frames = []
+
+    def set_ear_keyframe(self, side, frame_index):
+        self.ear_frames.append((side, frame_index))
 
     def compose(self, eye_x, eye_y):
         if self.events is not None:
@@ -663,7 +667,9 @@ def test_headless_ear_press_release_is_independent_from_actions_and_restores(mon
     assert window._ear_adapter.active is True
     while window._ear_adapter.active:
         root.run_next()
-    assert window._ear_pose.angle_degrees == 0.0
+    assert window._ear_pose.frame_index is None
+    assert _compositor.ear_frames[-1] == (None, None)
+    assert any(index is not None for _, index in _compositor.ear_frames)
     assert window.eye_session.state == "following"
 
 
