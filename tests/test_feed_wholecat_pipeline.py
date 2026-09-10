@@ -31,3 +31,27 @@ def test_fake_transparency_is_rejected(tmp_path):
     p=manifest(tmp_path,'RGB')
     with pytest.raises(RuntimeError,match='alpha'):
         build_feed_assets(p,tmp_path/'out')
+
+
+def test_late_invalid_frame_does_not_replace_previous_sequence(tmp_path):
+    p = manifest(tmp_path)
+    output = tmp_path / 'out'
+    output.mkdir()
+    for i in range(6):
+        (output / f'{i:02}.png').write_bytes(b'previous-approved-frame')
+    content = json.loads(p.read_text())
+    content['frames'][5]['sha256'] = 'bad-hash'
+    p.write_text(json.dumps(content))
+    with pytest.raises(RuntimeError, match='hash'):
+        build_feed_assets(p, output)
+    assert all(path.read_bytes() == b'previous-approved-frame' for path in output.iterdir())
+
+
+def test_wholecat_scaling_rejects_clipped_anatomy(tmp_path):
+    p = manifest(tmp_path)
+    content = json.loads(p.read_text())
+    content['canonical'] = {'canvas': [100, 100], 'subject_height': 90,
+                            'center_x': 10, 'feet_y': 95}
+    p.write_text(json.dumps(content))
+    with pytest.raises(RuntimeError, match='clip'):
+        build_feed_assets(p, tmp_path / 'out')

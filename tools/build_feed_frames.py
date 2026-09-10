@@ -241,8 +241,7 @@ def build_whole_cat_assets(manifest_path: Path, manifest: dict, output_root: Pat
     records = manifest.get("frames", [])
     if len(records) != 6:
         raise RuntimeError("whole-cat feed requires six complete frames")
-    output_root.mkdir(parents=True, exist_ok=True)
-    built = []
+    validated = []
     for index, record in enumerate(records):
         name = record["file"]
         if Path(name).name != name:
@@ -261,6 +260,11 @@ def build_whole_cat_assets(manifest_path: Path, manifest: dict, output_root: Pat
             subject = frame.crop(bounds)
             height = manifest["canonical"]["subject_height"]
             width = round(subject.width * height / subject.height)
+            left = manifest["canonical"]["center_x"] - width // 2
+            top = manifest["canonical"]["feet_y"] - height
+            canvas_width, canvas_height = manifest["canonical"]["canvas"]
+            if left < 0 or top < 0 or left + width > canvas_width or top + height > canvas_height:
+                raise RuntimeError("whole-cat alignment would clip anatomy")
             subject = subject.resize((width, height), Image.Resampling.LANCZOS)
             frame = Image.new("RGBA", tuple(manifest["canonical"]["canvas"]))
             frame.alpha_composite(subject, (manifest["canonical"]["center_x"] - width // 2,
@@ -268,6 +272,13 @@ def build_whole_cat_assets(manifest_path: Path, manifest: dict, output_root: Pat
             buffer = io.BytesIO()
             frame.save(buffer, format="PNG")
             data = buffer.getvalue()
+        validated.append(data)
+
+    # Validate the complete sequence before replacing any previous frame. A late
+    # bad hash/alpha must not leave a mixture of old and new animation assets.
+    output_root.mkdir(parents=True, exist_ok=True)
+    built = []
+    for index, data in enumerate(validated):
         destination = output_root / f"{index:02d}.png"
         temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
         try:
