@@ -38,3 +38,9 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - 远端事实：当前仓库未配置 remote/remote refs，不能把本地提交或 `make_pr` 元数据记录视为已推送。
 - 待完成门：Windows Actions 构建、候选实际大小/SHA-256 与用户 Windows 实机视觉验收。Linux 容器不替代这些门；不合并。
 - Windows run `34304052388` 构建成功，实际 EXE SHA-256 为 `712bdfbbf38ab9adabe4899a414f66c5cdebdf5eaf1b28012ed6e8eaf1ab4be5ff`，但因 `04.png` 缩小及脚部碎片被视觉拒收；本地已按每格主体连通域修复，等待新 Windows artifact 复核。
+# 2026-09-10 resumed grooming asset work
+
+PR12 adds an opt-in full-cat RGBA importer path; legacy manifests and approved
+images are unchanged. Seven focused tests pass (full-frame input and prior QA).
+New generated grooming art was rejected for RGB checkerboard and identity drift.
+This is NOT a completed animation repair and has no new Windows visual approval.

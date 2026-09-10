@@ -257,10 +257,51 @@ def _right_local_frame(source: Image.Image, neutral: Image.Image,
     return result
 
 
+def load_full_cat_frames(root: Path, data: dict, neutral: Image.Image) -> tuple[Image.Image, ...]:
+    """Validate complete runtime-size frames, without crops, patches or recoloring.
+
+    Structural validation is not visual acceptance. All input validation occurs
+    before the caller writes any output, including validation of the final frame.
+    """
+    if data.get("format") != "full-cat-rgba-v1" or len(data.get("frames", [])) != 12:
+        raise ValueError("full-cat format requires twelve complete frames")
+    root = root.resolve()
+    frames = []
+    for item in data["frames"]:
+        path = (root / item["path"]).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError("full-cat source must remain inside the manifest directory")
+        if sha256_file(path) != item["sha256"]:
+            raise ValueError("full-cat source SHA-256 mismatch")
+        with Image.open(path) as image:
+            if image.mode != "RGBA" or image.size != neutral.size:
+                raise ValueError("full-cat frame requires native runtime-size RGBA")
+            alpha = image.getchannel("A")
+            if alpha.getextrema() != (0, 255):
+                raise ValueError("full-cat frame requires real transparent and opaque pixels")
+            box = alpha.getbbox()
+            if box is None or box[0] == 0 or box[1] == 0 or box[2] == image.width or box[3] == image.height:
+                raise ValueError("full-cat frame touches the canvas edge or is empty")
+            frames.append(image.copy())
+    if any(frames[index].tobytes() != neutral.tobytes() for index in (0, 11)):
+        raise ValueError("full-cat endpoints must exactly restore the current neutral render")
+    return tuple(frames)
+
+
 def import_groom_frames(manifest_path: Path, output_dir: Path) -> tuple[Image.Image, ...]:
     manifest_path = Path(manifest_path)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     root = manifest_path.parent
+    if data.get("format") == "full-cat-rgba-v1":
+        from .assets import load_head_neck_compositor
+        from .head_neck_deformation import HeadPose
+        neutral = load_head_neck_compositor().compose(0.0, 0.0, HeadPose(0.0, 0.0))
+        frames = load_full_cat_frames(root, data, neutral)
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for index, frame in enumerate(frames):
+            frame.save(output_dir / f"{index:02d}.png", optimize=True, compress_level=9)
+        return frames
     source = root / data["source"]
     canonical = manifest_path.parents[2] / "rig/v1/source/canonical-idle.png"
     encoded = "".join(source.read_text(encoding="ascii").splitlines())

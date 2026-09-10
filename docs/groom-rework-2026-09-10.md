@@ -2,6 +2,29 @@
 
 Status: **redraw incomplete; not a new animation acceptance build**.
 
+## Resumed work: full-cat input path
+
+A third built-in ImageGen attempt used freshly reconstructed current runtime
+`00.png` (640×768), not the old flat cat image. It requested a complete cat lifting
+the mostly white image-left forepaw, with the opposite foreleg planted, fixed
+head/rump/feet, and genuine transparent RGBA. The pose was produced on the correct
+side, but the returned image was again 1145×1374 RGB with a baked checkerboard.
+Visual inspection also found a fuller chest and shifted ears/head geometry.
+It is rejected and is not included in the active manifest or EXE.
+
+The existing importer only supported a 4×3 sheet; its right-side branch applies
+local masks. A minimal separate `full-cat-rgba-v1` manifest path now accepts twelve
+already aligned complete runtime PNGs without resizing, crops, color edits or
+local masks. Each `frames` entry contains `path` and `sha256`. Inputs must stay
+inside the manifest directory, be native-size RGBA with real transparency and
+opaque subject pixels, avoid canvas clipping, and exactly match current neutral
+pixels at both endpoints. All twelve inputs validate before output writing.
+These checks do not establish identity or smooth-motion visual approval.
+
+No production manifest is switched: a compliant new full-cat animation remains
+unavailable. Focused tests cover pixel preservation, missing alpha, final-frame
+hash failure, wrong neutral endpoints and escaped source paths.
+
 ## Verified root causes
 
 - Baseline: `cee957f`. Right/orange foreground paw is explicitly composited by
