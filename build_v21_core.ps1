@@ -8,6 +8,8 @@ $work = Join-Path $root "build-v21-core"
 $name = "桌面宠物_公共基础接线与版本识别修复.exe"
 Push-Location $root
 try {
+    & $python tools/verify_about_localization.py
+    if ($LASTEXITCODE -ne 0) { throw "About localization verification failed" }
     & $python tools/verify_v21_runtime_wiring.py
     if ($LASTEXITCODE -ne 0) { throw "V2.1 runtime wiring verification failed" }
     & $python tools/verify_graphic_animation_contract.py

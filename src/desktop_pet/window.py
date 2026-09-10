@@ -20,6 +20,7 @@ from .eye_follow import CursorProvider
 from .foundation.platform import Point, Rect as FoundationRect
 from .foundation.runtime import Activity, ActivityToken, RuntimeEvent
 from .foundation.services import ApplicationServices
+from .foundation.about import about_content, about_title
 from .eye_runtime import (
     ActionFailure,
     Compositor,
@@ -417,7 +418,7 @@ class PetWindow:
             command=lambda: self.request_topmost(self._topmost_var.get()),
         )
         menu.add_separator()
-        menu.add_command(label="关于 / 运行状态", command=self._show_about)
+        menu.add_command(label=about_title(), command=self._show_about)
         if self.services is not None and self.services.build_info.feature_config.debug_menu_enabled:
             menu.add_command(label="调试", command=self._show_debug_commands)
         menu.add_separator()
@@ -656,11 +657,9 @@ class PetWindow:
     def _show_about(self) -> None:
         if self.services is None:
             return
-        fields = self.services.build_info.as_fields()
         state = self.services.runtime.snapshot()
-        message = "\n".join(f"{key}: {value}" for key, value in fields.items())
-        message += f"\nactivity: {state.activity.value}\nactivity_version: {state.activity_version}"
-        messagebox.showinfo("关于 / 运行状态", message, parent=self.root)
+        title, message = about_content(self.services.build_info, state)
+        messagebox.showinfo(title, message, parent=self.root)
 
     def _show_region_status(self) -> None:
         messagebox.showinfo("区域与锚点", f"coordinate_version: {self.services.regions.coordinate_version}", parent=self.root)
