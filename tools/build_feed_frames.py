@@ -236,9 +236,54 @@ def _isolated_alpha(mask: Image.Image, box: tuple[int, int, int, int]) -> Image.
     return alpha
 
 
+def build_whole_cat_assets(manifest_path: Path, manifest: dict, output_root: Path) -> list[BuiltFrame]:
+    """Validate full generated RGBA sprites; never compose face/body patches."""
+    records = manifest.get("frames", [])
+    if len(records) != 6:
+        raise RuntimeError("whole-cat feed requires six complete frames")
+    output_root.mkdir(parents=True, exist_ok=True)
+    built = []
+    for index, record in enumerate(records):
+        name = record["file"]
+        if Path(name).name != name:
+            raise RuntimeError("invalid whole-cat source name")
+        data = (manifest_path.parent / "source" / name).read_bytes()
+        if hashlib.sha256(data).hexdigest() != record["sha256"]:
+            raise RuntimeError("whole-cat source hash mismatch")
+        with Image.open(io.BytesIO(data)) as opened:
+            if opened.mode != "RGBA" or opened.getchannel("A").getextrema() != (0, 255):
+                raise RuntimeError("whole-cat source requires real transparent alpha")
+            frame = opened.copy()
+        if frame.size != tuple(manifest["canonical"]["canvas"]):
+            # Uniform whole-subject scaling and foot alignment at build time only.
+            # No patch extraction, recoloring, or replacement of static anatomy.
+            bounds = frame.getchannel("A").getbbox()
+            subject = frame.crop(bounds)
+            height = manifest["canonical"]["subject_height"]
+            width = round(subject.width * height / subject.height)
+            subject = subject.resize((width, height), Image.Resampling.LANCZOS)
+            frame = Image.new("RGBA", tuple(manifest["canonical"]["canvas"]))
+            frame.alpha_composite(subject, (manifest["canonical"]["center_x"] - width // 2,
+                manifest["canonical"]["feet_y"] - height))
+            buffer = io.BytesIO()
+            frame.save(buffer, format="PNG")
+            data = buffer.getvalue()
+        destination = output_root / f"{index:02d}.png"
+        temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+        try:
+            temporary.write_bytes(data)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        built.append(BuiltFrame(destination.name, destination, hashlib.sha256(data).hexdigest()))
+    return built
+
+
 def build_feed_assets(manifest_path: Path, output_root: Path) -> list[BuiltFrame]:
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get('version') == 3 and manifest.get('composite_mode') == 'whole_cat_frames':
+        return build_whole_cat_assets(manifest_path, manifest, output_root)
     if manifest.get('version') == 2 and manifest.get('composite_mode') == 'canonical_local_face':
         return build_local_face_assets(manifest_path, manifest, output_root)
     source_root = manifest_path.parent / "source"

@@ -268,7 +268,8 @@ class FeedRuntime:
         self.hunger = hunger or HungerService(SharedHungerState(services),
             lambda: int(self.runtime.clock.utc_now().timestamp()))
         self._owns_hunger = hunger is None
-        self.confirmation = confirmation or TkFeedConfirmation(owner)
+        self.confirmation = confirmation or TkFeedConfirmation(owner,
+            preference_path=services.paths.root / "feed-confirmation-preference.json")
         self.identity = identity or WindowsFileIdentityInspector((services.paths.root, Path(__file__).resolve().parents[3], os.environ.get('WINDIR', r'C:\Windows')))
         self.state = SharedFeedState(services, self.hunger)
         self.clock = SimpleNamespace(utc_iso=lambda: self.runtime.clock.utc_now().isoformat())
