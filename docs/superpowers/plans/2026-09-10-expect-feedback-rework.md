@@ -1,0 +1,26 @@
+# 期待反馈返工：阶段性实现记录
+
+## 已实现（待 Windows 验收）
+
+- 新增独立 `expectation` 圆形几何命中：头中心、显示画布对角线乘 1.5；不改变 click/drop 安全区域。
+- 身体或圆内悬停允许预览；真正交接文件仍必须命中头部。独立候选不处理或回收文件。
+- 保留进入过渡时间，循环两帧各从 100ms 改为 20ms（5 倍频率）。
+- 默认跟随回调不再被静态期待帧吞掉；期待效果使用最新跟随画面进行临时叠加。
+- 瞳孔颤动在底层 eye offset 注入并经过相同整头 mesh/旋转，不再裁眼后移动屏幕坐标；缓存中性帧也恢复准确姿态。
+- 已验证 DragEnter 后，DragLeave 可启动最长 10 秒的被动鼠标坐标/左键/ESC 轮询；无钩子和覆盖窗口，不代理其他应用 Drop。松开、ESC、超时立即退出，被动阶段不能交接文件。
+- 黄色圆点替换为固定坐标四角星缩放循环。
+- 未修改任何已批准素材。
+
+## 未完成，不得表述为最终交付
+
+- 原生 OLE 只在已有宠物窗口范围收到首次拖放事件。从未进入猫窗口的文件无法安全感知；不通过扩大透明窗口吞掉其他应用输入来伪装完成。已进入后的圆域尾随已实现。
+- 微张嘴与两帧口水素材未接入。第一张完整猫候选真实生成后发现 RGB 棋盘背景，质检拒收，未污染已批准素材。
+- 新实时叠加替代旧静态帧显示，不代表用户已认可视觉质量。
+
+## 自动证据
+
+`python -m pytest tests/test_expectation_feedback.py tests/test_drag_expectation.py tests/test_drag_foundation_adapter.py tests/test_drag_expression_frames_unit.py -q`：21 项通过。
+
+`python tools/verify_drag_runtime.py`：通过；包含身体预览但不允许身体 drop、异步晚到、退出、事务优先级、单次交接。
+
+旧 `tests/test_drag_candidate_packaging.py` 的四项断言仍硬编码 9 月 6 日未接线状态和旧 EXE 名，已与本分支返工前 9 月 9 日版本不符，不能当作本次行为回归证据。尚未运行 Windows 构建或真实鼠标操作。

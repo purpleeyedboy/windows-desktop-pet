@@ -162,12 +162,16 @@ def decorate_drag_expectation(
         )
         overlay.paste(contour_layer, (left, top), contour)
         positions = (
-            (left + (phase * 7) % max(1, right - left), top + 5),
-            (right - 6, top + (phase * 5) % max(1, bottom - top)),
-            (left + 7, bottom - 6 - (phase * 3) % max(1, bottom - top)),
+            (left + 20, top - 6),
+            (right + 6, top + 50),
+            (left - 6, bottom - 40),
         )
-        for x, y in positions:
-            r = config.particle_radius
-            draw.ellipse((x - r, y - r, x + r, y + r), fill=(255, 244, 150, 220))
+        for index, (x, y) in enumerate(positions):
+            scale = (0.6, 0.8, 1.0, 1.25, 1.4, 1.25, 1.0, 0.8)[(phase + index * 2) % 8]
+            r = max(2, round(config.particle_radius * 2 * scale))
+            inner = max(1, r // 3)
+            draw.polygon(((x, y-r), (x+inner, y-inner), (x+r, y),
+                          (x+inner, y+inner), (x, y+r), (x-inner, y+inner),
+                          (x-r, y), (x-inner, y-inner)), fill=(255, 226, 95, 230))
     result = Image.alpha_composite(result, overlay)
     return result

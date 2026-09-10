@@ -39,7 +39,7 @@ class ExpectationDrop:
 class DragExpectationRuntime:
     def __init__(self, services, *, hunger, frames, show_frame, restore,
                  schedule, cancel, inspector=None, consume_drop=None,
-                 durations_ms=(50, 50, 50, 100, 100)):
+                 durations_ms=(50, 50, 50, 20, 20), pointer_state=None):
         if len(frames) != 5 or any(frame.mode != "RGBA" for frame in frames):
             raise ValueError("expectation requires five real RGBA frames")
         if len(set(frame.size for frame in frames)) != 1:
@@ -61,6 +61,8 @@ class DragExpectationRuntime:
         self._closed = False
         self._ending = False
         self._debug_until = None
+        self._pointer_state = pointer_state
+        self._tail_until = None
         services.runtime.bind("file.result", self._validated)
         services.runtime.bind("expectation.tick", self._tick)
         services.runtime.bind("expectation.handoff", self._handoff)
@@ -83,14 +85,14 @@ class DragExpectationRuntime:
 
     def _in_region(self, purpose):
         hit = self.services.regions.hit_test(Point(*self._point), purpose)
-        return hit is not None and (purpose == "drag" or hit.part == "head")
+        return hit is not None and (purpose in ("drag", "expectation") or hit.part == "head")
 
     def enter(self, candidate, point, effects):
         self.leave("replaced")
         if self._closed:
             return 0
         self._point, self._effects = tuple(point), int(effects)
-        if candidate.count != 1 or not effects & 1 or not self._in_region("drag") or self._refresh_health() >= 100_000:
+        if candidate.count != 1 or not effects & 1 or not self._in_region("expectation") or self._refresh_health() >= 100_000:
             return 0
         self._candidate = candidate
         self._request = f"expectation:{uuid4().hex}"
@@ -134,14 +136,23 @@ class DragExpectationRuntime:
     def _reconcile(self):
         if self._closed:
             return 0
+        if self._tail_until is not None:
+            try:
+                point, held = self._pointer_state()
+            except Exception:
+                point, held = self._point, False
+            if not held or self.services.runtime.clock.monotonic() >= self._tail_until:
+                self.leave("passive-end")
+                return 0
+            self._point = tuple(point)
         current_units = self._refresh_health()
         debug_active = self._debug_until is not None and self.services.runtime.clock.monotonic() < self._debug_until
         valid = (not self._closed and self._candidate is not None
                  and self._validation is not None and self._validation.valid
                  and (debug_active or (self._debug_until is None and bool(self._effects & 1)
-                      and self._in_region("click") and current_units < 100_000)))
+                      and self._in_region("expectation") and current_units < 100_000)))
         if not valid:
-            if self._token is not None and self._candidate is not None and not self._in_region("click") and current_units < 100_000:
+            if self._token is not None and self._candidate is not None and not self._in_region("expectation") and current_units < 100_000:
                 self._begin_exit()
             else:
                 self._stop_preview()
@@ -213,6 +224,7 @@ class DragExpectationRuntime:
 
     def _recover_visual(self):
         was_active = self._token is not None
+        self._tail_until = None
         self._token = None
         self._ending = False
         timer, self._timer = self._timer, None
@@ -246,6 +258,15 @@ class DragExpectationRuntime:
             raise
 
     def leave(self, reason="leave"):
+        # No hook, overlay HWND or IDataObject proxy: only a bounded cursor poll
+        # AFTER our own native DragEnter has already validated the file.
+        if (reason == "leave" and self.active and self._validation is not None
+                and self._validation.valid and self._pointer_state is not None
+                and self._debug_until is None):
+            self._tail_until = self.services.runtime.clock.monotonic() + 10.0
+            self._reconcile()
+            return
+        self._tail_until = None
         if reason == "leave" and self._ending:
             self._candidate = self._validation = self._request = None
             return
@@ -260,7 +281,7 @@ class DragExpectationRuntime:
 
     def drop(self, candidate, point, effects):
         self._point, self._effects = tuple(point), int(effects)
-        accepted = self._debug_until is None and candidate == self._candidate and self._reconcile() == 1
+        accepted = self._tail_until is None and self._debug_until is None and candidate == self._candidate and self._in_region("click") and self._reconcile() == 1
         event = None
         if accepted:
             event = ExpectationDrop(candidate, tuple(point), self.services.runtime.clock.monotonic(), self._version, self._validation)

@@ -67,14 +67,15 @@ def main():
         )
         candidate = DragCandidate(r"C:\synthetic\never-opened.txt", 1)
         head, body = (180, 140), (180, 330)
+        outside = (2000, 2000)
         assert runtime.enter(candidate, body, 1) == 0
         worker.finish()
-        assert not runtime.active and not shown, "body hover cannot start expectation"
+        assert runtime.active and shown, "body hover inside expectation circle must start preview"
         assert runtime.over(head, 1) == 1 and runtime.active
         token = services.runtime.coordinator.current_token
         assert token.activity is Activity.DRAG_PREVIEW
         assert len(shown) == 1
-        assert runtime.over(body, 1) == 0 and not runtime.active
+        assert runtime.over(outside, 1) == 0 and not runtime.active
         for _ in range(3):
             key = next(iter(scheduled))
             scheduled.pop(key)()
@@ -92,9 +93,9 @@ def main():
         assert not runtime.active, "late file validation resurrected preview"
 
         runtime.enter(candidate, head, 1)
-        runtime.over(body, 1)
+        runtime.over(outside, 1)
         worker.finish()
-        assert not runtime.active, "validation used stale head coordinates"
+        assert not runtime.active, "validation used stale circle coordinates"
         runtime.over(head, 1)
         assert runtime.active
         hunger.set_units(100_000)
@@ -119,6 +120,12 @@ def main():
         assert services.runtime.snapshot().tear == "visible", "leave restores latest health"
 
         hunger.set_units(50_000)
+        runtime.enter(candidate, body, 1)
+        worker.finish()
+        assert runtime.active
+        runtime.drop(candidate, body, 1)
+        services.runtime.drain()
+        assert not handoffs, "circle must never expand the head-only drop region"
         protected = services.runtime.coordinator.request_activity(Activity.FEED_PROCESSING)
         runtime.enter(candidate, head, 1)
         worker.finish()
@@ -168,6 +175,20 @@ def main():
             reentry_failures.append("expired exit tick rendered after transaction review preempted it")
         runtime.leave("reset")
         services.runtime.coordinator.cancel_and_recover()
+
+        # A verified drag may keep visual-only expectation after native DragLeave.
+        pointer = [(180, 330), True]
+        runtime._pointer_state = lambda: (pointer[0], pointer[1])
+        hunger.set_units(50_000)
+        runtime.enter(candidate, head, 1)
+        worker.finish()
+        runtime.leave()
+        assert runtime.active, "validated drag should retain passive circular preview"
+        assert runtime._reconcile() == 1
+        pointer[1] = False
+        runtime._reconcile()
+        assert not runtime.active, "button release outside must clear passive preview"
+        runtime._pointer_state = None
 
         hunger.set_units(50_000)
         runtime.enter(candidate, head, 1)
