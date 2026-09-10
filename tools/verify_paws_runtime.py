@@ -101,7 +101,10 @@ def main():
     window.trigger_paw_press(PawSide.RIGHT)
     clock.advance(.20); pending.pop(0)()
     clock.advance(.20); pending.pop(0)()
-    assert cursor.point == scope["PointerPoint"](-200, 114)
+    # Independent acceptance value: 14 px * 2.5 = 35 px total at 32 px
+    # pointer height. Do not derive this from config, which could regress too.
+    assert cursor.point == scope["PointerPoint"](-200, 135)
+    assert all(point.x == -200 and 100 <= point.y <= 135 for point in cursor.moves)
     clock.advance(.82); pending.pop(0)()
     assert window._paw_controller.state is PawState.IDLE
     assert runtime.snapshot().activity is Activity.IDLE and not pending

@@ -36,7 +36,7 @@ if ($exeFiles.Count -ne 1) {
     throw "Expected exactly one EXE in dist, found $($exeFiles.Count)"
 }
 
-$expectedExe = Join-Path $dist '桌面宠物_双前肢按压鼠标_20260906修复候选.exe'
+$expectedExe = Join-Path $dist '桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe'
 if (-not [System.IO.Path]::GetFullPath($exeFiles[0].FullName).Equals(
     [System.IO.Path]::GetFullPath($expectedExe),
     [System.StringComparison]::OrdinalIgnoreCase

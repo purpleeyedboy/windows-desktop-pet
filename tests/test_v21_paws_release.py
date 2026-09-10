@@ -3,7 +3,7 @@ from pathlib import Path
 from tools.v21_paws_gate import inspect_release_diff, verify_baseline_assets
 
 ROOT = Path(__file__).parents[1]
-EXE = "桌面宠物_双前肢按压鼠标_20260906修复候选.exe"
+EXE = "桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe"
 
 
 def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():

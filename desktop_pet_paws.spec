@@ -72,7 +72,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="桌面宠物_双前肢按压鼠标_20260906修复候选",
+    name="桌面宠物_双前肢位移2.5倍与校验修复_20260910候选",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

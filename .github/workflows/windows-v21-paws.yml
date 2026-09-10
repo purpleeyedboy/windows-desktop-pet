@@ -44,5 +44,5 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: v2.1-paws-generated-frames-candidate
-          path: dist/桌面宠物_双前肢按压鼠标_20260906修复候选.exe
+          path: dist/桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe
           if-no-files-found: error

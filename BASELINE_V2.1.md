@@ -93,3 +93,10 @@ PR #10 follow-up: pointer displacement is now 2.5x (35 nominal, 20–70 bounds).
 Complete-cat frame import/runtime support has focused automated coverage.
 New art and Windows/user visual acceptance remain pending; existing animation
 art is unchanged. See `qa/v2.1-paws/rework-2026-09-10.md` for evidence and limits.
+
+## PAWS-CI-CONTRACT-20260910
+
+- PR #10 base `5f68d7176c5666c4cebb9995725de91239837ef8`: reproduced the CI runtime assertion expecting y=114 after starting at y=100. The approved 2.5x displacement is 35 px, so the independent acceptance endpoint is y=135; all per-step x/y bounds remain asserted.
+- CI-identical `python tools/verify_paws_runtime.py` now passes, including queue/window playback, preemption, stale callbacks, pointer takeover and 158 immutable baseline assets. Focused paw press/compositor/full-frame import/release suite: 25 passed (existing Pillow deprecation warnings).
+- New exact candidate filename: `桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe`; build, spec, version resource, smoke test, Actions upload and release checks agree. Previous EXEs remain untouched.
+- This checkpoint is Linux automated evidence only. Windows build/artifact and user visual acceptance remain separate gates. Existing animation art is unchanged; this is NOT a full-cat animation repair release.

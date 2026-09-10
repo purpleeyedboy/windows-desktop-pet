@@ -7,7 +7,7 @@ VSVersionInfo(
     StringStruct('FileDescription', 'V2.1-PAWS GENERATED-20260909；公共基础已接入；等待用户Windows实机验收；构建时写入实际Git提交'),
     StringStruct('FileVersion', '2.1.2.0'),
     StringStruct('InternalName', 'desktop_pet_paws'),
-    StringStruct('OriginalFilename', '桌面宠物_双前肢按压鼠标_20260906修复候选.exe'),
+    StringStruct('OriginalFilename', '桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe'),
     StringStruct('ProductName', '桌面宠物 双前肢按压鼠标'),
     StringStruct('ProductVersion', '2.1.2.0；BASELINE_V2.1.md')
   ])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])]
