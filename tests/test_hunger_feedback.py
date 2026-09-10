@@ -42,6 +42,26 @@ def test_corpus_and_feedback_parameters():
     assert motion('full', 0)[2] < motion('full', .2)[2]
 
 
+def test_corpus_does_not_repeat_a_thought_with_different_endings():
+    for phrases in CORPUS.values():
+        thoughts = [p.split('，')[0] for p in phrases]
+        assert len(set(thoughts)) == 100
+    assert all('嘿嘿' not in p and '哈哈' not in p
+               for mood in ('severe', 'critical') for p in CORPUS[mood])
+
+
+def test_critical_start_recovery_and_large_offline_crossings():
+    f = HungerFeedback()
+    assert f.update(999) == 'critical'
+    assert f.update(998) is None and f.critical
+    assert f.update(1000) is None and not f.critical
+    assert f.update(999) == 'critical'
+    assert f.update(100000) == 'full' and not f.critical
+    assert f.update(5000) == 'severe'
+    assert f.update(5000) is None
+    assert f.update(4000) == 'severe'
+
+
 def test_window_exposes_feedback_entrypoint():
     assert callable(getattr(HungerWindow, 'show_hunger_feedback', None))
 

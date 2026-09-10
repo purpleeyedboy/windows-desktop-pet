@@ -1,16 +1,7 @@
 """Value-crossing feedback, independent of wall time and animation scheduling."""
 import math
 
-# Ten short complete thoughts and ten affectionate endings per mood. All 100
-# combinations are short enough for the existing single-line bubble.
-_THOUGHTS = {
-    'mild': ('肚肚有点空', '想尝一口鱼', '有点想吃啦', '小肚子咕噜', '想要小点心', '有一点点饿', '饭香在哪里', '小鱼来一口', '想垫垫肚子', '点心时间到'),
-    'severe': ('好饿好饿呀', '快给点吃的', '肚肚叫不停', '急需小鱼干', '真的好想吃', '快开饭好嘛', '小猫等饭急', '饿得直跺爪', '饭饭快来呀', '快救救肚肚'),
-    'critical': ('快饿扁了呀', '不要我了吗', '饿到没力啦', '救救小猫呀', '一口也好呀', '快饿晕了喵', '饭饭别走呀', '肚肚撑不住', '求求喂一口', '饿死小猫啦'),
-    'full': ('嗝儿好饱呀', '肚肚圆滚滚', '吃饱好幸福', '小猫好满足', '饭饭太香啦', '饱饱暖呼呼', '谢谢这顿饭', '满足到眯眼', '今天好幸福', '小鱼装满啦'),
-}
-_ENDINGS = ('，喵～', '，嘿嘿', '，主人呀', '，咪呜', '，喵喵', '，蹭蹭你', '，小声喵', '，眨眨眼', '，贴贴呀', '，呜咪～')
-CORPUS = {mood: tuple(a + b for a in thoughts for b in _ENDINGS) for mood, thoughts in _THOUGHTS.items()}
+from .hunger_phrases import CORPUS
 
 
 class HungerFeedback:
