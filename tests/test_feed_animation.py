@@ -1,8 +1,11 @@
+import hashlib
+import json
 from pathlib import Path
 
 from PIL import Image
 
 from desktop_pet.feed_animation import FEED_POSE_SEQUENCE, FeedAnimationPlayer
+from tools.build_feed_frames import build_feed_assets
 
 
 class Scheduler:
@@ -69,13 +72,21 @@ def test_player_rejects_overlap_and_interrupt_restores_latest_pose():
     assert displayed[-1] == "interrupted-latest"
 
 
-def test_generated_frames_are_loaded_as_full_rgba_art():
-    root = Path("assets/generated/work/feed/v1")
+def test_legacy_feed_frames_match_approved_canvas_and_rgba_contract(tmp_path):
+    # This checks packaging integrity, not acceptance of whole-cat animation art.
+    manifest_path = Path("assets/feed/v1/manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["canonical"]["canvas"] == [640, 768]
+    root = tmp_path / "feed"
+    built = build_feed_assets(manifest_path, root)
+    assert len(built) == 6
     frames = []
     for path in sorted(root.glob("*.png")):
         with Image.open(path) as opened:
             frames.append(opened.copy())
     assert len(frames) == 6
-    assert all(frame.mode == "RGBA" and frame.size == (672, 768) for frame in frames)
-    # The cat occupies hundreds of colors; this excludes geometric mouth placeholders.
+    assert all(frame.mode == "RGBA" and frame.size == (640, 768) for frame in frames)
+    assert hashlib.sha256(frames[0].tobytes()).hexdigest() == manifest["canonical"]["neutral_rgba_sha256"]
+    assert all(frame.getchannel("A").getextrema() == (0, 255) for frame in frames)
+    # Color richness alone does not prove full-cat redraw or visual consistency.
     assert all(len(frame.getcolors(maxcolors=1_000_000) or ()) > 10_000 for frame in frames)
