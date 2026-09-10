@@ -244,6 +244,7 @@ class PawPressController:
         self._start_monitor: PointerBounds | None = None
         self._cursor_cancelled = False
         self._cursor_failed = False
+        self.cancellation_error: Exception | None = None
 
     def start(self, side: PawSide, approval: ActivityApproval, now: float) -> bool:
         if self.state is not PawState.IDLE or not self.input_gate.paw_activity_allowed():
@@ -257,6 +258,7 @@ class PawPressController:
         self._start_monitor = None
         self._cursor_cancelled = self.input_gate.pointer_interaction_blocked()
         self._cursor_failed = False
+        self.cancellation_error = None
         try:
             self._release_point = self.cursor.position()
         except Exception:
@@ -322,7 +324,14 @@ class PawPressController:
         self.state, self.side, self._approval = PawState.IDLE, None, None
         self._cursor_cancelled = True
         if approval is not None and notify:
-            self.on_cancel(approval)
+            try:
+                self.on_cancel(approval)
+            except Exception as error:
+                # Cancellation is a recovery boundary invoked by focus loss,
+                # renderer failure and shutdown.  External ownership cleanup
+                # must not prevent a terminal pose; retain the error so it is
+                # observable rather than silently treating cleanup as clean.
+                self.cancellation_error = error
 
     def close(self) -> None:
         self.cancel()

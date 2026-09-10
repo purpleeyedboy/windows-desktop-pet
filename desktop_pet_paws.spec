@@ -16,7 +16,8 @@ except (OSError, subprocess.CalledProcessError):
     GIT_COMMIT = "unknown"
 IDENTITY = GENERATED / "build_identity.json"
 IDENTITY.write_text(json.dumps({
-    "product_version": "2.1.2-paws",
+    "product_version": "2.1.3-paws",
+    "candidate_id": "PAWS-2.5X-BOUNDARY-20260910",
     "git_short_hash": GIT_COMMIT[:8],
     "git_commit": GIT_COMMIT,
     "foundation_commit": "4eda8964",
@@ -26,6 +27,8 @@ IDENTITY.write_text(json.dumps({
     "debug_enabled": True,
     "debug_menu_enabled": True,
     "acceptance": "User Windows visual acceptance pending",
+    "automated_validation": "performed in GitHub Actions",
+    "windows_desktop_acceptance": "pending",
 }, ensure_ascii=False), encoding="utf-8")
 EYE_SOURCE = ROOT / "assets/rig/v1/source/eye-neutral-v1"
 EYE_RUNTIME = "assets/rig/v1/runtime/eye-neutral-v1"
@@ -72,7 +75,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="桌面宠物_双前肢位移2.5倍与校验修复_20260910候选",
+    name="桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

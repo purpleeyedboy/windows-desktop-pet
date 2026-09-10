@@ -100,3 +100,11 @@ art is unchanged. See `qa/v2.1-paws/rework-2026-09-10.md` for evidence and limit
 - CI-identical `python tools/verify_paws_runtime.py` now passes, including queue/window playback, preemption, stale callbacks, pointer takeover and 158 immutable baseline assets. Focused paw press/compositor/full-frame import/release suite: 25 passed (existing Pillow deprecation warnings).
 - New exact candidate filename: `桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe`; build, spec, version resource, smoke test, Actions upload and release checks agree. Previous EXEs remain untouched.
 - This checkpoint is Linux automated evidence only. Windows build/artifact and user visual acceptance remain separate gates. Existing animation art is unchanged; this is NOT a full-cat animation repair release.
+
+## PAWS-2.5X-BOUNDARY-20260910
+
+- Candidate identity is `PAWS-2.5X-BOUNDARY-20260910`, product version `2.1.3-paws`, exact EXE `桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe`, and artifact `v2.1-paws-2.5x-boundary-candidate` with 14-day retention.
+- Focused regression coverage records same-paw mouse release, release while a physical button remains down, input cancellation/takeover, focus-loss cancellation wiring, idempotent exit after cancellation-notification failure, cursor API failures, 2.5x endpoint scaling, negative-coordinate DPI/multi-monitor coordinates, monitor/ClipCursor intersection, and invalid native rectangles.
+- Native bounds with zero or inverted width/height now fail closed before clamping. Cancellation establishes the idle/closed terminal state even if the external ownership callback fails, preventing focus loss or shutdown from leaving the PAWS controller active.
+- Actions writes `candidate-evidence.json` beside the sole EXE with the full commit, run URL, byte length, SHA-256, automated-build result, and separate pending Windows-desktop acceptance field. A successful Actions build is not Windows interaction or visual acceptance.
+- Linux cannot produce or honestly validate the Windows single-file EXE. The workflow build, isolated Tk startup, artifact hash, real Windows DPI/multi-display interaction, and user visual acceptance remain separate evidence gates until an Actions run and physical review exist.

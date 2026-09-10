@@ -402,7 +402,8 @@ def test_real_window_press_release_on_same_alpha_paw_reaches_feature_request():
 def test_paw_drag_threshold_moves_window_and_never_backfills_press_request():
     window = object.__new__(PetWindow)
     mask = Image.new("L", (8, 8)); mask.putpixel((6, 6), 255)
-    window._paw_compositor = PawCompositor(mask, Image.new("L", (8, 8)))
+    other = Image.new("L", (8, 8)); other.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(mask, other)
     window._window_rect = Rect(0, 0, 80, 80)
     window._paw_controller = SimpleNamespace(state=PawState.IDLE)
     window._button_state = SimpleNamespace(
@@ -420,6 +421,40 @@ def test_paw_drag_threshold_moves_window_and_never_backfills_press_request():
     window._on_left_release(SimpleNamespace(x_root=70, y_root=65))
 
     assert requested == []
+
+
+def test_paw_release_with_button_still_down_clears_click_ownership():
+    window = object.__new__(PetWindow)
+    mask = Image.new("L", (8, 8)); mask.putpixel((6, 6), 255)
+    other = Image.new("L", (8, 8)); other.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(mask, other)
+    window._window_rect = Rect(0, 0, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: True, drag_threshold=lambda: (4, 4)
+    )
+    window.eye_session = None; window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    requested = []; window.trigger_paw_press = requested.append
+
+    event = SimpleNamespace(x_root=65, y_root=65)
+    window._on_left_press(event)
+    window._on_left_release(event)
+
+    assert requested == []
+    assert window._press_pointer is None and window._press_window is None
+    assert window._paw_candidate is None
+    assert window._paw_click_consumed is False
+
+
+def test_focus_loss_binding_routes_to_paw_cancellation(monkeypatch):
+    window, root, *_rest = make_headless_window(monkeypatch)
+    calls = []
+    window.cancel_paw_press = lambda **kwargs: calls.append(kwargs)
+
+    root.bindings["<FocusOut>"](SimpleNamespace())
+
+    assert calls == [{}]
 
 
 def test_constrain_rect_to_area_keeps_the_whole_pet_visible():

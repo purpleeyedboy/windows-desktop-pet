@@ -117,6 +117,57 @@ def test_boundaries_negative_coordinates_clip_and_zero_remaining():
     assert len(cursor.moves) == count
 
 
+def test_multi_monitor_boundary_uses_start_monitor_and_clip_intersection():
+    cursor = FakeCursor(
+        point=PointerPoint(-5, -20),
+        monitor=PointerBounds(-1280, -1024, 1280, 1124),
+        clip=PointerBounds(-100, -50, 200, 60),
+    )
+    controller = PawPressController(cursor, FakeGate(), approval_validator=valid)
+
+    controller.start(PawSide.LEFT, approval(), 0)
+    controller.sample(.20); controller.sample(.359)
+
+    assert cursor.point == PointerPoint(-5, 9)
+    assert all(-100 <= point.x < 100 and -50 <= point.y < 10 for point in cursor.moves)
+
+
+def test_release_button_state_cancels_cursor_before_first_press_sample():
+    cursor, gate = FakeCursor(), FakeGate()
+    controller = PawPressController(cursor, gate, approval_validator=valid)
+    controller.start(PawSide.RIGHT, approval(), 0)
+
+    gate.buttons = True
+    controller.sample(.20); controller.sample(.359)
+
+    assert cursor.moves == []
+    assert controller.state is PawState.PRESS
+
+
+def test_cancel_and_close_are_idempotent_when_notification_fails():
+    cursor, gate = FakeCursor(), FakeGate()
+    notifications = 0
+
+    def fail_notification(_approval):
+        nonlocal notifications
+        notifications += 1
+        raise RuntimeError("injected cancellation failure")
+
+    controller = PawPressController(
+        cursor, gate, approval_validator=valid, on_cancel=fail_notification
+    )
+    controller.start(PawSide.LEFT, approval(), 0)
+
+    controller.cancel()
+    controller.close()
+    controller.close()
+
+    assert notifications == 1
+    assert controller.state is PawState.CLOSED
+    assert controller.side is None
+    assert str(controller.cancellation_error) == "injected cancellation failure"
+
+
 def test_stale_approval_or_permission_cancels_and_restores_pose():
     cursor, gate = FakeCursor(), FakeGate()
     c = PawPressController(cursor, gate, approval_validator=lambda _: False)

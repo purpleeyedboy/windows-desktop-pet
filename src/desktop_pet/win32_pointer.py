@@ -71,6 +71,8 @@ class Win32CursorMovementService:
         if not monitor or not self.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
             raise OSError("monitor bounds unavailable")
         rect = info.rcMonitor
+        if rect.right <= rect.left or rect.bottom <= rect.top:
+            raise OSError("invalid monitor bounds")
         return PointerBounds(rect.left, rect.top, rect.right - rect.left,
                              rect.bottom - rect.top)
 
@@ -78,6 +80,8 @@ class Win32CursorMovementService:
         rect = RECT()
         if not self.user32.GetClipCursor(ctypes.byref(rect)):
             raise OSError("GetClipCursor failed")
+        if rect.right <= rect.left or rect.bottom <= rect.top:
+            raise OSError("invalid cursor clip bounds")
         return PointerBounds(rect.left, rect.top, rect.right - rect.left,
                              rect.bottom - rect.top)
 

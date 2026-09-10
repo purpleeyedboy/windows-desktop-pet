@@ -33,16 +33,34 @@ jobs:
           $expectedName = (Get-Content -LiteralPath 'paws_exe_name.txt' -Encoding UTF8 -Raw).Trim()
           if ($exes[0].Name -cne $expectedName) { throw "Unexpected EXE name" }
           [PSCustomObject]@{
+            CandidateId = 'PAWS-2.5X-BOUNDARY-20260910'
             Candidate = 'pending user Windows acceptance'
             Name = $exes[0].Name
             Length = $exes[0].Length
             SHA256 = (Get-FileHash -Algorithm SHA256 $exes[0].FullName).Hash
+            Commit = '${{ github.sha }}'
+            RunUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            AutomatedBuild = 'passed'
+            WindowsDesktopAcceptance = 'pending'
           } | Format-List
+          [PSCustomObject]@{
+            candidate_id = 'PAWS-2.5X-BOUNDARY-20260910'
+            name = $exes[0].Name
+            length = $exes[0].Length
+            sha256 = (Get-FileHash -Algorithm SHA256 $exes[0].FullName).Hash
+            commit = '${{ github.sha }}'
+            run_url = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            automated_build = 'passed'
+            windows_desktop_acceptance = 'pending'
+          } | ConvertTo-Json | Set-Content -LiteralPath 'dist/candidate-evidence.json' -Encoding UTF8
       - name: Check identified Tk startup in isolated profile
         shell: pwsh
         run: ./tools/smoke_test_paws_candidate.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: v2.1-paws-generated-frames-candidate
-          path: dist/桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe
+          name: v2.1-paws-2.5x-boundary-candidate
+          path: |
+            dist/桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe
+            dist/candidate-evidence.json
           if-no-files-found: error
+          retention-days: 14

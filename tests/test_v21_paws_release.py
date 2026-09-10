@@ -3,7 +3,7 @@ from pathlib import Path
 from tools.v21_paws_gate import inspect_release_diff, verify_baseline_assets
 
 ROOT = Path(__file__).parents[1]
-EXE = "桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe"
+EXE = "桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe"
 
 
 def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
@@ -20,7 +20,7 @@ def test_paws_spec_is_independent_one_file_and_packages_only_feature_assets():
 
 def test_version_resource_contains_required_traceability():
     text = (ROOT / "version_info_paws.txt").read_text(encoding="utf-8")
-    for value in ("2.1.2.0", "BASE-001", "单侧前肢按压与有限光标推动", "修复候选版",
+    for value in ("2.1.3.0", "BASE-001", "单侧前肢按压与有限光标推动", "修复候选版",
                   "调试菜单", "BASELINE_V2.1.md", "2026-09-09", "Foundation=4eda8964"):
         assert value in text
 
@@ -35,8 +35,11 @@ def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     assert EXE in text
     assert "Length" in text and "Get-FileHash" in text
     assert "actions/upload-artifact@" in text
-    assert "generated-frames-candidate" in text
+    assert "v2.1-paws-2.5x-boundary-candidate" in text
     assert "pending user Windows acceptance" in text
+    assert "candidate-evidence.json" in text
+    assert "retention-days: 14" in text
+    assert "github.run_id" in text and "github.sha" in text
     assert expected_name == EXE
     inline_powershell = text.split("run: |", 1)[1].split(
         "- uses: actions/upload-artifact@", 1
@@ -44,6 +47,14 @@ def test_windows_action_builds_untested_candidate_and_checks_unique_exe():
     assert EXE not in inline_powershell
     assert "Get-Content" in inline_powershell
     assert "-Encoding UTF8" in inline_powershell
+
+
+def test_packaged_identity_names_the_boundary_candidate_and_separate_gates():
+    text = (ROOT / "desktop_pet_paws.spec").read_text(encoding="utf-8")
+    assert '"product_version": "2.1.3-paws"' in text
+    assert '"candidate_id": "PAWS-2.5X-BOUNDARY-20260910"' in text
+    assert '"automated_validation": "performed in GitHub Actions"' in text
+    assert '"windows_desktop_acceptance": "pending"' in text
 
 
 def test_release_diff_contains_no_binary_files_and_no_tracked_preview_pngs():

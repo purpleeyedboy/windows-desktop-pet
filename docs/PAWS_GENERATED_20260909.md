@@ -34,7 +34,7 @@ while eye-follow pulses are paused. Completion, interruption and exit resume
 following, and recentering never changes the click's captured cursor origin.
 
 Cursor verification uses only an in-memory cursor. Each action starts a new fixed
-trajectory, clamps total positive-y displacement to 8–28 physical pixels (14 at
+trajectory, clamps total positive-y displacement to 20–70 physical pixels (35 at
 nominal 32-pixel cursor height), respects the original monitor and existing clip,
 and abandons cursor movement when the user takes over. It does not inject buttons.
 

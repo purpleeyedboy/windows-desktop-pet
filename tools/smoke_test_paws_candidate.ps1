@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$CandidatePath = "dist/桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe")
+param([string]$CandidatePath = "dist/桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe")
 $ErrorActionPreference = "Stop"
 $candidate = (Resolve-Path -LiteralPath $CandidatePath).Path
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("paws-startup-" + [guid]::NewGuid().ToString("N"))
