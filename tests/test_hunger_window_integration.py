@@ -1,55 +1,52 @@
-from types import SimpleNamespace
+from types import SimpleNamespace as NS
 
-from PIL import Image, ImageChops
+from PIL import Image
 
-from desktop_pet.hunger_animation import HungerAnimationFrame, HungerVisual
-from desktop_pet.model import Rect
-from desktop_pet.window import PetWindow
-
-
-class Bubble:
-    def __init__(self): self.messages = []
-    def show_message(self, text, pet, screen): self.messages.append(text)
+from desktop_pet.foundation.runtime import Activity
+from desktop_pet.hunger import HungerLevel
+from desktop_pet.hunger_window import HungerWindow
 
 
-def bare_window() -> PetWindow:
-    window = object.__new__(PetWindow)
-    window._closed = False
-    window._last_hunger_presentation = None
-    window._hunger_frame = None
-    window._eye_interaction_boxes = ((170, 250, 220, 290), (290, 250, 340, 290))
-    window._current_image = Image.new("RGBA", (512, 768), (0, 0, 0, 0))
-    window._presentation_snapshot = SimpleNamespace()
-    window._window_rect = Rect(0, 0, 200, 300)
-    window.bubble = Bubble()
-    window.current_screen = lambda: Rect(0, 0, 1920, 1080)
-    rendered = []
-    window._apply_image = lambda image, anchor=None: rendered.append(
-        window._compose_hunger_image(image)
-    )
-    window._anchor = lambda: (100, 300)
-    window.rendered = rendered
-    return window
-
-
-def test_window_consumes_tears_and_phase_in_rendered_output() -> None:
-    window = bare_window()
-    dry = HungerAnimationFrame(HungerVisual.EXTREME_HUNGRY, False, 0, 1_600)
-    wet = HungerAnimationFrame(HungerVisual.EXTREME_HUNGRY, True, 600, 1_600)
-    window.present_hunger(dry)
-    window.present_hunger(wet)
-    assert len(window.rendered) == 2
-    assert ImageChops.difference(*window.rendered).convert("RGB").getbbox() is not None
-
-
-def test_bubble_only_shows_on_level_transition_not_animation_ticks() -> None:
-    window = bare_window()
-    for phase in (0, 400, 800, 1_200):
-        window.present_hunger(
-            HungerAnimationFrame(HungerVisual.SEVERE_HUNGRY, False, phase, 2_400)
+def bare_window(activity):
+    window = HungerWindow.__new__(HungerWindow)
+    window.services = NS(
+        runtime=NS(
+            clock=NS(monotonic=lambda: 0.0),
+            snapshot=lambda: NS(activity=activity[0]),
         )
-    assert window.bubble.messages == ["肚子好饿……"]
-    window.present_hunger(
-        HungerAnimationFrame(HungerVisual.EXTREME_HUNGRY, True, 0, 1_600)
     )
-    assert window.bubble.messages == ["肚子好饿……", "真的非常饿了……"]
+    window._hunger_snapshot = None
+    window._critical_visible = False
+    window._critical_index = None
+    window._critical_frames = (
+        Image.new("RGBA", (640, 768), (1, 2, 3, 4)),
+        Image.new("RGBA", (640, 768), (5, 6, 7, 8)),
+    )
+    window._critical_durations = (240, 240)
+    window._critical_art = window._critical_frames[0]
+    window._neutral_center_frame = Image.new("RGBA", (640, 768), (9, 10, 11, 12))
+    window._refresh_meter = lambda _units: None
+    window._refresh_feedback = lambda _units: None
+    applied = []
+    window._apply_image = lambda image, anchor: applied.append((image, anchor))
+    window._anchor = lambda: (320, 768)
+    return window, applied
+
+
+def test_critical_art_hides_during_interaction_and_recovers_when_idle():
+    activity = [Activity.IDLE]
+    window, applied = bare_window(activity)
+    snapshot = NS(level=HungerLevel.CRITICAL_HUNGRY, units=999)
+
+    window.refresh_hunger_presentation(snapshot)
+    assert window._critical_visible
+    assert applied[-1][0] is window._neutral_center_frame
+
+    activity[0] = Activity.BODY_ACTION
+    window.refresh_hunger_presentation(snapshot)
+    assert not window._critical_visible
+
+    activity[0] = Activity.IDLE
+    window.refresh_hunger_presentation(snapshot)
+    assert window._critical_visible
+    assert len(applied) == 3

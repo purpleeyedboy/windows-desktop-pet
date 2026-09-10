@@ -1,54 +1,37 @@
-from PIL import Image, ImageChops
+from PIL import Image
 
+from desktop_pet.hunger import HungerLevel
 from desktop_pet.hunger_animation import HungerAnimationFrame, HungerVisual
 from desktop_pet.hunger_effect import compose_hunger_effect
 
 
-def frame(*, visual, tears, phase):
-    return HungerAnimationFrame(visual, tears, phase, 1_600)
-
-
-def test_animation_phase_changes_transparent_composite_without_mutating_source() -> None:
-    source = Image.new("RGBA", (512, 768), (0, 0, 0, 0))
-    source.paste((240, 220, 200, 255), (120, 80, 390, 740))
-    before = source.tobytes()
-    first = compose_hunger_effect(
-        source,
-        frame(visual=HungerVisual.SEVERE_HUNGRY, tears=False, phase=0),
-        ((170, 250, 220, 290), (290, 250, 340, 290)),
+def frame(visual):
+    return HungerAnimationFrame(
+        HungerLevel.HUNGRY, visual, 1.0, False, 0.0, 400, None, 1,
     )
-    second = compose_hunger_effect(
-        source,
-        frame(visual=HungerVisual.SEVERE_HUNGRY, tears=False, phase=600),
-        ((170, 250, 220, 290), (290, 250, 340, 290)),
-    )
-    assert source.tobytes() == before
-    assert ImageChops.difference(first, second).convert("RGB").getbbox() is not None
-    assert first.size == source.size and first.mode == "RGBA"
 
 
-def test_tears_visible_is_consumed_by_compositor_below_both_eyes() -> None:
-    source = Image.new("RGBA", (512, 768), (0, 0, 0, 0))
-    boxes = ((170, 250, 220, 290), (290, 250, 340, 290))
-    dry = compose_hunger_effect(
-        source,
-        frame(visual=HungerVisual.EXTREME_HUNGRY, tears=False, phase=400),
-        boxes,
-    )
-    wet = compose_hunger_effect(
-        source,
-        frame(visual=HungerVisual.EXTREME_HUNGRY, tears=True, phase=400),
-        boxes,
-    )
-    assert ImageChops.difference(dry, wet).getbbox() is not None
-    for left, _top, right, bottom in boxes:
-        crop = wet.crop((left, bottom, right, bottom + 70))
-        assert crop.getchannel("A").getbbox() is not None
+class Library:
+    def __init__(self, overlay):
+        self.overlay = overlay
+
+    def overlay_for(self, _frame):
+        return self.overlay
 
 
-def test_suspended_frame_returns_unmodified_pixel_copy() -> None:
+def test_authored_frame_replaces_live_pose_without_mutating_either_image():
+    source = Image.new("RGBA", (640, 768), (1, 2, 3, 4))
+    authored = Image.new("RGBA", (640, 768), (5, 6, 7, 8))
+    source_before, authored_before = source.tobytes(), authored.tobytes()
+    result = compose_hunger_effect(source, frame(HungerVisual.MOUTH), Library(authored))
+    assert result.tobytes() == authored_before
+    assert result is not authored
+    assert source.tobytes() == source_before
+    assert authored.tobytes() == authored_before
+
+
+def test_suspended_frame_returns_unmodified_pixel_copy():
     source = Image.new("RGBA", (32, 32), (1, 2, 3, 4))
-    suspended = HungerAnimationFrame(HungerVisual.SUSPENDED, False, 0, 1_000)
-    result = compose_hunger_effect(source, suspended, ())
-    assert result is not source
+    result = compose_hunger_effect(source, frame(HungerVisual.SUSPENDED), Library(None))
     assert result.tobytes() == source.tobytes()
+    assert result is not source

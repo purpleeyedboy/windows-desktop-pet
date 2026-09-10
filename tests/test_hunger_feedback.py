@@ -37,6 +37,7 @@ def test_corpus_and_feedback_parameters():
     for phrases in CORPUS.values():
         assert len(phrases) == len(set(phrases)) == 100
         assert all(0 < len(p) <= 18 for p in phrases)
+    assert len({phrase for phrases in CORPUS.values() for phrase in phrases}) == 400
     assert bar_color(100000) == (75, 196, 107)
     assert bar_color(0) == (235, 75, 75)
     assert motion('full', 0)[2] < motion('full', .2)[2]
@@ -91,3 +92,51 @@ def test_graphic_runtime_plays_only_crossings():
     units[0] = 9999
     r._tick()
     assert clips[-1][0] == 'hunger.severe'
+
+
+def test_crossing_waits_for_interaction_then_recovers_animation_and_text_together():
+    from types import SimpleNamespace as NS
+    from desktop_pet.foundation.runtime import Activity
+    from desktop_pet.hunger import HungerService
+    from desktop_pet.hunger_graphic_runtime import HungerGraphicRuntime
+
+    units = [21_000]
+    activity = [Activity.IDLE]
+    permitted = [True]
+    clips, feedback = [], []
+    coordinator = NS(
+        current_token=None,
+        permits=lambda _: permitted[0],
+        cancel_and_recover=lambda _: None,
+    )
+    shared_runtime = NS(
+        coordinator=coordinator,
+        set_health=lambda *args, **kwargs: None,
+        drain=lambda: None,
+        snapshot=lambda: NS(activity=activity[0]),
+    )
+    service = NS(snapshot=lambda: NS(
+        units=units[0], level=HungerService.level_for(units[0])
+    ))
+    window = NS(
+        root=NS(after=lambda *args: 1),
+        refresh_hunger_presentation=lambda _: None,
+        show_hunger_feedback=feedback.append,
+        request_graphic_clip=lambda *args: clips.append(args),
+    )
+    runtime = HungerGraphicRuntime(
+        services=NS(runtime=shared_runtime), service=service,
+        window=window, clock=NS(monotonic=lambda: 100.0),
+    )
+    runtime.start()
+    activity[0] = Activity.BODY_ACTION
+    permitted[0] = False
+    units[0] = 20_000
+    runtime._tick()
+    assert clips == [] and feedback == []
+
+    activity[0] = Activity.IDLE
+    permitted[0] = True
+    runtime._tick()
+    assert [clip[0] for clip in clips] == ['hunger.hungry']
+    assert feedback == ['mild']

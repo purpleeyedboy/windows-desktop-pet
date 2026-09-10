@@ -199,8 +199,8 @@ class HungerService:
         return self.snapshot(now), True
 
     def close(self) -> None:
-        current = self.snapshot()
         now = self.utc_clock()
+        current = self.snapshot(now)
         # A shutdown is a necessary business checkpoint; rollback never writes an older anchor.
         if now >= current.anchor_utc:
             elapsed = now - current.anchor_utc

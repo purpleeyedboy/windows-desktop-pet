@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXE = "桌面宠物_修复饥饿衰减与张嘴流泪.exe"
+EXE = "桌面宠物_饥饿真实帧与公共基础接入.exe"
 
 
 def test_hunger_build_skips_tests_and_checks_name_size_hash() -> None:
@@ -19,7 +19,7 @@ def test_hunger_build_skips_tests_and_checks_name_size_hash() -> None:
 
 def test_hunger_spec_keeps_baseline_assets_and_has_exact_name() -> None:
     spec = (ROOT / "desktop_pet_hunger.spec").read_text(encoding="utf-8")
-    assert "桌面宠物_修复饥饿衰减与张嘴流泪" in spec
+    assert EXE.removesuffix(".exe") in spec
     assert "assets/rig/v1/runtime/eye-neutral-v1" in spec
     assert "build_metadata.json" in spec
     assert 'excludes=["numpy", "cv2"]' in spec
@@ -46,16 +46,16 @@ def test_build_metadata_declares_required_candidate_identity() -> None:
     ):
         assert text in script
     assert "automated_tests = $false" in script
-    assert 'windows_acceptance = "blocked_pending_pr5_then_user_validation"' in script
+    assert 'windows_acceptance = "pending_user_validation"' in script
 
 
-def test_workflow_labels_candidate_as_untested_pending_user_acceptance() -> None:
+def test_workflow_keeps_build_and_visual_acceptance_separate() -> None:
     workflow = (ROOT / ".github/workflows/windows-hunger.yml").read_text(encoding="utf-8")
-    assert "UNTESTED" in workflow
-    assert "BLOCKED pending PR5 foundation integration, then user Windows validation" in workflow
+    assert "startup survived seven seconds; this is not visual acceptance" in workflow
+    assert "pending user Windows visual acceptance" in workflow
 
 
-def test_windows_version_resource_labels_exe_as_untested_candidate() -> None:
+def test_windows_version_resource_labels_exe_as_test_candidate() -> None:
     version_info = (ROOT / "version_info_hunger.txt").read_text(encoding="utf-8")
-    assert "返工版" in version_info
-    assert "待PR5接入" in version_info
+    assert "饥饿真实帧候选版（待Windows验收）" in version_info
+    assert EXE in version_info
