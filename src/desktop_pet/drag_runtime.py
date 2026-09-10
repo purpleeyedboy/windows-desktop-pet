@@ -161,13 +161,17 @@ class DragExpectationRuntime:
         if self._token is not None and coordinator.current_token != self._token:
             self._recover_visual()
         if self._ending:
-            if self._timer is not None:
-                self._cancel(self._timer)
-            self._timer = None
-            self._ending = False
-            self._frame_index = 0
-            self._show(self.frames[0])
-            self._arm()
+            timer, self._timer = self._timer, None
+            try:
+                if timer is not None:
+                    self._cancel(timer)
+                self._ending = False
+                self._frame_index = 0
+                self._show(self.frames[0])
+                self._arm()
+            except Exception:
+                self._stop_preview()
+                raise
         if self._token is None:
             token = coordinator.request_activity(Activity.DRAG_PREVIEW, animation_id=f"expectation:{self._version}", timeout_seconds=60)
             if token is None:
