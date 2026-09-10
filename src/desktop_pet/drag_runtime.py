@@ -209,8 +209,12 @@ class DragExpectationRuntime:
                 self._stop_preview()
                 return
             self._frame_index -= 1
-            self._show(self.frames[self._frame_index])
-            self._arm()
+            try:
+                self._show(self.frames[self._frame_index])
+                self._arm()
+            except Exception:
+                self._stop_preview()
+                raise
             return
         if self._reconcile() == 0 or not self._owns_tick(event):
             return

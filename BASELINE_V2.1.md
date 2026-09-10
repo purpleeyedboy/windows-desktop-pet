@@ -61,3 +61,6 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+# EXPECT 后续修复记录（2026-09-10）
+
+版本范围：V2.1-EXPECT。退出帧渲染/调度失败立即释放期待活动并恢复默认显示；不更改批准素材、文件安全区域或外围首次触发限制。自动证据：期待定向回归 23 项通过、`verify_drag_runtime.py` 通过。Windows 构建与用户视觉验收尚待本提交后验证；全猫口水新帧未接入。
