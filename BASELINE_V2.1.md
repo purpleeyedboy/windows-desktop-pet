@@ -3,8 +3,8 @@
 ## CORE-ACTIVITY-RECOVERY-20260910 活动恢复契约复核
 
 - 公共 `AnimationChannels` 现保证物理播放、取消或恢复回调抛出异常时，仍释放对应的共享活动令牌并回到逻辑待机；原始异常继续向调用方传播，避免把物理失败伪装为成功。
-- 取消通道只调用一次物理取消；随后清除通道所有权并执行公共中性恢复。迟到令牌仍不得取消或完成当前活动，既有活动/版本/取消 ID/动画 ID 四字段身份契约不变。
-- `tools/verify_graphic_animation_contract.py` 已把播放异常、取消异常和显式恢复异常纳入 Windows 打包前门禁，并继续覆盖真实窗口队列、活动通道、逐帧播放器、抢占、超时与中性帧恢复。
+- 取消通道只调用一次物理取消；随后仅在通道仍由同一令牌持有时清除所有权并执行公共中性恢复。迟到 `recover()` 不得删除同通道替代活动，回调重入后也会再次核对所有权；既有活动/版本/取消 ID/动画 ID 四字段身份契约不变。
+- `tools/verify_graphic_animation_contract.py` 已把播放异常、取消异常、显式恢复异常和旧令牌恢复不影响替代活动纳入 Windows 打包前门禁，并继续覆盖真实窗口队列、活动通道、逐帧播放器、抢占、超时与中性帧恢复。
 - 功能分支兼容契约：继续使用 `ActivityCoordinator.request_activity()` 获得令牌，以同一令牌调用 `AnimationChannels.play()`，只通过 `complete()`、`cancel()` 或 `recover()` 结束；不得直接写 `RuntimeSnapshot` 或绕过通道。功能分支应以本修复提交为共同基础 SHA；具体 SHA 随提交与 PR 回报，不以循环自引用写入本文件。
 - 本项不改变活动优先级、认可素材、动作时序或 About 机器字段。Windows Actions 构建成功、artifact 下载复核、Windows 实机运行和视觉验收仍分别记录，不能相互替代。
 

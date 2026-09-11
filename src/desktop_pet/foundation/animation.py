@@ -70,6 +70,6 @@ class AnimationChannels:
             if activity_token is not None and self._active.get(channel) == activity_token:
                 self._channels[channel][1]()
         finally:
-            if activity_token is not None:
+            if self._active.get(channel) == activity_token:
                 self._active.pop(channel, None)
             self._coordinator.cancel_and_recover(activity_token)

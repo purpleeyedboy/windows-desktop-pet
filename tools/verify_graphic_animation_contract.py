@@ -81,6 +81,31 @@ def verify_channel_exception_recovery() -> None:
         raise RuntimeError("physical recovery exception stranded logical activity ownership")
 
 
+def verify_stale_recover_preserves_replacement() -> None:
+    """A delayed recovery request must not clear a replacement on the channel."""
+    clock = FixedTimeSource(datetime(2026, 9, 10, tzinfo=timezone.utc), 0)
+    runtime = RuntimeContext(clock)
+    channels = AnimationChannels(runtime.coordinator)
+    channels.register("body", lambda _payload: True, lambda: True)
+
+    stale = runtime.coordinator.request_activity(
+        Activity.GROOM, animation_id="stale"
+    )
+    if not channels.play("body", object(), stale):
+        raise RuntimeError("stale activity setup was rejected")
+    replacement = runtime.coordinator.request_activity(
+        Activity.FEED_ANIMATION, animation_id="replacement"
+    )
+    if not channels.play("body", object(), replacement):
+        raise RuntimeError("replacement activity setup was rejected")
+
+    channels.recover("body", stale)
+    if runtime.coordinator.current_token != replacement:
+        raise RuntimeError("stale recovery displaced replacement logical ownership")
+    if not channels.complete("body", replacement, "replacement"):
+        raise RuntimeError("stale recovery cleared replacement channel ownership")
+
+
 def verify_logical_frame_anchors() -> None:
     """Recenter frames use their own canvas; authored clip anchors stay intact."""
     window = PetWindow.__new__(PetWindow)
@@ -247,6 +272,7 @@ def verify_feature_activity_playback() -> None:
 
 def main() -> int:
     verify_channel_exception_recovery()
+    verify_stale_recover_preserves_replacement()
     verify_logical_frame_anchors()
     verify_feature_activity_playback()
     frame_root = ROOT / "assets" / "keyframes"
