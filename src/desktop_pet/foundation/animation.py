@@ -20,7 +20,11 @@ class AnimationChannels:
     def play(self, channel: str, payload: Any, activity_token: ActivityToken) -> bool:
         if self._coordinator.current_token != activity_token or channel in self._active:
             return False
-        accepted = self._channels[channel][0](payload)
+        try:
+            accepted = self._channels[channel][0](payload)
+        except Exception:
+            self._coordinator.cancel_and_recover(activity_token)
+            raise
         if accepted:
             self._active[channel] = activity_token
             self._coordinator.attach_recovery(
@@ -46,11 +50,11 @@ class AnimationChannels:
     def cancel(self, channel: str, activity_token: ActivityToken | None) -> bool:
         if activity_token is None or self._active.get(channel) != activity_token:
             return False
-        cancelled = self._channels[channel][1]()
-        if cancelled:
-            del self._active[channel]
+        try:
+            return self._channels[channel][1]()
+        finally:
+            self._active.pop(channel, None)
             self._coordinator.cancel_and_recover(activity_token)
-        return cancelled
 
     def _cancel_from_coordinator(self, channel: str, token: ActivityToken) -> None:
         if self._active.get(channel) != token:
@@ -62,9 +66,10 @@ class AnimationChannels:
 
     def recover(self, channel: str, activity_token: ActivityToken | None) -> None:
         """Best-effort physical cancellation followed by mandatory logical recovery."""
-        if activity_token is not None and self._active.get(channel) == activity_token:
-            try:
+        try:
+            if activity_token is not None and self._active.get(channel) == activity_token:
                 self._channels[channel][1]()
-            finally:
-                del self._active[channel]
-        self._coordinator.cancel_and_recover(activity_token)
+        finally:
+            if self._active.get(channel) == activity_token:
+                self._active.pop(channel, None)
+            self._coordinator.cancel_and_recover(activity_token)

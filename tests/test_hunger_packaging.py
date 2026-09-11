@@ -31,6 +31,7 @@ def test_windows_action_runs_isolated_hunger_acceptance_and_uploads_only_hunger_
     assert "build_hunger.ps1" in workflow
     assert "python -m pytest -q" in workflow
     for test_file in (
+        "tests/test_foundation_animation.py",
         "tests/test_hunger.py",
         "tests/test_hunger_runtime.py",
         "tests/test_hunger_feedback.py",
@@ -71,7 +72,7 @@ def test_provenance_records_published_activity_recovery_source() -> None:
     )
     assert (
         '"activity_recovery_fix_commit": '
-        '"77a4f3a90c74c549a66052bebb4b652500e1f7be"'
+        '"1a18477faa4caa28170e648437d7cb8b39612ac0"'
     ) in provenance
 
 

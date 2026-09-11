@@ -1,7 +1,7 @@
 {
   "foundation_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
   "graphic_playback_fix_commit": "6af84461332787ee6eb16ffe945a56083bbd1d89",
-  "activity_recovery_fix_commit": "77a4f3a90c74c549a66052bebb4b652500e1f7be",
+  "activity_recovery_fix_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
   "files": {
     "src/desktop_pet/foundation/__init__.py": {
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
@@ -14,9 +14,9 @@
       "sha256": "fd4efb170e2c0b69a43cf10a3a4633d27d109c75338113d8a0fcd984b947cc11"
     },
     "src/desktop_pet/foundation/animation.py": {
-      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
-      "git_blob": "2647554bc0344c761efc766236f5533ba5ecbe29",
-      "sha256": "8122c6316101da63bec71ec7bdbffc6b80f2f923f3b9d5ece0e128e8fa548640"
+      "source_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
+      "git_blob": "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb",
+      "sha256": "4a3e8a245a844afa28d7597fa50a35b38f4fb1eb5874efea023778ef526957c1"
     },
     "src/desktop_pet/foundation/config.py": {
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
