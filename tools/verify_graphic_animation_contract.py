@@ -22,6 +22,65 @@ from desktop_pet.model import ACTIONS
 from desktop_pet.window import PetWindow
 
 
+def verify_channel_exception_recovery() -> None:
+    """Physical adapter failures must never strand shared logical ownership."""
+    clock = FixedTimeSource(datetime(2026, 9, 10, tzinfo=timezone.utc), 0)
+    runtime = RuntimeContext(clock)
+    channels = AnimationChannels(runtime.coordinator)
+
+    def fail_play(_payload) -> bool:
+        raise RuntimeError("injected play failure")
+
+    channels.register("play-failure", fail_play, lambda: True)
+    token = runtime.coordinator.request_activity(
+        Activity.GROOM, animation_id="play-failure"
+    )
+    try:
+        channels.play("play-failure", object(), token)
+    except RuntimeError as error:
+        if str(error) != "injected play failure":
+            raise
+    else:
+        raise RuntimeError("physical play exception was hidden")
+    if runtime.coordinator.current_token is not None or runtime.snapshot().activity is not Activity.IDLE:
+        raise RuntimeError("physical play exception stranded logical activity ownership")
+
+    def fail_cancel() -> bool:
+        raise RuntimeError("injected cancel failure")
+
+    channels.register("cancel-failure", lambda _payload: True, fail_cancel)
+    token = runtime.coordinator.request_activity(
+        Activity.FEED_ANIMATION, animation_id="cancel-failure"
+    )
+    if not channels.play("cancel-failure", object(), token):
+        raise RuntimeError("cancel-failure setup was rejected")
+    try:
+        channels.cancel("cancel-failure", token)
+    except RuntimeError as error:
+        if str(error) != "injected cancel failure":
+            raise
+    else:
+        raise RuntimeError("physical cancel exception was hidden")
+    if runtime.coordinator.current_token is not None or runtime.snapshot().activity is not Activity.IDLE:
+        raise RuntimeError("physical cancel exception stranded logical activity ownership")
+
+    channels.register("recover-failure", lambda _payload: True, fail_cancel)
+    token = runtime.coordinator.request_activity(
+        Activity.BODY_ACTION, animation_id="recover-failure"
+    )
+    if not channels.play("recover-failure", object(), token):
+        raise RuntimeError("recover-failure setup was rejected")
+    try:
+        channels.recover("recover-failure", token)
+    except RuntimeError as error:
+        if str(error) != "injected cancel failure":
+            raise
+    else:
+        raise RuntimeError("physical recovery exception was hidden")
+    if runtime.coordinator.current_token is not None or runtime.snapshot().activity is not Activity.IDLE:
+        raise RuntimeError("physical recovery exception stranded logical activity ownership")
+
+
 def verify_logical_frame_anchors() -> None:
     """Recenter frames use their own canvas; authored clip anchors stay intact."""
     window = PetWindow.__new__(PetWindow)
@@ -187,6 +246,7 @@ def verify_feature_activity_playback() -> None:
 
 
 def main() -> int:
+    verify_channel_exception_recovery()
     verify_logical_frame_anchors()
     verify_feature_activity_playback()
     frame_root = ROOT / "assets" / "keyframes"
