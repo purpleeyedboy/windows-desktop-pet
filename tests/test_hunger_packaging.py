@@ -25,11 +25,20 @@ def test_hunger_spec_keeps_baseline_assets_and_has_exact_name() -> None:
     assert 'excludes=["numpy", "cv2"]' in spec
 
 
-def test_windows_action_checks_and_uploads_only_hunger_exe() -> None:
+def test_windows_action_runs_isolated_hunger_acceptance_and_uploads_only_hunger_exe() -> None:
     workflow = (ROOT / ".github/workflows/windows-hunger.yml").read_text(encoding="utf-8")
     assert "runs-on: windows-latest" in workflow
     assert "build_hunger.ps1" in workflow
-    assert "pytest" not in workflow.lower()
+    assert "python -m pytest -q" in workflow
+    for test_file in (
+        "tests/test_hunger.py",
+        "tests/test_hunger_runtime.py",
+        "tests/test_hunger_feedback.py",
+        "tests/test_hunger_animation.py",
+        "tests/test_hunger_window_integration.py",
+    ):
+        assert test_file in workflow
+    assert "tests/ " not in workflow
     assert "requirements-assets.txt" not in workflow
     assert "Count -ne 1" in workflow
     assert EXE in workflow
@@ -43,6 +52,7 @@ def test_build_metadata_declares_required_candidate_identity() -> None:
         "version", "date", "git_short_hash", "baseline_tag", "enabled_features",
         "test_build", "debug_menu", "documentation_baseline",
         "automated_tests", "windows_acceptance", "baseline_commit", "foundation_commit",
+        "activity_recovery_fix_commit",
     ):
         assert text in script
     assert "automated_tests = $false" in script
@@ -53,6 +63,16 @@ def test_workflow_keeps_build_and_visual_acceptance_separate() -> None:
     workflow = (ROOT / ".github/workflows/windows-hunger.yml").read_text(encoding="utf-8")
     assert "startup survived seven seconds; this is not visual acceptance" in workflow
     assert "pending user Windows visual acceptance" in workflow
+
+
+def test_provenance_records_published_activity_recovery_source() -> None:
+    provenance = (ROOT / "docs/hunger-foundation-provenance.json").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        '"activity_recovery_fix_commit": '
+        '"77a4f3a90c74c549a66052bebb4b652500e1f7be"'
+    ) in provenance
 
 
 def test_windows_version_resource_labels_exe_as_test_candidate() -> None:

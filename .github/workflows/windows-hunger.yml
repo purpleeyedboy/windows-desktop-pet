@@ -18,7 +18,15 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install . "PyInstaller>=6,<7"
+      - run: python -m pip install . "PyInstaller>=6,<7" "pytest>=8,<9"
+      - name: Run isolated hunger acceptance regressions
+        run: >-
+          python -m pytest -q
+          tests/test_hunger.py
+          tests/test_hunger_runtime.py
+          tests/test_hunger_feedback.py
+          tests/test_hunger_animation.py
+          tests/test_hunger_window_integration.py
       - run: .\build_hunger.ps1
         shell: pwsh
       - name: Verify isolated candidate startup survives seven seconds

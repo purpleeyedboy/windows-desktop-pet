@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     provenance = json.loads((ROOT / "docs/hunger-foundation-provenance.json").read_text("utf-8"))
+    if provenance.get("activity_recovery_fix_commit") != "77a4f3a90c74c549a66052bebb4b652500e1f7be":
+        raise RuntimeError("published activity recovery source is not recorded")
     sources = provenance["files"]
     if not sources:
         raise RuntimeError("foundation source record is empty")

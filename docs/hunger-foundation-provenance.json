@@ -1,6 +1,7 @@
 {
   "foundation_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
   "graphic_playback_fix_commit": "6af84461332787ee6eb16ffe945a56083bbd1d89",
+  "activity_recovery_fix_commit": "77a4f3a90c74c549a66052bebb4b652500e1f7be",
   "files": {
     "src/desktop_pet/foundation/__init__.py": {
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",

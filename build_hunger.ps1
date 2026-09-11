@@ -28,6 +28,7 @@ try {
     baseline_commit = "c3b218df9dd0cfc84d96231701e771f0382388e1"
     foundation_commit = $Provenance.foundation_commit
     graphic_playback_fix_commit = $Provenance.graphic_playback_fix_commit
+    activity_recovery_fix_commit = $Provenance.activity_recovery_fix_commit
     enabled_features = @("baseline", "hunger_0_100000", "real_utc_decay_120m", "real_graphic_hunger", "unified_state_adapter")
     test_build = $true
     debug_menu = $true
@@ -42,6 +43,7 @@ try {
     build_date = $Metadata.date
     git_short_hash = $Metadata.git_short_hash
     foundation_commit = $Metadata.foundation_commit
+    activity_recovery_fix_commit = $Metadata.activity_recovery_fix_commit
     enabled_features = $Metadata.enabled_features
     test_build = $true
     debug_enabled = $true
