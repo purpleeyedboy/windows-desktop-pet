@@ -77,7 +77,7 @@ try {
     if (@($windows | Where-Object { $_ -match '无法启动|Fatal error|Traceback' }).Count) {
         throw "Candidate displayed an error window: $($windows -join ', ')"
     }
-    if (-not @($windows | Where-Object { $_ -match '^TkTopLevel\|桌面宠物 V2\.1-CORE \| 2\.1\.2-paws \| git:[0-9a-f]{8} \| foundation:4eda8964$' }).Count) {
+    if (-not @($windows | Where-Object { $_ -match '^TkTopLevel\|桌面宠物 V2\.1-CORE \| 2\.1\.3-paws \| git:[0-9a-f]{8} \| foundation:4eda8964$' }).Count) {
         throw "No identified visible Tk candidate window in the launched process tree: $($windows -join ', ')"
     }
     "Isolated candidate process tree displayed its identified Tk window after seven seconds; pending user visual acceptance." |
