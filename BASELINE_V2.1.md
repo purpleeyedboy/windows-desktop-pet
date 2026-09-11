@@ -67,6 +67,6 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 
 ## 2026-09-11：PR #5 发布来源与 Windows 回归门禁
 
-- 公共基础 PR #5 的正式发布来源更新为完整提交 `77a4f3a90c74c549a66052bebb4b652500e1f7be`，取代候选元数据中的临时拆分提交标记 `f617765+6af8446`。本分支已有共享 services、coordinator、STA worker、region 与 hunger adapter 接线；由于当前容器访问 GitHub 被代理拒绝，未把无法取得的远端 diff 冒充为逐文件同步证据。
-- Windows workflow 在构建前运行 OLE 进入/离开/Drop、退出与重入回调异常恢复、重复/迟到触发、头部限定交接以及不修改共享饥饿状态的自动回归。候选仍不安装 FEED consumer，因此不会移动、删除或回收文件；`CF_HDROP` 只复制路径值并及时释放 OLE medium。
+- 公共基础 PR #5 的最新正式发布来源为完整提交 `1a18477faa4caa28170e648437d7cb8b39612ac0`。已按核验完整源文件同步 `src/desktop_pet/foundation/animation.py`，同步后 Git blob 为 `a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb`；播放、取消或恢复回调异常均释放逻辑所有权，旧 token 的恢复不能清除替代活动。
+- Windows workflow 在构建前运行 CORE 动画播放/取消/恢复异常、旧 token 隔离、OLE 进入/离开/Drop、退出与重入回调异常恢复、重复/迟到触发、头部限定交接以及不修改共享饥饿状态的自动回归。候选仍不安装 FEED consumer，因此不会移动、删除或回收文件；`CF_HDROP` 只复制路径值并及时释放 OLE medium。
 - 自动代码验证、Windows 构建、artifact 上传、Windows 实机 OLE/DPI/多屏验证和用户视觉验收分别记录。后四项必须等待真实 Actions/Windows 证据，不以 Linux 测试或元数据替代。

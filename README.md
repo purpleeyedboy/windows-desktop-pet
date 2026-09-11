@@ -35,7 +35,7 @@ V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，�
 
 ## V2.1 文件拖动期待反馈测试版
 
-返工开发版使用 `build_drag_expectation_candidate.ps1` 在 Windows 构建，输出 `dist-drag-expectation-candidate\桌面宠物_期待逐帧与公共基础接入.exe`。公共基础来源记录为 PR #5 发布提交 `77a4f3a90c74c549a66052bebb4b652500e1f7be`。OLE 层会复制单个 `CF_HDROP` 本地绝对路径并释放 `STGMEDIUM`；多对象、目录、相对路径和网络路径被拒绝。Drop 只形成不可变预览事件，不执行复制、移动、删除、回收、打开、上传或修改文件，也不改变饥饿值。
+返工开发版使用 `build_drag_expectation_candidate.ps1` 在 Windows 构建，输出 `dist-drag-expectation-candidate\桌面宠物_期待逐帧与公共基础接入.exe`。公共基础来源记录为 PR #5 发布提交 `1a18477faa4caa28170e648437d7cb8b39612ac0`；同步的 `foundation/animation.py` Git blob 为 `a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb`。OLE 层会复制单个 `CF_HDROP` 本地绝对路径并释放 `STGMEDIUM`；多对象、目录、相对路径和网络路径被拒绝。Drop 只形成不可变预览事件，不执行复制、移动、删除、回收、打开、上传或修改文件，也不改变饥饿值。
 
 右键菜单的一级“调试”子菜单提供“期待动画预览（3秒，不改变饥饿）”和“停止期待预览”；它不模拟或执行文件操作。动画数值集中在 `DragVisualConfig`，在 Windows 真机确认前均标记为待视觉验收。
 

@@ -4,13 +4,14 @@ from pathlib import Path
 
 
 NAME = "桌面宠物_期待逐帧与公共基础接入.exe"
-FOUNDATION_COMMIT = "77a4f3a90c74c549a66052bebb4b652500e1f7be"
+FOUNDATION_COMMIT = "1a18477faa4caa28170e648437d7cb8b39612ac0"
+ANIMATION_BLOB = "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb"
 
 
 def test_drag_candidate_metadata_is_complete_and_scope_limited():
     metadata = json.loads(Path("DRAG_EXPECTATION_BUILD_INFO.json").read_text(encoding="utf-8"))
     assert metadata == {
-        "version": "2.1-expect-frames.2",
+        "version": "2.1-expect-frames.3",
         "date": "2026-09-11",
         "git_short_hash": "BUILD_TIME_REQUIRED",
         "foundation_commit": FOUNDATION_COMMIT,
@@ -68,6 +69,7 @@ def test_drag_build_and_actions_run_regressions_and_enforce_candidate_artifact_g
     for required in (
         "windows-latest",
         "python -m pytest tests/test_expectation_exit_recovery.py",
+        "tests/test_foundation_animation_recovery.py",
         "python tools/verify_drag_runtime.py",
         "python tools/verify_graphic_animation_contract.py",
         r".\build_drag_expectation_candidate.ps1 -SkipTests",
@@ -91,6 +93,7 @@ def test_drag_build_and_actions_run_regressions_and_enforce_candidate_artifact_g
     assert FOUNDATION_COMMIT in version_info
     assert "Windows lifecycle/non-destructive tests: PASS" in workflow
     assert f"Foundation source: PR #5 {FOUNDATION_COMMIT}" in workflow
+    assert f"foundation/animation.py blob: {ANIMATION_BLOB}" in workflow
     assert 'PYTHONUTF8: "1"' in workflow
     assert "PYTHONIOENCODING: utf-8" in workflow
 

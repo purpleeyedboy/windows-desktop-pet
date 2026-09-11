@@ -3,10 +3,10 @@ VSVersionInfo(
   kids=[StringFileInfo([StringTable('080404b0', [
     StringStruct('CompanyName', 'Windows Desktop Pet'),
     StringStruct('FileDescription', 'V2.1 real expectation frames with shared runtime'),
-    StringStruct('FileVersion', '2.1-expect-frames.2 (2026-09-11; build commit required; foundation 77a4f3a90c74c549a66052bebb4b652500e1f7be; BASE-001)'),
+    StringStruct('FileVersion', '2.1-expect-frames.3 (2026-09-11; build commit required; foundation 1a18477faa4caa28170e648437d7cb8b39612ac0; BASE-001)'),
     StringStruct('InternalName', 'desktop_pet_drag_expectation'),
     StringStruct('OriginalFilename', '桌面宠物_期待逐帧与公共基础接入.exe'),
     StringStruct('ProductName', '桌面宠物 - 文件拖动期待反馈'),
-    StringStruct('ProductVersion', '2.1-expect-frames.2; lifecycle and non-destructive gates; Windows and user visual acceptance pending; BASELINE_V2.1.md')
+    StringStruct('ProductVersion', '2.1-expect-frames.3; CORE animation recovery and drag lifecycle gates; Windows and user visual acceptance pending; BASELINE_V2.1.md')
   ])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])]
 )
