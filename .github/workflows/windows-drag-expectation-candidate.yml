@@ -22,8 +22,17 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-      - run: python -m pip install . "PyInstaller>=6,<7"
-      - run: .\build_drag_expectation_candidate.ps1
+      - run: python -m pip install . "pytest>=8,<9" "PyInstaller>=6,<7"
+      - name: Verify OLE lifecycle, recovery, repeated triggers, and non-destructive behavior
+        run: >-
+          python -m pytest tests/test_expectation_exit_recovery.py
+          tests/test_drag_expectation.py tests/test_drag_foundation_adapter.py
+          tests/test_ole_drop_target.py -q
+      - name: Verify shared drag runtime contract
+        run: python tools/verify_drag_runtime.py
+      - name: Verify graphic animation contract
+        run: python tools/verify_graphic_animation_contract.py
+      - run: .\build_drag_expectation_candidate.ps1 -SkipTests
         shell: pwsh
       - name: Verify isolated startup and actual expectation frames
         shell: pwsh
@@ -37,7 +46,8 @@ jobs:
           if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
           $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
           "Shared runtime and real graphic gates: PASS; user visual acceptance: PENDING" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
-          "Foundation integration: actual shared services, coordinator, worker and hunger" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Windows lifecycle/non-destructive tests: PASS" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Foundation source: PR #5 77a4f3a90c74c549a66052bebb4b652500e1f7be" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
           "Independent expectation candidate; feeding consumer is a separate integration" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
           "SHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

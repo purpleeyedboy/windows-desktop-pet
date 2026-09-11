@@ -108,10 +108,12 @@ try {
 
     & $Python tools/build_expectation_assets.py
     if ($LASTEXITCODE -ne 0) { throw "Expectation asset reconstruction failed." }
-    & $Python tools/verify_drag_runtime.py
-    if ($LASTEXITCODE -ne 0) { throw "Shared expectation runtime verification failed." }
-    & $Python tools/verify_graphic_animation_contract.py
-    if ($LASTEXITCODE -ne 0) { throw "Graphic playback verification failed." }
+    if (-not $SkipTests) {
+        & $Python tools/verify_drag_runtime.py
+        if ($LASTEXITCODE -ne 0) { throw "Shared expectation runtime verification failed." }
+        & $Python tools/verify_graphic_animation_contract.py
+        if ($LASTEXITCODE -ne 0) { throw "Graphic playback verification failed." }
+    }
     & $Python -m PyInstaller --noconfirm --distpath dist-drag-expectation-candidate --workpath build-drag-expectation-candidate desktop_pet_drag_expectation.spec
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE." }
 
