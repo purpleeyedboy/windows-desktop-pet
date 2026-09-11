@@ -68,7 +68,7 @@ Push-Location $RepositoryRoot
 try {
     $env:PYTHONPATH = Join-Path $RepositoryRoot "src"
     if ([string]::IsNullOrWhiteSpace($FoundationCommit)) {
-        $FoundationCommit = "4eda8964ccee8ccd0bd0e2bddb9670618924f90e"
+        $FoundationCommit = "77a4f3a90c74c549a66052bebb4b652500e1f7be"
     }
     $RuntimeApi = Join-Path $RepositoryRoot "docs\v21-runtime-api.md"
     if (-not (Test-Path -LiteralPath $RuntimeApi -PathType Leaf)) {

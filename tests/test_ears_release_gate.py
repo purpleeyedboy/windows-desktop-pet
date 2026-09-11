@@ -66,19 +66,19 @@ def test_preview_is_deterministic_temporary_output_not_a_tracked_png(tmp_path) -
     ).splitlines()
 
 
-def test_windows_gate_skips_automated_tests_and_preserves_exe_contract() -> None:
+def test_windows_gate_runs_ear_regressions_and_preserves_exe_contract() -> None:
     workflow = (ROOT / ".github/workflows/windows-ears-candidate.yml").read_text(
         encoding="utf-8"
     )
     assert "fetch-depth: 0" in workflow
-    assert "pytest" not in workflow.lower()
+    assert "python -m pytest -q" in workflow.lower()
     assert "tools/build_ears_preview.py" not in workflow
     assert "-SkipTests" not in workflow
-    assert "未自动测试" in workflow
+    assert "已通过双耳自动化回归" in workflow
     assert 'if ($exes.Count -ne 1)' in workflow
     assert "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe" in workflow
     assert "Get-FileHash" in workflow
-    assert "4eda8964ccee8ccd0bd0e2bddb9670618924f90e" in workflow
+    assert "77a4f3a90c74c549a66052bebb4b652500e1f7be" in workflow
 
 
 def test_verified_pr5_source_manifest_and_runtime_wiring_are_present() -> None:

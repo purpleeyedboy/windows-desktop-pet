@@ -37,7 +37,7 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
     assert "activity_coordinator import ActivityCoordinator" not in script
     assert "input_router import InputRouter" not in script
     assert "docs\\v21-runtime-api.md" in script
-    assert "4eda8964ccee8ccd0bd0e2bddb9670618924f90e" in script
+    assert "77a4f3a90c74c549a66052bebb4b652500e1f7be" in script
     assert script.index("Clear-CandidateOutputs") < script.index("-m PyInstaller")
     assert "filevers=(2, 1, 1, 0)" in version
     assert EXE in version
@@ -46,7 +46,10 @@ def test_ears_candidate_has_independent_onefile_spec_and_build_metadata() -> Non
 def test_windows_ears_workflow_checks_only_expected_exe_size_hash_and_upload() -> None:
     workflow = (ROOT / ".github/workflows/windows-ears-candidate.yml").read_text(encoding="utf-8")
     assert "runs-on: windows-latest" in workflow
-    assert "pytest" not in workflow.lower()
+    assert "python -m pytest -q" in workflow.lower()
+    assert "tests/test_ear_interaction.py" in workflow
+    assert "tests/test_layered_window.py" in workflow
+    assert "tests/test_window.py" in workflow
     assert "requirements-assets.txt" not in workflow
     assert ".\\build_ears_candidate.ps1" in workflow
     assert "-SkipTests" not in workflow
@@ -57,6 +60,7 @@ def test_windows_ears_workflow_checks_only_expected_exe_size_hash_and_upload() -
     assert "Get-FileHash" in workflow
     assert "actions/upload-artifact@" in workflow
     assert workflow.count("actions/upload-artifact@") == 1
-    assert "未自动测试" in workflow
+    assert "已通过双耳自动化回归" in workflow
     assert "V21_FOUNDATION_COMMIT" in workflow
+    assert "77a4f3a90c74c549a66052bebb4b652500e1f7be" in workflow
     assert "secrets." not in workflow.lower()

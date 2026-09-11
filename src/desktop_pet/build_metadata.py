@@ -12,7 +12,7 @@ SOURCE_FALLBACK = {
     "build_date": "source checkout",
     "git_short_hash": "not packaged",
     "baseline": "BASE-001",
-    "foundation_commit": "4eda8964ccee8ccd0bd0e2bddb9670618924f90e",
+    "foundation_commit": "77a4f3a90c74c549a66052bebb4b652500e1f7be",
     "enabled_features": ["既有基线", "耳朵防触摸系统"],
     "channel": "未自动测试；等待用户 Windows 实机验收的候选版",
     "documentation_baseline": "V2.1-EARS",

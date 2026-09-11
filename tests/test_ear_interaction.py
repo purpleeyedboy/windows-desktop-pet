@@ -58,3 +58,14 @@ def test_adapter_ignores_other_ear_while_active_validates_context_and_cools_down
     assert adapter.cancel_and_recover(first)
     assert h.frames[-1] == ('left', EarRasterPose())
     assert h.completed == [(first, True)]
+
+def test_adapter_ignores_late_timer_callback_after_interruption():
+    h = Harness(); adapter = EarFeatureAdapter(h.schedule, h.cancel, h.clock, h.display, h.complete)
+    context = EarActionContext('ear:left', 4, object())
+    assert adapter.start_approved('left', context)
+    late_callback = h.pending[0]
+    assert adapter.cancel_and_recover(context)
+    recovered_frames = list(h.frames)
+    late_callback()
+    assert h.frames == recovered_frames
+    assert h.completed == [(context, True)]
