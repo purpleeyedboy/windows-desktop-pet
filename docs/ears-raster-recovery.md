@@ -20,6 +20,12 @@ No preview binaries or redundant decoded runtime frames are committed.
 
 The first recovered ear candidate still contained the earlier `e178f371` services/persistence implementation. A later bounded comparison found the missing backup/journal recovery, legacy migration, rotating logs, authoritative shared state, frame-playback APIs and menu-priority fix. This follow-up incorporates the actual shared code from local core commit `6af8446` (remote PR 5 commit `4eda8964ccee8ccd0bd0e2bddb9670618924f90e`), retaining only the ear-specific activity/config extension and the ear compositor/session methods. The metadata now identifies that real shared source.
 
+The subsequent published CORE recovery is `1a18477faa4caa28170e648437d7cb8b39612ac0`.
+Its verified `foundation/animation.py` blob
+`a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb` is synchronized verbatim. The source
+manifest records it as an override to the historical reconstruction so the actual
+file identity, rather than only the release label, is gated.
+
 `verify_ears_foundation_recovery.py` verifies migration without changing the legacy inputs, corrupt-primary backup recovery, pending journal recovery, redacted rotating logs and authoritative state on window close, using only temporary synthetic files. Shared graphic and ear-specific playback checks both remain enabled in the ear builder.
 
 The shared frame-anchor change also needed a compatibility adjustment: old six-frame action endpoints are replaced by the existing 640px-wide center frame, while their physical frames and manifest are 512px-wide. Logical endpoints retain their actual image-center anchor; other authored frames continue to use manifest anchors. This prevents introducing horizontal displacement into the already working baseline.

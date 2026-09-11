@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -78,16 +79,25 @@ def test_windows_gate_runs_ear_regressions_and_preserves_exe_contract() -> None:
     assert 'if ($exes.Count -ne 1)' in workflow
     assert "桌面宠物_耳朵防触摸系统_单次躲闪-20260910.exe" in workflow
     assert "Get-FileHash" in workflow
-    assert "77a4f3a90c74c549a66052bebb4b652500e1f7be" in workflow
+    assert "1a18477faa4caa28170e648437d7cb8b39612ac0" in workflow
 
 
 def test_verified_pr5_source_manifest_and_runtime_wiring_are_present() -> None:
-    source = (ROOT / "docs/v2.1-ears-foundation-source.json").read_text(
-        encoding="utf-8"
-    )
+    source_path = ROOT / "docs/v2.1-ears-foundation-source.json"
+    source = source_path.read_text(encoding="utf-8")
+    manifest = json.loads(source)
     assert '"source_commit": "e178f371bd2da1c0b4e892609acfdf79bfcab450"' in source
+    assert '"current_core_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0"' in source
+    assert '"blob": "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb"' in source
     assert '"base_commit": "c3b218df9dd0cfc84d96231701e771f0382388e1"' in source
-    assert source.count('"blob":') == 29
+    assert source.count('"blob":') == 30
+    override = manifest["synchronized_overrides"]
+    assert override == [{
+        "path": "src/desktop_pet/foundation/animation.py",
+        "status": "modified",
+        "blob": "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb",
+    }]
+    assert _git("hash-object", override[0]["path"]).strip() == override[0]["blob"]
     window = (ROOT / "src/desktop_pet/window.py").read_text(encoding="utf-8")
     assert 'runtime.bind("input.ear", self._consume_ear)' in window
     assert 'self.services.animation.play("ears", side, token)' in window

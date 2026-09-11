@@ -27,6 +27,7 @@ jobs:
           python -m pytest -q
           tests/test_ear_interaction.py
           tests/test_ear_touch_recoil.py
+          tests/test_foundation_animation.py
           tests/test_layered_window.py
           tests/test_window.py::test_headless_ear_press_release_is_independent_from_actions_and_restores
           tests/test_window.py::test_headless_ear_pointer_leave_focus_loss_and_close_restore_neutral
@@ -35,7 +36,7 @@ jobs:
           tests/test_window.py::test_headless_ear_animation_interruptions_restore_exact_neutral
       - name: Build Windows acceptance candidate
         env:
-          V21_FOUNDATION_COMMIT: 77a4f3a90c74c549a66052bebb4b652500e1f7be
+          V21_FOUNDATION_COMMIT: 1a18477faa4caa28170e648437d7cb8b39612ac0
         run: .\build_ears_candidate.ps1
         shell: pwsh
       - name: Verify isolated Windows candidate startup

@@ -2,6 +2,14 @@
   "schema_version": 1,
   "handoff_kind": "verified-source-patch-not-git-ancestry",
   "source_commit": "e178f371bd2da1c0b4e892609acfdf79bfcab450",
+  "current_core_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
+  "synchronized_overrides": [
+    {
+      "path": "src/desktop_pet/foundation/animation.py",
+      "status": "modified",
+      "blob": "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb"
+    }
+  ],
   "base_commit": "c3b218df9dd0cfc84d96231701e771f0382388e1",
   "files": [
     {
