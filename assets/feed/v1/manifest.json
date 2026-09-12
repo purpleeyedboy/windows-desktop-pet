@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "source_size": [
+    1024,
+    1536
+  ],
+  "sources": {
+    "color": {
+      "sha256": "ba65bc204a76af8f21fc1c1250eb98e9df69edd6553df8e8b17c5671da45ece5"
+    },
+    "mask": {
+      "sha256": "5b1d87426305fe457dcf6be2d5dae290db646b991119f18ca6b7687cd37468ff"
+    }
+  },
+  "poses": [
+    "canonical_closed",
+    "half_open",
+    "wide_open",
+    "half_open_return",
+    "squint_upper_lip_lick",
+    "squint_corner_lick"
+  ],
+  "canonical": {
+    "canvas": [
+      640,
+      768
+    ],
+    "subject_height": 524,
+    "feet_y": 736,
+    "center_x": 320,
+    "original_offset": [
+      64,
+      0
+    ],
+    "original_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+    "neutral_rgba_sha256": "e02f052cb970d2ebed4946ad0f09038adbce4d41da3a730e09e56783054e5eb0",
+    "face_region": [
+      104,
+      312,
+      264,
+      476
+    ]
+  },
+  "source_bundle": "feed-face-patches.base64.txt",
+  "composite_mode": "canonical_local_face",
+  "legacy_source_bundle": "feed-sources.base64.txt",
+  "frame_patches": [
+    null,
+    "half",
+    "wide",
+    "half",
+    "upper",
+    "corner"
+  ],
+  "face_patch_masks": {
+    "half": {
+      "ellipses": [
+        [
+          76,
+          378,
+          180,
+          457
+        ]
+      ],
+      "lower_left_guard": true
+    },
+    "wide": {
+      "ellipses": [
+        [
+          70,
+          378,
+          182,
+          472
+        ]
+      ],
+      "lower_left_guard": true
+    },
+    "upper": {
+      "ellipses": [
+        [
+          76,
+          365,
+          181,
+          453
+        ],
+        [
+          43,
+          322,
+          109,
+          380
+        ],
+        [
+          126,
+          320,
+          195,
+          378
+        ]
+      ],
+      "lower_left_guard": true
+    },
+    "corner": {
+      "ellipses": [
+        [
+          76,
+          365,
+          185,
+          453
+        ],
+        [
+          43,
+          322,
+          109,
+          380
+        ],
+        [
+          126,
+          320,
+          195,
+          378
+        ]
+      ],
+      "lower_left_guard": true
+    }
+  }
+}

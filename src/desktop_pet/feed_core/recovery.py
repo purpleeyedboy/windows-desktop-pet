@@ -28,10 +28,7 @@ class FeedRecovery:
 
     @property
     def feed_blocked(self) -> bool:
-        return any(
-            self._phase(record) is RecoveryPhase.NEEDS_REVIEW
-            for record in self.store.incomplete_feed_transactions()
-        )
+        return bool(tuple(self.store.incomplete_feed_transactions()))
 
     def recover_startup(self) -> None:
         for record in self.store.incomplete_feed_transactions():
@@ -52,7 +49,10 @@ class FeedRecovery:
             elif phase is RecoveryPhase.REWARD_APPLIED:
                 # Reward and its operation-id ledger were already committed in
                 # one atomic StateStore write.  Only finish the journal stage.
-                self.store.set_feed_phase(record.operation_id, RecoveryPhase.COMPLETED)
+                if self.store.has_feed_reward(record.operation_id):
+                    self.store.set_feed_phase(record.operation_id, RecoveryPhase.COMPLETED)
+                else:
+                    self._review(record.operation_id, "reward_ledger_missing")
 
     def resolve(self, operation_id: str, *, claim_reward: bool) -> bool:
         records = {r.operation_id: r for r in self.store.incomplete_feed_transactions()}
@@ -90,7 +90,7 @@ class FeedRecovery:
         ):
             return False
         snapshot = getattr(record, "snapshot", None)
-        return snapshot is None or (
+        return snapshot is not None and (
             receipt.source_volume_serial == snapshot.volume_serial
             and receipt.source_file_id_128 == snapshot.file_id_128
         )
