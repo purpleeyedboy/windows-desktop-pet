@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import os
 from ctypes import wintypes
 
@@ -25,6 +26,26 @@ SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 HGDI_ERROR = ctypes.c_void_p(-1).value
+RGN_OR = 2
+
+
+def alpha_hit_spans(image: Image.Image) -> tuple[tuple[int, int, int, int], ...]:
+    """Return exact non-zero-Alpha horizontal runs for the native input region."""
+    alpha = image.convert("RGBA").getchannel("A")
+    width, height = alpha.size
+    pixels = alpha.load()
+    spans: list[tuple[int, int, int, int]] = []
+    for y in range(height):
+        x = 0
+        while x < width:
+            while x < width and pixels[x, y] == 0:
+                x += 1
+            start = x
+            while x < width and pixels[x, y] != 0:
+                x += 1
+            if start < x:
+                spans.append((start, y, x, y + 1))
+    return tuple(spans)
 
 
 def _last_error() -> int:
@@ -113,6 +134,7 @@ class LayeredWindowRenderer:
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
         self._configure_functions()
+        self._input_region_signature: bytes | None = None
         top_level = self._user32.GetAncestor(self.hwnd, GA_ROOT)
         if top_level:
             self.hwnd = int(top_level)
@@ -155,6 +177,12 @@ class LayeredWindowRenderer:
             wintypes.UINT,
         ]
         self._user32.SetWindowPos.restype = wintypes.BOOL
+        self._user32.SetWindowRgn.argtypes = [
+            wintypes.HWND,
+            wintypes.HRGN,
+            wintypes.BOOL,
+        ]
+        self._user32.SetWindowRgn.restype = ctypes.c_int
 
         self._gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
         self._gdi32.CreateCompatibleDC.restype = wintypes.HDC
@@ -173,6 +201,15 @@ class LayeredWindowRenderer:
         self._gdi32.SelectObject.restype = wintypes.HGDIOBJ
         self._gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
         self._gdi32.DeleteObject.restype = wintypes.BOOL
+        self._gdi32.CreateRectRgn.argtypes = [ctypes.c_int] * 4
+        self._gdi32.CreateRectRgn.restype = wintypes.HRGN
+        self._gdi32.CombineRgn.argtypes = [
+            wintypes.HRGN,
+            wintypes.HRGN,
+            wintypes.HRGN,
+            ctypes.c_int,
+        ]
+        self._gdi32.CombineRgn.restype = ctypes.c_int
 
     def _get_extended_style(self) -> int:
         ctypes.set_last_error(0)
@@ -210,6 +247,48 @@ class LayeredWindowRenderer:
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         ):
             raise _win32_error()
+
+    def set_input_region(self, image: Image.Image, *, expansion: int = 16) -> None:
+        """Set the native hit-test region from current Alpha in physical pixels."""
+        alpha = image.getchannel("A")
+        signature = hashlib.blake2b(alpha.tobytes(), digest_size=16).digest()
+        if signature == self._input_region_signature:
+            return
+        combined = self._gdi32.CreateRectRgn(0, 0, 0, 0)
+        if not combined:
+            raise _win32_error()
+        installed = False
+        try:
+            pixels = alpha.load()
+            for y in range(alpha.height):
+                run_start: int | None = None
+                for x in range(alpha.width + 1):
+                    opaque = x < alpha.width and pixels[x, y] != 0
+                    if opaque and run_start is None:
+                        run_start = x
+                    if run_start is None or opaque:
+                        continue
+                    row = self._gdi32.CreateRectRgn(
+                        max(0, run_start - expansion),
+                        max(0, y - expansion),
+                        min(alpha.width, x + expansion),
+                        min(alpha.height, y + expansion + 1),
+                    )
+                    if not row:
+                        raise _win32_error()
+                    try:
+                        if self._gdi32.CombineRgn(combined, combined, row, RGN_OR) == 0:
+                            raise _win32_error()
+                    finally:
+                        self._gdi32.DeleteObject(row)
+                    run_start = None
+            if not self._user32.SetWindowRgn(self.hwnd, combined, True):
+                raise _win32_error()
+            installed = True
+            self._input_region_signature = signature
+        finally:
+            if not installed:
+                self._gdi32.DeleteObject(combined)
 
     def _create_top_down_dib(
         self, screen_dc: wintypes.HDC, size: tuple[int, int]
@@ -284,6 +363,7 @@ class LayeredWindowRenderer:
                 ULW_ALPHA,
             ):
                 raise _win32_error()
+            self._apply_alpha_input_region(image)
         finally:
             if old_bitmap and memory_dc:
                 self._gdi32.SelectObject(memory_dc, old_bitmap)
@@ -292,3 +372,29 @@ class LayeredWindowRenderer:
             if memory_dc:
                 self._gdi32.DeleteDC(memory_dc)
             self._user32.ReleaseDC(None, screen_dc)
+
+    def _apply_alpha_input_region(self, image: Image.Image) -> None:
+        alpha_bytes = image.convert("RGBA").getchannel("A").tobytes()
+        if alpha_bytes == getattr(self, "_input_region_alpha", None):
+            return
+        region = self._gdi32.CreateRectRgn(0, 0, 0, 0)
+        if not region:
+            raise _win32_error()
+        transferred = False
+        try:
+            for left, top, right, bottom in alpha_hit_spans(image):
+                span = self._gdi32.CreateRectRgn(left, top, right, bottom)
+                if not span:
+                    raise _win32_error()
+                try:
+                    if not self._gdi32.CombineRgn(region, region, span, RGN_OR):
+                        raise _win32_error()
+                finally:
+                    self._gdi32.DeleteObject(span)
+            if not self._user32.SetWindowRgn(self.hwnd, region, True):
+                raise _win32_error()
+            transferred = True
+            self._input_region_alpha = alpha_bytes
+        finally:
+            if not transferred:
+                self._gdi32.DeleteObject(region)

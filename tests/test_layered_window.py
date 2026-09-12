@@ -18,7 +18,17 @@ from desktop_pet.layered_window import (
     WS_EX_TRANSPARENT,
     _win32_error,
     rgba_to_premultiplied_bgra,
+    alpha_hit_spans,
 )
+
+
+def test_alpha_hit_spans_exclude_transparent_pixels_without_rectangular_catchall():
+    image = Image.new("RGBA", (4, 3), (0, 0, 0, 0))
+    image.putpixel((1, 0), (1, 2, 3, 1))
+    image.putpixel((2, 0), (1, 2, 3, 255))
+    image.putpixel((3, 2), (1, 2, 3, 255))
+
+    assert alpha_hit_spans(image) == ((1, 0, 3, 1), (3, 2, 4, 3))
 
 
 def test_rgba_to_premultiplied_bgra_uses_integer_rounding():
