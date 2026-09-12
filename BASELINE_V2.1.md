@@ -27,3 +27,43 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+
+## V2.1-FEED-CORE 独立候选
+
+- 功能标签：`V2.1-FEED-CORE`；版本 `2.1.0`；日期 `2026-09-04`。
+- 新增文件验证、逐次确认、IFileOperation/专用 STA 回收适配器、版本化事务审计、NeedsReview 崩溃恢复，以及幂等奖励与动画回调边界。
+- DRAG 仅为不注册 DropTarget 的标准 Drop 事件 adapter；HUNGER 仅为幂等奖励 fake。生产接线留待 FEED-WIRING，因此该 EXE 如实标为测试候选。
+- 候选文件名：`桌面宠物_文件喂食与回收站事务.exe`。Windows Actions 负责测试、唯一 EXE、大小、SHA-256 和 artifact 门禁。
+- 既有认可素材、运动、转头角度、旧测试及金图均未修改；真实 Windows 构建、IFileOperation opt-in E2E 与用户桌面验收仍为待执行门禁。
+
+
+### PR #8 候选修正
+
+- 候选 EXE 现在直接导入并运行 `feed_core` 的临时目录模拟事务，界面醒目标注模拟模式；不注册 DropTarget、不提供文件选择，也不移动或删除任何真实文件。
+- PyInstaller 明确收集完整事务核心，构建后验证嵌入 PYZ 模块并运行冻结 EXE `--self-test`；Windows 门禁仍待 Actions 执行。
+- 确认前后及 STA 执行前复核稳定身份与关键元数据；等待有明确超时/取消，未知结果进入 NeedsReview。奖励仅接受含凭证且经验证的回收结果。
+- 本轮删除了真实回收站 E2E 测试入口；自动测试仅使用模拟器、内存替身和测试创建的临时目录。
+
+
+## V2.1-FEED-CORE 实机高风险候选接线（2026-09-05）
+
+- 候选入口改为真实桌宠 `run_desktop_pet.py`，由唯一 Windows OLE `IDropTarget` 接收单文件，且 DropEffect 只返回 Copy；喂食区限定于桌宠头部。
+- 只允许本地固定磁盘、0–1 GiB 普通文件，并拒绝目录、网络/虚拟路径、重解析点、云占位、可移动盘、程序自身、仓库/素材与系统保护对象。
+- 松开后逐次显示文件名、大小和修改时间确认；仅实时验证 IFileOperation 成功后幂等增加饥饿值并显示反馈。极度饥饿不会禁用喂食或退出。
+- `桌面宠物_文件喂食与回收站事务.exe` 明确为未经过自动测试、等待用户 Windows 实机验收的高风险候选；Actions 刻意跳过 pytest，只执行编译、资源/归档、唯一 EXE、大小、SHA-256 与上传门禁。
+- Windows 构建、真实拖放/回收站行为和用户验收尚未在本 Linux 环境完成；不得将代码检查写成实机通过。
+
+
+## REPAIR-20260906-V21-FEED 状态
+
+- 已撤回“功能完成”结论，并删除私有 HungerMeter、事务协调器/日志、模拟器、阻塞确认及无 ProgressSink 的回收实现；不再用矩形头部命中或 jump 冒充喂食表现。
+- 已实现面向 PR5 公共基础的只读 Protocol adapter：OLE 回调只复制路径、坐标和共享 Clock 的 UTC 时间，并提交唯一 InputRouter；区域命中依赖 InteractionRegionService 的 Alpha 区域。
+- 当前仓库尚无 PR5 foundation API、PR11 期待反馈 adapter、共享 HungerService/StateStore/ActivityCoordinator，也没有可信 IFileOperationProgressSink 与独立嘴/舌素材动画。因此构建脚本主动失败，禁止发布可验收候选。
+- 公共基础统一并完成上述依赖后，才允许输出 `桌面宠物_文件喂食与回收站事务修复.exe`；Windows 实机验收仍待用户执行。
+
+### INTEGRATE-20260906 第二轮
+
+- 尝试读取 PR5 `codex-od26j1` 与提交 `1a02fe9680f28dda07add8b96c78445e0b3c0f59`，但 GitHub HTTPS fetch 被容器代理以 403 拒绝；该对象也不在本地对象库，故未声称接入该 SHA。
+- 在现有 foundation adapter 上新增 FEED 业务 handler/ports：定点奖励计价、Prepared 持久化前置、确认后 FILE_ID_INFO 重验、元数据变化重新确认、可信凭据后 RecycleConfirmed、原子奖励与 Completed、缺证据 NeedsReview。
+- 新增非阻塞拥有窗 30 秒确认 adapter、Windows 句柄 FILE_ID_INFO 检查 adapter，以及严格组合 PostDeleteItem/PerformOperations/aborted/new-item 证据的凭据 assembler。
+- 尚缺实际 PR5 API 适配、PR6 HungerService、PR11 期待层、COM IFileOperationProgressSink vtable/消息泵接线和嘴/舌素材动画；构建继续 fail-closed，不发布候选。
