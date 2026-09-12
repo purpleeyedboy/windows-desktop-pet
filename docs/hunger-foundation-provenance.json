@@ -1,0 +1,84 @@
+{
+  "foundation_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+  "graphic_playback_fix_commit": "6af84461332787ee6eb16ffe945a56083bbd1d89",
+  "activity_recovery_fix_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
+  "files": {
+    "src/desktop_pet/foundation/__init__.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "c9b66a32f335ca78ef38569441f43accd8bee201",
+      "sha256": "935b06fc8b9e1a0b2f11232dd04b403a5ff7dbfc6266ce9c07c45091dade9d89"
+    },
+    "src/desktop_pet/foundation/actions.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "e7ed4de5fa64a7bd309aa6c3056dae900c946c48",
+      "sha256": "fd4efb170e2c0b69a43cf10a3a4633d27d109c75338113d8a0fcd984b947cc11"
+    },
+    "src/desktop_pet/foundation/animation.py": {
+      "source_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
+      "git_blob": "a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb",
+      "sha256": "4a3e8a245a844afa28d7597fa50a35b38f4fb1eb5874efea023778ef526957c1"
+    },
+    "src/desktop_pet/foundation/config.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "4e081ee026821c4febd4a715f22f6b8cf04d09ae",
+      "sha256": "e83ab3be1d054f759c4111fd1e9fdbdac05e1c1fd2f5a80f27a5f9ff476683db"
+    },
+    "src/desktop_pet/foundation/persistence.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "254bd6fa3a7faa09700634c140e3ce06dcaa426f",
+      "sha256": "686f854ab2f58e78940ab28fa874ced9c2b44c8915d3525c1bcce83dc42968e2"
+    },
+    "src/desktop_pet/foundation/platform.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "bea79b41e912135854504f55dd2142b3a319e5ca",
+      "sha256": "c70e3dc8a30b8577b27bbe3e3056c235b27a0259cd51c1e51b58e48aa6560cdb"
+    },
+    "src/desktop_pet/foundation/regions.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "1d322df292fca14f362ae6e098e0872429575ace",
+      "sha256": "8d50c58b0be6948b233bbf39f8d2afcaa32fc4e9aebfaa237dca6e9a9706472b"
+    },
+    "src/desktop_pet/foundation/runtime.py": {
+      "source_commit": "eeaa994de5e2c40a23442a409f423bf1d58e4d53",
+      "git_blob": "3e5487aa746de648d2e1248fdd5f349f51811ed9",
+      "sha256": "adf7fdeb8d7abf97be0a554e4d8dfcaa8234b8ddd9abb7973457d7ff150fb54e"
+    },
+    "src/desktop_pet/foundation/services.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "4085ed3d11c214a692942892d3a209685c32369d",
+      "sha256": "4b75236ad024df1a6fc17c2caa598c5bc2e089754ba21065f431bad750fa0e5a"
+    },
+    "src/desktop_pet/foundation/sources.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "6c5f8efbf14154006f501f34ab2c27d0a4b38562",
+      "sha256": "7d13ef5d20a735c165af87a8027615f0c45334354a783144019d8ae5d6901e48"
+    },
+    "src/desktop_pet/window.py": {
+      "source_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf",
+      "git_blob": "655bdb282196e9e23a96c3ac11a30c53d0ed4b53",
+      "sha256": "2329f77fecb4701f785ed321340b98ac36b8e0ad5151dbb882477422c138ef67"
+    },
+    "src/desktop_pet/animation.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "4ee06ecd870c9075909768aa6e5d948765b6bcbf",
+      "sha256": "ae4d7f71a9822e80479cd76f97c233c3a5c298670654f77c3e13418bd8e1015b"
+    },
+    "src/desktop_pet/assets.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "5d50566f37e601d2b00357725cf42d0690b6db88",
+      "sha256": "5343302408be6c41be01b75a9adc509c3bc3b2cbdb6fdd08a76eff01a0205c87"
+    },
+    "src/desktop_pet/eye_runtime.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "9f3da79dd28b6c0ad6342f6d33c63894da8bdc8b",
+      "sha256": "05e5e706c1bd618d3b47d452b37addb2d1f688034dd23e15117f1de85f034f11"
+    },
+    "src/desktop_pet/layered_window.py": {
+      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
+      "git_blob": "515f8b51db3132913144c2b65c622678d25378c0",
+      "sha256": "8bef5a8d36a6ae561387d2ea3befc654bc6ac8c43eace05500f836850b9f5e0c"
+    }
+  },
+  "logical_center_anchor_fix_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf",
+  "reentrant_recovery_fix_commit": "eeaa994de5e2c40a23442a409f423bf1d58e4d53"
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "canvas": [512, 768],
+  "anchor": [256, 768],
+  "sequences": {
+    "hungry": [
+      {"source": "hungry-00.png", "phase": "open", "duration_ms": 170},
+      {"source": "hungry-01.png", "phase": "open", "duration_ms": 180},
+      {"source": "hungry-02.png", "phase": "hold", "duration_ms": 1000},
+      {"source": "hungry-03.png", "phase": "close", "duration_ms": 170},
+      {"source": "hungry-04.png", "phase": "close", "duration_ms": 180}
+    ],
+    "severe": [
+      {"source": "severe-00.png", "phase": "open", "duration_ms": 170},
+      {"source": "severe-01.png", "phase": "open", "duration_ms": 180},
+      {"source": "severe-02.png", "phase": "hold", "duration_ms": 1000},
+      {"source": "severe-03.png", "phase": "close", "duration_ms": 170},
+      {"source": "severe-04.png", "phase": "close", "duration_ms": 180}
+    ],
+    "critical": [
+      {"source": "critical-00.png", "phase": "loop", "duration_ms": 120},
+      {"source": "critical-01.png", "phase": "loop", "duration_ms": 120}
+    ]
+  }
+}

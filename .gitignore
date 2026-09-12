@@ -6,3 +6,9 @@ __pycache__/
 build/
 dist/
 assets/generated/work/
+build-hunger/
+dist-hunger/
+build_identity.json
+build_metadata.json
+assets/hunger/v1/
+assets/hunger/v1.building/
