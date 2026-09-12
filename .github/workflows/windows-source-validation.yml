@@ -3,7 +3,7 @@ name: Windows source validation
 on:
   pull_request:
     branches:
-      - codex/desktop-pet-6-frame-alpha
+      - codex/head-neck-continuous-preview
   workflow_dispatch:
 
 permissions:
@@ -21,4 +21,4 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install ".[dev]" -r requirements-assets.txt
       - run: python -c 'import PIL; assert PIL.__version__.split(".", 1)[0] == "11", PIL.__version__'
-      - run: python -m pytest -q
+      - run: python -m pytest -q --maxfail=1 --tb=short

@@ -18,7 +18,7 @@ def test_windows_source_validation_workflow_is_security_constrained():
         "on:\n"
         "  pull_request:\n"
         "    branches:\n"
-        "      - codex/desktop-pet-6-frame-alpha\n"
+        "      - codex/head-neck-continuous-preview\n"
         "  workflow_dispatch:\n\n"
         "permissions:\n"
         "  contents: read\n\n"

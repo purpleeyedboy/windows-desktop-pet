@@ -40,7 +40,7 @@ def test_first_sample_arms_an_occasional_cooldown() -> None:
 
 @pytest.mark.parametrize(
     ("mode", "expected_tilt"),
-    (("left", -30.0), ("right", 30.0)),
+    (("left", -18.0), ("right", 18.0)),
 )
 def test_single_direction_modes_approach_hold_and_return(
     mode: str,
@@ -75,9 +75,9 @@ def test_approach_uses_a_minimum_jerk_position_curve() -> None:
     midpoint = motion.sample(APPROACH_SECONDS * 0.5)
     three_quarters = motion.sample(APPROACH_SECONDS * 0.75)
 
-    assert quarter.rotation_degrees == pytest.approx(30.0 * 0.103515625)
-    assert midpoint.rotation_degrees == pytest.approx(15.0)
-    assert three_quarters.rotation_degrees == pytest.approx(30.0 * 0.896484375)
+    assert quarter.rotation_degrees == pytest.approx(18.0 * 0.103515625)
+    assert midpoint.rotation_degrees == pytest.approx(9.0)
+    assert three_quarters.rotation_degrees == pytest.approx(18.0 * 0.896484375)
     assert idle_head_tilt._minimum_jerk(0.0) == 0.0
     assert idle_head_tilt._minimum_jerk(1.0) == 1.0
 
@@ -95,7 +95,7 @@ def test_arc_mode_moves_over_a_large_lifted_arc_and_holds_right() -> None:
     assert midpoint.rotation_degrees == pytest.approx(0.0, abs=1e-12)
     assert midpoint.arc == pytest.approx(1.0)
     right_hold = motion.sample(arc_start + ARC_TRAVEL_SECONDS + 0.4)
-    assert right_hold == IdleTiltPose(30.0)
+    assert right_hold == IdleTiltPose(18.0)
 
 
 def test_completed_action_returns_to_center_and_restarts_cooldown() -> None:
@@ -130,9 +130,9 @@ def test_reset_cancels_an_active_motion() -> None:
 @pytest.mark.parametrize(
     ("mode", "expected_tilt"),
     (
-        ("left", -30.0),
-        ("right", 30.0),
-        ("left_arc_right", -30.0),
+        ("left", -18.0),
+        ("right", 18.0),
+        ("left_arc_right", -18.0),
     ),
 )
 def test_trigger_starts_the_requested_mode_without_idle_wait_or_random_choice(
@@ -169,23 +169,38 @@ def test_triggered_arc_mode_keeps_the_existing_large_arc_contract() -> None:
     assert midpoint.arc == pytest.approx(1.0)
 
 
-def test_both_visual_direction_angle_caps_are_thirty_percent_below_fifty() -> None:
+def sample_tilt(mode: str, uniform) -> tuple[float, list[tuple[float, float]]]:
     calls: list[tuple[float, float]] = []
-
-    def highest_uniform(low: float, high: float) -> float:
+    def recording_uniform(low: float, high: float) -> float:
         calls.append((low, high))
-        return high
+        return uniform(low, high)
+    motion = IdleHeadTiltMotion(uniform=recording_uniform)
+    motion.trigger(mode, 0.0)
+    return motion.sample(APPROACH_SECONDS).rotation_degrees, calls
 
-    clockwise = IdleHeadTiltMotion(uniform=highest_uniform)
-    clockwise.trigger("left", 0.0)
-    assert clockwise.sample(APPROACH_SECONDS).rotation_degrees == -35.0
-    assert (MIN_TILT_DEGREES, MAX_CLOCKWISE_TILT_DEGREES) in calls
 
-    calls.clear()
-    counterclockwise = IdleHeadTiltMotion(uniform=highest_uniform)
-    counterclockwise.trigger("right", 0.0)
-    assert counterclockwise.sample(APPROACH_SECONDS).rotation_degrees == 35.0
-    assert (MIN_TILT_DEGREES, MAX_COUNTERCLOCKWISE_TILT_DEGREES) in calls
+def test_left_random_tilt_minimum_is_eighteen_degrees() -> None:
+    rotation, calls = sample_tilt("left", lambda low, high: low)
+    assert rotation == -18.0
+    assert (18.0, 30.0) in calls
+
+
+def test_left_random_tilt_maximum_is_thirty_degrees() -> None:
+    rotation, calls = sample_tilt("left", lambda low, high: high)
+    assert rotation == -30.0
+    assert (18.0, 30.0) in calls
+
+
+def test_right_random_tilt_minimum_is_eighteen_degrees() -> None:
+    rotation, calls = sample_tilt("right", lambda low, high: low)
+    assert rotation == 18.0
+    assert (18.0, 30.0) in calls
+
+
+def test_right_random_tilt_maximum_is_thirty_degrees() -> None:
+    rotation, calls = sample_tilt("right", lambda low, high: high)
+    assert rotation == 30.0
+    assert (18.0, 30.0) in calls
 
 
 def test_trigger_rejects_an_invalid_mode_without_changing_the_motion() -> None:
@@ -232,7 +247,7 @@ def test_public_timing_and_mode_ranges_match_the_idle_contract() -> None:
     assert set(TILT_MODES) == {"left", "right", "left_arc_right"}
     assert MIN_HOLD_SECONDS == 0.8
     assert MAX_HOLD_SECONDS == 2.0
-    assert MIN_TILT_DEGREES == 30.0
-    assert MAX_CLOCKWISE_TILT_DEGREES == 35.0
-    assert MAX_COUNTERCLOCKWISE_TILT_DEGREES == 35.0
+    assert MIN_TILT_DEGREES == 18.0
+    assert MAX_CLOCKWISE_TILT_DEGREES == 30.0
+    assert MAX_COUNTERCLOCKWISE_TILT_DEGREES == 30.0
     assert MAX_TILT_DEGREES == 50.0

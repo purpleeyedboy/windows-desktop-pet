@@ -3,7 +3,8 @@ name: Windows approved-assets preview build
 on:
   pull_request:
     branches:
-      - codex/desktop-pet-6-frame-alpha
+      - codex/head-neck-continuous-preview
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,9 +23,17 @@ jobs:
       - run: python -c 'import PIL; assert PIL.__version__.split(".", 1)[0] == "11", PIL.__version__'
       - run: .\build_eye_follow_candidate.ps1 -SkipTests
         shell: pwsh
+      - name: Verify unique EXE and publish SHA-256
+        shell: pwsh
+        run: |
+          $exes = @(Get-ChildItem -LiteralPath dist-eye-follow-candidate -Filter *.exe -File)
+          if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
+          if ($exes[0].Name -ne '桌面宠物_最终素材与转头角度基线修正版.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "SHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: desktop-pet-turn-easing-angle-preview
-          path: dist-eye-follow-candidate/桌面宠物-转头缓动与角度修正版.exe
+          name: desktop-pet-v2-1-baseline
+          path: dist-eye-follow-candidate/桌面宠物_最终素材与转头角度基线修正版.exe
           retention-days: 7
           if-no-files-found: error

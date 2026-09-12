@@ -45,7 +45,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='桌面宠物-转头缓动与角度修正版',
+    name='桌面宠物_最终素材与转头角度基线修正版',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -58,4 +58,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version=str(ROOT / 'version_info.txt'),
 )

@@ -2,6 +2,8 @@
 
 这是使用提供的猫咪照片制作的 Windows 桌面宠物。
 
+当前开发基线为 V2.1：保留已批准猫头、猫身、逐像素 Alpha、眼球跟随、眨眼、头颈连续形变与 minimum-jerk 转头缓动；随机左右倾斜的实际幅度为 18°–30°。50° 仅作为内部姿态/网格安全校验上限，不是实际随机动作范围。
+
 ## 运行
 
 双击 `dist/桌面宠物-6帧猫耳颜文字版.exe` 即可运行，无需安装 Python。程序使用 Windows 逐像素 Alpha 显示平滑透明轮廓，默认无边框并始终置顶；重复双击不会创建第二只桌宠。
@@ -24,6 +26,8 @@
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
+
+V2.1 候选版在 Windows 上使用 `build_eye_follow_candidate.ps1` 构建，输出 `dist-eye-follow-candidate\桌面宠物_最终素材与转头角度基线修正版.exe`。Linux 云容器中的测试和编译检查不能替代 Windows EXE 构建或真实桌面视觉验收。
 
 构建脚本会先验证 18 张透明动作帧（3 组动作、每组 6 帧），并核对每张归档关键帧的 SHA-256 不变；随后验证每动作 `180 中文 + 20 颜文字`、三套内置字体覆盖和 28px/40px 渲染边界，再用独立 Tcl/Tk 生命周期运行自动测试。PyInstaller 生成唯一的 `dist/桌面宠物-6帧猫耳颜文字版.exe` 后，构建脚本会使用 PyInstaller 自身的归档读取器逐字节核对 18 张关键帧、5 张气泡图、3 个字体、3 份许可、台词 JSON 和第三方说明。
 
