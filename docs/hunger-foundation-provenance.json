@@ -39,9 +39,9 @@
       "sha256": "8d50c58b0be6948b233bbf39f8d2afcaa32fc4e9aebfaa237dca6e9a9706472b"
     },
     "src/desktop_pet/foundation/runtime.py": {
-      "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
-      "git_blob": "b90862807553d52b33cb57ab23f22628d82d29dd",
-      "sha256": "5934b5480eac53b9b54f15e9b4b62fc63064542c08d454b06ea155d4d5bb8714"
+      "source_commit": "eeaa994de5e2c40a23442a409f423bf1d58e4d53",
+      "git_blob": "3e5487aa746de648d2e1248fdd5f349f51811ed9",
+      "sha256": "adf7fdeb8d7abf97be0a554e4d8dfcaa8234b8ddd9abb7973457d7ff150fb54e"
     },
     "src/desktop_pet/foundation/services.py": {
       "source_commit": "f617765b1aeb1be9cf9d73ce1dd04f5f4e426421",
@@ -79,5 +79,6 @@
       "sha256": "8bef5a8d36a6ae561387d2ea3befc654bc6ac8c43eace05500f836850b9f5e0c"
     }
   },
-  "logical_center_anchor_fix_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf"
+  "logical_center_anchor_fix_commit": "e0eefbd97ab5eecce764a41a53dda164c7f16baf",
+  "reentrant_recovery_fix_commit": "eeaa994de5e2c40a23442a409f423bf1d58e4d53"
 }
