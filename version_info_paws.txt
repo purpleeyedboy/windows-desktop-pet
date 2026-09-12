@@ -1,0 +1,14 @@
+# BuildDate=2026-09-09 GitShortHash=generated-by-spec BaseTag=BASE-001 Foundation=4eda8964+e0eefbd-anchor-fix
+# EnabledFeature=单侧前肢按压与有限光标推动 Channel=修复候选版 Acceptance=等待用户Windows实机验收 DebugMenu=调试菜单 Documentation=BASELINE_V2.1.md
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers=(2, 1, 3, 0), prodvers=(2, 1, 3, 0), mask=0x3f, flags=0x2, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[StringFileInfo([StringTable('080404b0', [
+    StringStruct('CompanyName', 'Windows Desktop Pet'),
+    StringStruct('FileDescription', 'V2.1-PAWS GENERATED-20260909；公共基础已接入；等待用户Windows实机验收；构建时写入实际Git提交'),
+    StringStruct('FileVersion', '2.1.3.0'),
+    StringStruct('InternalName', 'desktop_pet_paws'),
+    StringStruct('OriginalFilename', '桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe'),
+    StringStruct('ProductName', '桌面宠物 双前肢按压鼠标'),
+    StringStruct('ProductVersion', '2.1.3.0；BASELINE_V2.1.md')
+  ])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])]
+)

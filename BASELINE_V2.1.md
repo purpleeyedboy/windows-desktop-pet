@@ -27,3 +27,84 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+
+## V2.1-PAWS 独立增量
+
+- 基础标签：`BASE-001`；统一起点：`c3b218d`；文档基线：`BASELINE_V2.1.md`。
+- 启用功能仅为“双前肢按压鼠标”：两个独立、非矩形、可审查 JSON row-RLE 逐像素 Alpha 遮罩在运行时确定性还原；按下、保持、推动、松开、取消与用户抢占状态；物理虚拟桌面边界和既有 `ClipCursor` 交集；所有终止路径执行幂等释放。
+- 测试版调试入口：右键一级“调试”菜单的直接二级命令“左前肢按压/右前肢按压”，与正常前肢点击调用同一业务入口；目标文件名为 `桌面宠物_双前肢按压鼠标_20260906修复候选.exe`。未启用耳朵、舔手、饥饿、拖放或文件喂食。
+- 本候选版依用户决定明确标记为**未自动测试**：候选 PowerShell 与 Windows Actions 完全跳过 pytest 和旧测试，只执行 PyInstaller 打包、唯一 EXE、精确文件名、大小和 SHA-256 检查。真实 Windows 桌面运行与功能验收由用户本人执行。
+- 已认可猫头、猫身、眼睛、Alpha、头颈、眼球跟随和转头角度没有调整；旧视觉回归失败只记录，不删除测试、不修改金图。
+- 相对 `c3b218d` 的发布差异必须全为文本；既有 158 项 `assets/` 基线 SHA-256 由 `assets/v2.1-baseline.sha256` 固定，源码门禁可独立验证，但依用户决定不在本次候选构建或 Actions 中运行。PAWS 预览 PNG 不跟踪，可按需由脚本写入临时目录。
+- Windows Actions 候选打包：待 PR #10 更新后运行；自动测试：**未运行**；Windows 实机功能与视觉验收：**待用户本人验收**。
+
+### REPAIR-20260906
+
+- 已撤销旧候选的完成判断：正常窗口前肢 Alpha 点击现接入按下候选、系统 DPI 拖动阈值、同侧松开与单爪业务入口；超阈值只拖窗口，动作锁期间其它爪点击被消费且不排队。
+- 单爪阶段固定为抬起 0.12 秒、停顿 0.08 秒、按压 0.16 秒、恢复 0.24 秒、冷却 0.6 秒；每帧从默认图像与固定锚点合成，只变换选中爪，并以邻近上肢纹理补原位置。
+- PAWS 光标接口现仅允许读取/设置位置及读取显示器、裁剪区和指针标称高度；已移除按键合成、光标捕获和 `ClipCursor` 修改。总位移按 `clamp(14 × height / 32, 8, 28)` 计算且只沿屏幕 y 正向，用户偏差超过 4 物理像素后不拉回、不重试。
+- PR5 公共 `ActivityCoordinator`/`InputRouter`/权限策略尚未进入本分支；所需窄接口记录于 `docs/V21_PAWS_FOUNDATION_API.md`。在统一基础提交接入前，本分支不得描述为可验收完成版。
+## 已撤回的 V2.1-CORE 未接线增量记录
+
+- 基础标签：`V2.1-CORE`；启用功能仅为 `common-foundation`。
+- 当时仅新增了未连接运行程序的公共契约；该状态已被用户拒收，并由下方 REPAIR-20260906 接线替代。
+- 明确未新增耳朵、前肢、舔手、饥饿、拖放、喂食、自主动画或生产用户文件处理。测试持久化仅使用 pytest 临时目录。
+- 调试时间和状态注入仅允许测试版或显式调试开关；生产随机源使用系统熵且没有固定种子。
+- 原未接线候选名为 `桌面宠物_V2.1公共基础架构.exe`，已被 REPAIR-20260906 撤回，不得再交付。修复候选版本资源包含产品版本、UTC 构建日期、Git 短哈希、基础提交、基础标签、启用功能、测试版状态、调试菜单状态和 `BASE-001` 文档基线。
+- Windows Actions 的真实构建、唯一 EXE 大小/SHA-256、下载复核及真实桌面视觉验收均须在提交和 PR 后分别记录；Linux 不作为 EXE 或视觉通过证据。
+- 两项旧视觉金图回归仍是已知基线问题；不得通过删除或放宽测试、更新金图或修改已认可素材掩盖。
+- 本增量聚焦门禁：28 项通过；Python 编译、158 个素材文件相对起点 SHA-256、`git diff --check` 均通过。容器完整收集仍缺 PyInstaller/NumPy；排除三个依赖收集文件后的检查点为 584 通过、3 跳过、12 失败、42 错误，失败包括既有素材/金图差异、无 DISPLAY 的 Tk 测试及依赖 NumPy 的 QA，不写作通过。
+- 旧单功能 EXE 已撤回。Windows 工作流仍明确以 `build_v21_core.ps1 -SkipTests` 构建；旧基线自动测试不再阻塞修复候选 EXE 打包和 artifact 上传，但其已知失败仍保留且不修改。
+
+## REPAIR-20260906 公共基础接线候选
+
+- 撤回“仅提供未调用抽象即可完成”的旧判断。真实入口现在由 `main()` 创建一个 `ApplicationServices`，并注入 `PetWindow`；窗口点击、菜单、移动、动画完成、区域更新、调试、OLE 生命周期、状态保存和退出均调用共享运行时。
+- 状态采用唯一 Tk 串行事件队列和唯一 `ActivityCoordinator`，Health、Activity、Eye、Mouth、Tear、Particle、InputGate 正交；活动令牌携带版本、取消 ID 和动画 ID，旧完成回调不能覆盖当前活动。
+- Windows 使用 PerMonitorV2/asInvoker manifest；当前 Alpha 生成原生窗口命中区并扩展 16 个物理像素。OLE 注册只提供诊断和拒绝 drop 的公共能力，不读取或操作用户文件。
+- 测试版右键菜单提供“关于 / 运行状态”和一级“调试”；调试打开一个可滚动二级列表。后续六项功能未接入的命令明确禁用，不伪造动画。
+- 新候选名：`桌面宠物_公共基础接线与版本识别修复.exe`。该候选未经旧 pytest/逐像素套件门禁，仍须 Windows 构建检查和用户实机验收；不能称为已验收完成版。
+- REPAIR 静态/临时目录证据：入口接线审查、Python 编译、事件优先级与物理恢复、四字段播放身份、损坏存储/备份/日志、STA 工作队列关闭、manifest XML 和 158 项素材 SHA-256 均已检查；按授权未运行 pytest。
+- 尚未完成的外部门禁：本容器不能验证 Windows OLE 消息、PerMonitorV2 多屏切换、Alpha/16px 原生命中、旧实例激活、真实菜单键盘操作、PyInstaller EXE 启动和用户视觉验收。饥饿、舔手、喂食、耳朵、前肢、期待仍由 PR6～PR11 接入，本候选中明确禁用，不得当作已完成功能。
+
+## CORE-DATA-REPAIR-20260907 数据恢复增量
+
+- 统一数据目录改为 `%LOCALAPPDATA%/DesktopPet`，固定包含 `state.json`、`state.backup.json`、`settings.json`、`feed-journal.jsonl`、`logs/` 和 `recovery/`。
+- 加载顺序固定为正式状态、有效备份、脱敏事务日志；正式与备份双损坏时，日志中的未完成事务恢复到 `pending_transaction`，启动必须进入 `TransactionReview`，不能默认为无事务。
+- 保存前先验证候选状态；只把验证通过的旧正式状态原子写入备份。损坏正式状态不会覆盖有效备份，损坏输入保留到 `recovery/`。
+- `SharedState.commit/update` 是唯一共享提交入口：先完成持久化，成功后才发布新内存快照；兼容的 `ApplicationServices.close(state=None)` 忽略旧调用者副本并保存当前最新快照。
+- 旧 `%LOCALAPPDATA%/DesktopPetV21` 文件仅在新目标缺失时复制迁移，不删除、不改写、不覆盖旧文件；普通日志采用 2 MiB、5 备份轮转并脱敏完整路径。
+
+## FRAME-CONTRACT-20260907 逐帧图形播放器增量
+
+- 撤销“不得新增动作素材”的错误门禁；默认认可素材仍按哈希锁定，但六个功能分支可新增真实 RGBA 全帧或带逐帧补洞层的局部帧。
+- 真实 `AnimationController → PetWindow` 播放链现读取 `AnimationSequence/FrameStep`：帧序、每帧毫秒、有限循环段、源画布锚点和 full/local 模式均显式声明；取消、超时或中断继续通过活动令牌恢复认可默认帧。
+- `assets/keyframes/playback.json` 已把现有 jump/squash/shake 图形帧接入新时序接口；它只证明公共播放器真实可达，绝不冒充舔手、耳朵、前肢、饥饿嘴部、进食或期待动作。
+- 公共播放器证据位于 `qa/v21-frame-player/`：18 帧联系表、连续 GIF 和逐帧 SHA/时长报告。六项新功能的正式动作帧当前仍缺失，必须由对应 PR 提供并经用户验收后才可报告动画完成。
+
+## GRAPHIC-ACTIVITY-REPAIR-20260909 图形活动接线修复
+
+- 修复窗口播放器把所有活动硬限为 `BODY_ACTION` 的阻塞：舔手、普通/严重饥饿和进食现使用各自真实活动令牌播放，不改写为身体活动。拖放期待须保留实时眼球跟随，不接入会暂停眼球的全帧身体通道。
+- 自定义动作完成时先验证活动/版本/取消 ID/动画 ID，再恢复认可默认帧；迟到完成回调不得覆盖新动作，取消和超时同时恢复播放器与活动状态。
+- `verify_graphic_animation_contract.py` 新增真实窗口请求→串行队列→活动通道→逐帧播放器→完成/中断恢复门禁。修复前已复现功能活动被拒和默认帧未恢复；修复后两项现有 non-pytest 门禁通过。Windows 构建即使使用 `-SkipTests` 仍执行这两项轻量门禁，不运行旧 pytest 整套。
+- 此增量仅修公共播放链，不代表六项素材或 Windows EXE 视觉验收通过；Windows 构建与用户实机验收另记。
+# PAWS rework checkpoint 2026-09-10
+
+PR #10 follow-up: pointer displacement is now 2.5x (35 nominal, 20–70 bounds).
+Complete-cat frame import/runtime support has focused automated coverage.
+New art and Windows/user visual acceptance remain pending; existing animation
+art is unchanged. See `qa/v2.1-paws/rework-2026-09-10.md` for evidence and limits.
+
+## PAWS-CI-CONTRACT-20260910
+
+- PR #10 base `5f68d7176c5666c4cebb9995725de91239837ef8`: reproduced the CI runtime assertion expecting y=114 after starting at y=100. The approved 2.5x displacement is 35 px, so the independent acceptance endpoint is y=135; all per-step x/y bounds remain asserted.
+- CI-identical `python tools/verify_paws_runtime.py` now passes, including queue/window playback, preemption, stale callbacks, pointer takeover and 158 immutable baseline assets. Focused paw press/compositor/full-frame import/release suite: 25 passed (existing Pillow deprecation warnings).
+- New exact candidate filename: `桌面宠物_双前肢位移2.5倍与校验修复_20260910候选.exe`; build, spec, version resource, smoke test, Actions upload and release checks agree. Previous EXEs remain untouched.
+- This checkpoint is Linux automated evidence only. Windows build/artifact and user visual acceptance remain separate gates. Existing animation art is unchanged; this is NOT a full-cat animation repair release.
+
+## PAWS-2.5X-BOUNDARY-20260910
+
+- Candidate identity is `PAWS-2.5X-BOUNDARY-20260910`, product version `2.1.3-paws`, exact EXE `桌面宠物_双前肢位移2.5倍_释放与边界验证_20260910候选.exe`, and artifact `v2.1-paws-2.5x-boundary-candidate` with 14-day retention.
+- Focused regression coverage records same-paw mouse release, release while a physical button remains down, input cancellation/takeover, focus-loss cancellation wiring, idempotent exit after cancellation-notification failure, cursor API failures, 2.5x endpoint scaling, negative-coordinate DPI/multi-monitor coordinates, monitor/ClipCursor intersection, and invalid native rectangles.
+- Native bounds with zero or inverted width/height now fail closed before clamping. Cancellation establishes the idle/closed terminal state even if the external ownership callback fails, preventing focus loss or shutdown from leaving the PAWS controller active.
+- Actions writes `candidate-evidence.json` beside the sole EXE with the full commit, run URL, byte length, SHA-256, automated-build result, and separate pending Windows-desktop acceptance field. A successful Actions build is not Windows interaction or visual acceptance.
+- Linux cannot produce or honestly validate the Windows single-file EXE. The workflow build, isolated Tk startup, artifact hash, real Windows DPI/multi-display interaction, and user visual acceptance remain separate evidence gates until an Actions run and physical review exist.

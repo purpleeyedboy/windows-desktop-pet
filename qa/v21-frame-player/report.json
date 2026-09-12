@@ -1,0 +1,136 @@
+{
+  "approved_default_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+  "clips": {
+    "jump": {
+      "anchor": [
+        256,
+        768
+      ],
+      "frames": [
+        {
+          "duration_ms": 90,
+          "index": 0,
+          "sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
+        },
+        {
+          "duration_ms": 90,
+          "index": 1,
+          "sha256": "42bdc297358a63828e1364cff66dc14c59a9e1ec1ce295e7ef1e44863d93a4c0"
+        },
+        {
+          "duration_ms": 90,
+          "index": 2,
+          "sha256": "ca7f53e7e1af54d5b0c4c2660bdc4cecf5f91f3d3aeceb3ac22456acb91e7bed"
+        },
+        {
+          "duration_ms": 90,
+          "index": 3,
+          "sha256": "8e32886fa0ce897aeca494c694d98d262bc67b67a45430f1fd7a4b48d61da425"
+        },
+        {
+          "duration_ms": 90,
+          "index": 4,
+          "sha256": "6733c3f8e49a2ccf60ac96ffb89129fb4aeb38cec3fc8071451c651f2bd88166"
+        },
+        {
+          "duration_ms": 90,
+          "index": 5,
+          "sha256": "de5d26a85e0d9f476d466a4ae133542982878f5505bf02163135f509c892ceda"
+        }
+      ],
+      "layer_mode": "full"
+    },
+    "shake": {
+      "anchor": [
+        256,
+        768
+      ],
+      "frames": [
+        {
+          "duration_ms": 90,
+          "index": 0,
+          "sha256": "34a5de87f8583415afc7e7af8e46d9e71726ab08f17096cc943ba3ee5c984613"
+        },
+        {
+          "duration_ms": 90,
+          "index": 1,
+          "sha256": "35180566fb15ac68111a27f37ed223f212952f0e648c15cbcf0dded5c04b8969"
+        },
+        {
+          "duration_ms": 90,
+          "index": 2,
+          "sha256": "b8921f3e3df451c7692b201518a3c443933fbbb3a2e29450b0bbbe0986f71743"
+        },
+        {
+          "duration_ms": 90,
+          "index": 3,
+          "sha256": "c84573880229e1e49c3af70f11c4a9fbd575f3fffcc05dba47e82dd9c6745259"
+        },
+        {
+          "duration_ms": 90,
+          "index": 4,
+          "sha256": "186002431bfb56a33cb3e8eda04dd2bd9cc60e47f5abc86f6b0bc10ddf35981f"
+        },
+        {
+          "duration_ms": 90,
+          "index": 5,
+          "sha256": "0cc1caac66cd576dd79d11ffcbfe3af05d0fffec241912b8aac6bd4b5ff7201f"
+        }
+      ],
+      "layer_mode": "full"
+    },
+    "squash": {
+      "anchor": [
+        256,
+        768
+      ],
+      "frames": [
+        {
+          "duration_ms": 90,
+          "index": 0,
+          "sha256": "e1f9aa39d31feb25abf1f483ff54615dc1a7c08f9887ee88a5aa44e637182563"
+        },
+        {
+          "duration_ms": 90,
+          "index": 1,
+          "sha256": "65622dbcab5ccc7edc93db847d68c71ba9f8586b325c57dbf29cbd2e10976036"
+        },
+        {
+          "duration_ms": 90,
+          "index": 2,
+          "sha256": "b1c8c19fa5b7c3a244a14764cbde162b92cdd612c9f43c5d6d1f375d463d59c8"
+        },
+        {
+          "duration_ms": 90,
+          "index": 3,
+          "sha256": "22d24d909a59fac6445381ccab563aaab38e8fec6265c373bf8aeee8b5e2904f"
+        },
+        {
+          "duration_ms": 90,
+          "index": 4,
+          "sha256": "3779043b19f7b3a37eb3134f8acdee1b77e3bcdd1e784e15f5fcf3dcd616711b"
+        },
+        {
+          "duration_ms": 90,
+          "index": 5,
+          "sha256": "b693e9081b0b2a3bd88893d72cc2582023674b15805e5417a9ac946239978fae"
+        }
+      ],
+      "layer_mode": "full"
+    }
+  },
+  "missing_feature_art": [
+    "hand-licking",
+    "ears",
+    "forelimbs",
+    "hunger-mouth",
+    "feeding",
+    "anticipation"
+  ],
+  "outputs": [
+    "contact-sheet.png",
+    "existing-actions-preview.gif"
+  ],
+  "purpose": "real graphic frame player wiring evidence; not evidence for missing V2.1 feature art",
+  "version": 1
+}
