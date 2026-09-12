@@ -101,10 +101,15 @@ class ActivityCoordinator:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("activity timeout must be positive")
         if self._token is not None:
+            previous = self._token
             try:
-                self._cancel_physical(self._token)
+                self._cancel_physical(previous)
             finally:
-                self._recover_neutral()
+                self._recover_neutral(previous)
+        # A recovery callback may have acquired a newer activity. It owns the
+        # runtime now; the interrupted request must not overwrite its token.
+        if self._token is not None or not self.permits(activity):
+            return None
         version = self._snapshot.activity_version + 1
         token = ActivityToken(activity, version, uuid4().hex, animation_id, self._clock.monotonic() + timeout_seconds)
         self._token = token
@@ -133,10 +138,11 @@ class ActivityCoordinator:
         if token is not None and not self._matches(token, token.animation_id):
             return False
         if self._token is not None:
+            previous = self._token
             try:
-                self._cancel_physical(self._token)
+                self._cancel_physical(previous)
             finally:
-                self._recover_neutral()
+                self._recover_neutral(previous)
         else:
             self._recover_neutral()
         return True
@@ -147,10 +153,11 @@ class ActivityCoordinator:
     def expire_timeout(self) -> bool:
         if self._token is None or self._token.deadline is None or self._clock.monotonic() < self._token.deadline:
             return False
+        previous = self._token
         try:
-            self._cancel_physical(self._token)
+            self._cancel_physical(previous)
         finally:
-            self._recover_neutral()
+            self._recover_neutral(previous)
         return True
 
     def _matches(self, token: ActivityToken, animation_id: str | None) -> bool:
@@ -162,7 +169,9 @@ class ActivityCoordinator:
             and token.animation_id == animation_id
         )
 
-    def _recover_neutral(self) -> None:
+    def _recover_neutral(self, expected: ActivityToken | None = None) -> None:
+        if expected is not None and self._token != expected:
+            return
         if self._token is not None:
             self._recovery.pop(self._token.cancellation_id, None)
         self._token = None
@@ -235,3 +244,4 @@ class RuntimeContext:
         self._closed = True
         self.coordinator.request_activity(Activity.SHUTTING_DOWN)
         self.drain()
+
