@@ -1,5 +1,20 @@
 # 桌面宠物 V2.1 基线记录
 
+## CORE-ACTIVITY-RECOVERY-20260910 活动恢复契约复核
+
+- 公共 `AnimationChannels` 现保证物理播放、取消或恢复回调抛出异常时，仍释放对应的共享活动令牌并回到逻辑待机；原始异常继续向调用方传播，避免把物理失败伪装为成功。
+- 取消通道只调用一次物理取消；随后仅在通道仍由同一令牌持有时清除所有权并执行公共中性恢复。迟到 `recover()` 不得删除同通道替代活动，回调重入后也会再次核对所有权；既有活动/版本/取消 ID/动画 ID 四字段身份契约不变。
+- `tools/verify_graphic_animation_contract.py` 已把播放异常、取消异常、显式恢复异常和旧令牌恢复不影响替代活动纳入 Windows 打包前门禁，并继续覆盖真实窗口队列、活动通道、逐帧播放器、抢占、超时与中性帧恢复。
+- 功能分支兼容契约：继续使用 `ActivityCoordinator.request_activity()` 获得令牌，以同一令牌调用 `AnimationChannels.play()`，只通过 `complete()`、`cancel()` 或 `recover()` 结束；不得直接写 `RuntimeSnapshot` 或绕过通道。功能分支应以本修复提交为共同基础 SHA；具体 SHA 随提交与 PR 回报，不以循环自引用写入本文件。
+- 本项不改变活动优先级、认可素材、动作时序或 About 机器字段。Windows Actions 构建成功、artifact 下载复核、Windows 实机运行和视觉验收仍分别记录，不能相互替代。
+
+## ABOUT-LOCALIZATION-20260910 关于界面返工
+
+- Windows 按当前用户的系统界面语言（非区域格式）选择中文或英文；所有中文地区语言归入中文，其他语言与检测失败使用英文。
+- 关于入口、标题、版本字段、布尔值、公共基础功能名及运行活动提供中文/英文呈现，作者固定 `Alex&Xixi`；技术版本号、Git 提交与基线编号保留原值。机器接口 `BuildInfo.as_fields()` 不变。
+- `tools/verify_about_localization.py` 标准库 headless 验证先因模块缺失失败，实施后 4 项通过（包含中文地区、英文/日文、检测失败、所有 Activity、机器字段不变和真实窗口 About 接线）；接入 Windows 打包前门禁，不执行旧 pytest。
+- 仅更改关于呈现；猫咪素材、动画与文件处理未改变。Windows 原生语言读取和真实窗口视觉待 Windows 实机验收，EXE 尚待 Actions 构建，不宣称完成实机验收。
+
 ## 文档与代码基线
 
 - 基线编号：`BASE-001`。
@@ -27,3 +42,47 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+
+## 已撤回的 V2.1-CORE 未接线增量记录
+
+- 基础标签：`V2.1-CORE`；启用功能仅为 `common-foundation`。
+- 当时仅新增了未连接运行程序的公共契约；该状态已被用户拒收，并由下方 REPAIR-20260906 接线替代。
+- 明确未新增耳朵、前肢、舔手、饥饿、拖放、喂食、自主动画或生产用户文件处理。测试持久化仅使用 pytest 临时目录。
+- 调试时间和状态注入仅允许测试版或显式调试开关；生产随机源使用系统熵且没有固定种子。
+- 原未接线候选名为 `桌面宠物_V2.1公共基础架构.exe`，已被 REPAIR-20260906 撤回，不得再交付。修复候选版本资源包含产品版本、UTC 构建日期、Git 短哈希、基础提交、基础标签、启用功能、测试版状态、调试菜单状态和 `BASE-001` 文档基线。
+- Windows Actions 的真实构建、唯一 EXE 大小/SHA-256、下载复核及真实桌面视觉验收均须在提交和 PR 后分别记录；Linux 不作为 EXE 或视觉通过证据。
+- 两项旧视觉金图回归仍是已知基线问题；不得通过删除或放宽测试、更新金图或修改已认可素材掩盖。
+- 本增量聚焦门禁：28 项通过；Python 编译、158 个素材文件相对起点 SHA-256、`git diff --check` 均通过。容器完整收集仍缺 PyInstaller/NumPy；排除三个依赖收集文件后的检查点为 584 通过、3 跳过、12 失败、42 错误，失败包括既有素材/金图差异、无 DISPLAY 的 Tk 测试及依赖 NumPy 的 QA，不写作通过。
+- 旧单功能 EXE 已撤回。Windows 工作流仍明确以 `build_v21_core.ps1 -SkipTests` 构建；旧基线自动测试不再阻塞修复候选 EXE 打包和 artifact 上传，但其已知失败仍保留且不修改。
+
+## REPAIR-20260906 公共基础接线候选
+
+- 撤回“仅提供未调用抽象即可完成”的旧判断。真实入口现在由 `main()` 创建一个 `ApplicationServices`，并注入 `PetWindow`；窗口点击、菜单、移动、动画完成、区域更新、调试、OLE 生命周期、状态保存和退出均调用共享运行时。
+- 状态采用唯一 Tk 串行事件队列和唯一 `ActivityCoordinator`，Health、Activity、Eye、Mouth、Tear、Particle、InputGate 正交；活动令牌携带版本、取消 ID 和动画 ID，旧完成回调不能覆盖当前活动。
+- Windows 使用 PerMonitorV2/asInvoker manifest；当前 Alpha 生成原生窗口命中区并扩展 16 个物理像素。OLE 注册只提供诊断和拒绝 drop 的公共能力，不读取或操作用户文件。
+- 测试版右键菜单提供“关于 / 运行状态”和一级“调试”；调试打开一个可滚动二级列表。后续六项功能未接入的命令明确禁用，不伪造动画。
+- 新候选名：`桌面宠物_公共基础接线与版本识别修复.exe`。该候选未经旧 pytest/逐像素套件门禁，仍须 Windows 构建检查和用户实机验收；不能称为已验收完成版。
+- REPAIR 静态/临时目录证据：入口接线审查、Python 编译、事件优先级与物理恢复、四字段播放身份、损坏存储/备份/日志、STA 工作队列关闭、manifest XML 和 158 项素材 SHA-256 均已检查；按授权未运行 pytest。
+- 尚未完成的外部门禁：本容器不能验证 Windows OLE 消息、PerMonitorV2 多屏切换、Alpha/16px 原生命中、旧实例激活、真实菜单键盘操作、PyInstaller EXE 启动和用户视觉验收。饥饿、舔手、喂食、耳朵、前肢、期待仍由 PR6～PR11 接入，本候选中明确禁用，不得当作已完成功能。
+
+## CORE-DATA-REPAIR-20260907 数据恢复增量
+
+- 统一数据目录改为 `%LOCALAPPDATA%/DesktopPet`，固定包含 `state.json`、`state.backup.json`、`settings.json`、`feed-journal.jsonl`、`logs/` 和 `recovery/`。
+- 加载顺序固定为正式状态、有效备份、脱敏事务日志；正式与备份双损坏时，日志中的未完成事务恢复到 `pending_transaction`，启动必须进入 `TransactionReview`，不能默认为无事务。
+- 保存前先验证候选状态；只把验证通过的旧正式状态原子写入备份。损坏正式状态不会覆盖有效备份，损坏输入保留到 `recovery/`。
+- `SharedState.commit/update` 是唯一共享提交入口：先完成持久化，成功后才发布新内存快照；兼容的 `ApplicationServices.close(state=None)` 忽略旧调用者副本并保存当前最新快照。
+- 旧 `%LOCALAPPDATA%/DesktopPetV21` 文件仅在新目标缺失时复制迁移，不删除、不改写、不覆盖旧文件；普通日志采用 2 MiB、5 备份轮转并脱敏完整路径。
+
+## FRAME-CONTRACT-20260907 逐帧图形播放器增量
+
+- 撤销“不得新增动作素材”的错误门禁；默认认可素材仍按哈希锁定，但六个功能分支可新增真实 RGBA 全帧或带逐帧补洞层的局部帧。
+- 真实 `AnimationController → PetWindow` 播放链现读取 `AnimationSequence/FrameStep`：帧序、每帧毫秒、有限循环段、源画布锚点和 full/local 模式均显式声明；取消、超时或中断继续通过活动令牌恢复认可默认帧。
+- `assets/keyframes/playback.json` 已把现有 jump/squash/shake 图形帧接入新时序接口；它只证明公共播放器真实可达，绝不冒充舔手、耳朵、前肢、饥饿嘴部、进食或期待动作。
+- 公共播放器证据位于 `qa/v21-frame-player/`：18 帧联系表、连续 GIF 和逐帧 SHA/时长报告。六项新功能的正式动作帧当前仍缺失，必须由对应 PR 提供并经用户验收后才可报告动画完成。
+
+## GRAPHIC-ACTIVITY-REPAIR-20260909 图形活动接线修复
+
+- 修复窗口播放器把所有活动硬限为 `BODY_ACTION` 的阻塞：舔手、普通/严重饥饿和进食现使用各自真实活动令牌播放，不改写为身体活动。拖放期待须保留实时眼球跟随，不接入会暂停眼球的全帧身体通道。
+- 自定义动作完成时先验证活动/版本/取消 ID/动画 ID，再恢复认可默认帧；迟到完成回调不得覆盖新动作，取消和超时同时恢复播放器与活动状态。
+- `verify_graphic_animation_contract.py` 新增真实窗口请求→串行队列→活动通道→逐帧播放器→完成/中断恢复门禁。修复前已复现功能活动被拒和默认帧未恢复；修复后两项现有 non-pytest 门禁通过。Windows 构建即使使用 `-SkipTests` 仍执行这两项轻量门禁，不运行旧 pytest 整套。
+- 此增量仅修公共播放链，不代表六项素材或 Windows EXE 视觉验收通过；Windows 构建与用户实机验收另记。

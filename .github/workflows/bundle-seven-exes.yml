@@ -1,0 +1,53 @@
+name: Bundle seven desktop pet test EXEs
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bundle-seven-exes.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified candidates and collect seven EXEs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import os, io, json, hashlib, zipfile, urllib.request, urllib.error
+          from pathlib import Path
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          opener = urllib.request.build_opener(NoRedirect())
+          out = Path("bundle"); out.mkdir()
+          items = [["01_公共基础_接线与版本识别修复.exe",10300938416,"bbb0f7eb8771592dfcf23b7469d2f0b517a98e740e569dca23b43ff1d6650381"],["02_双耳_逐帧反馈.exe",10301795299,"00670895256117d107478ca8f7fd169eb41a5e7904c9892a6a302a8794e7cea6"],["03_双前肢_抬爪按压与鼠标边界修复.exe",10300823762,"9a5474c0c69e8191ed3911a16ce21b9fc1ce071e2366730f00b64b1d9519d570"],["04_饥饿_真实帧与基础校验修复.exe",10302036781,"968887c5d20fc9b7172ffb3173df9f178b75de81a8e574b6e5708e53de95a46c"],["05_舔手_双侧动作与中断恢复.exe",10302855031,"ef9c189fec2c7db1c33d6fd931fe0442c4a2b495769bb1e1d94411c6c2f0210f"],["06_拖动期待_迟到回调修复.exe",10302516890,"7323a122eadac9d66789d80cd38b708af3abd84b0001f5f1278014e8656a4172"],["07_进食_动画与确认恢复.exe",10301825073,"6b9c30f2e00688aa9a5822d127561604afd36f57df3f4ed956031a9e801b1f37"]]
+          for name, aid, expected in items:
+              req = urllib.request.Request(f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts/{aid}/zip", headers={"Authorization":"Bearer "+os.environ["GH_TOKEN"], "Accept":"application/vnd.github+json"})
+              try:
+                  response=opener.open(req, timeout=60)
+                  data=response.read()
+              except urllib.error.HTTPError as e:
+                  if e.code not in (301,302,303,307,308): raise
+                  url=e.headers["Location"]
+                  if not url.startswith("https://"): raise RuntimeError("insecure redirect")
+                  data=urllib.request.urlopen(url, timeout=120).read()
+              assert hashlib.sha256(data).hexdigest()==expected, f"archive mismatch: {aid}"
+              with zipfile.ZipFile(io.BytesIO(data)) as z:
+                  exes=[x for x in z.infolist() if not x.is_dir() and x.filename.lower().endswith(".exe")]
+                  assert len(exes)==1, (aid,len(exes))
+                  payload=z.read(exes[0])
+                  assert payload[:2]==b"MZ"
+                  (out/name).write_bytes(payload)
+                  print(name, len(payload), hashlib.sha256(payload).hexdigest())
+          assert len(list(out.glob("*.exe")))==7
+          
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: 桌面宠物_七项独立测试EXE合集_20260912
+          path: bundle/*.exe
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
