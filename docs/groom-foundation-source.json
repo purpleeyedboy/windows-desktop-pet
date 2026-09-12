@@ -9,7 +9,7 @@
     "src/desktop_pet/foundation/persistence.py": "686f854ab2f58e78940ab28fa874ced9c2b44c8915d3525c1bcce83dc42968e2",
     "src/desktop_pet/foundation/platform.py": "c70e3dc8a30b8577b27bbe3e3056c235b27a0259cd51c1e51b58e48aa6560cdb",
     "src/desktop_pet/foundation/regions.py": "8d50c58b0be6948b233bbf39f8d2afcaa32fc4e9aebfaa237dca6e9a9706472b",
-    "src/desktop_pet/foundation/runtime.py": "5934b5480eac53b9b54f15e9b4b62fc63064542c08d454b06ea155d4d5bb8714",
+    "src/desktop_pet/foundation/runtime.py": "adf7fdeb8d7abf97be0a554e4d8dfcaa8234b8ddd9abb7973457d7ff150fb54e",
     "src/desktop_pet/foundation/services.py": "4b75236ad024df1a6fc17c2caa598c5bc2e089754ba21065f431bad750fa0e5a",
     "src/desktop_pet/foundation/sources.py": "7d13ef5d20a735c165af87a8027615f0c45334354a783144019d8ae5d6901e48",
     "src/desktop_pet/animation.py": "ae4d7f71a9822e80479cd76f97c233c3a5c298670654f77c3e13418bd8e1015b",
@@ -22,5 +22,9 @@
     "src/desktop_pet/assets.py"
   ],
   "feature": "approved-bilateral-groom-frames",
-  "hash_normalization": "UTF-8 text with CRLF/CR normalized to LF; BOM preserved"
+  "hash_normalization": "UTF-8 text with CRLF/CR normalized to LF; BOM preserved",
+  "reentrant_recovery_fix_commit": "eeaa994de5e2c40a23442a409f423bf1d58e4d53",
+  "file_source_overrides": {
+    "src/desktop_pet/foundation/runtime.py": "eeaa994de5e2c40a23442a409f423bf1d58e4d53"
+  }
 }
