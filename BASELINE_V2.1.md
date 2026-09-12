@@ -30,12 +30,17 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 
 ## V2.1-LICK 独立增量
 
-- 起点：当前 `c3b218df9dd0cfc84d96231701e771f0382388e1`；未切换旧分支。
-- 返工行为合同：共享明确交互空闲 60 秒后抽取 `90..300` 秒等待；普通鼠标经过/头眼跟随不重置。获授权的一轮固定猫自身一侧和 `3..20` 次，单次 0.45 秒，20 次加准备恢复不超过 13 秒。
-- Feature adapter：只接受包含动画 ID、状态版本和取消令牌的已授权请求；支持单次边界退出和 150ms 紧急恢复，不创建第二套 AppState、事件队列、Clock、StateStore 或全局监听。
-- 拒收修复：固定坐标 `ImageDraw.line/ellipse` 伪前肢/舌头已从真实运行路径移除。新合成接口要求原猫前肢、补洞、嘴舌、遮罩、锚点和当前头部映射；这些审核资产尚未提供。
-- 保留范围：未修改任何素材、黄金图、转头角度、Alpha、头颈、眼球跟随或 minimum-jerk；未实现耳朵、双前肢、饥饿、拖放或喂食。
-- 发布状态：**未完成/不可验收**。PR5 公共基础及审核素材均未进入此分支，真实主入口接线不存在。预定返工候选名为 `桌面宠物_空闲舔手返工候选.exe`；构建脚本在依赖缺失时拒绝 PyInstaller 和 artifact 发布。
-- 返工检查：新增合同聚焦测试 25 项通过；Python 编译、关键导入、禁止伪合成/自治运行调用审计和 `git diff --check` 通过。未运行旧 pytest 作为候选门，也未修旧金图。
-- 差异完整性：相对 `c3b218d` 仅有文本差异，既有素材、QA 金图和交付目录无变化。
-- 待完成门：PR5 公共基础统一提交、审核局部资产、真实主入口/输入/调试菜单/渲染接线、Windows Actions 构建及哈希、用户 Windows 实机验收。Linux 容器不替代这些门。
+- 行为合同：明确交互空闲 60 秒后抽取 `90..300` 秒等待；普通鼠标经过/头眼跟随不重置。生产一轮 `3..20` 次，调试构造固定 3 次。
+- 用户认可的单侧 12 帧整帧原稿以每行不超过 120 字符的 Base64 文本保存；不镜像整猫伪造另一侧，不提交 PNG/GIF/派生帧。
+- 基础审计：当前分支及可见 refs 中没有 `RuntimeContext`、`ActivityCoordinator` 或健康服务；不把局部播放器冒充公共基础，也不另建全局状态机。候选沿用现有 `RuntimeEyeSession` 的唯一 tick、`following/playing` 所有权与输入中断路径。
+- 构建：解码后核验原 PNG SHA，确定性生成并检查 12 帧，将生成帧装入独立候选 `桌面宠物_舔手逐帧动画恢复.exe`；验收候选通过明确测试元数据开放“调试 → 左前爪舔手（3次）”，生产默认关闭。
+- 保留范围：canonical idle SHA 保持 `48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7`；未修改已认可头身眼素材、转头角度或 minimum-jerk。
+- 远端事实：当前仓库未配置 remote/remote refs，不能把本地提交或 `make_pr` 元数据记录视为已推送。
+- 待完成门：Windows Actions 构建、候选实际大小/SHA-256 与用户 Windows 实机视觉验收。Linux 容器不替代这些门；不合并。
+- Windows run `34304052388` 构建成功，实际 EXE SHA-256 为 `712bdfbbf38ab9adabe4899a414f66c5cdebdf5eaf1b28012ed6e8eaf1ab4be5ff`，但因 `04.png` 缩小及脚部碎片被视觉拒收；本地已按每格主体连通域修复，等待新 Windows artifact 复核。
+# 2026-09-10 resumed grooming asset work
+
+PR12 adds an opt-in full-cat RGBA importer path; legacy manifests and approved
+images are unchanged. Seven focused tests pass (full-frame input and prior QA).
+New generated grooming art was rejected for RGB checkerboard and identity drift.
+This is NOT a completed animation repair and has no new Windows visual approval.
