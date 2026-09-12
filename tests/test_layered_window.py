@@ -18,6 +18,7 @@ from desktop_pet.layered_window import (
     WS_EX_TRANSPARENT,
     _win32_error,
     rgba_to_premultiplied_bgra,
+    alpha_hit_test,
 )
 
 
@@ -28,6 +29,15 @@ def test_rgba_to_premultiplied_bgra_uses_integer_rounding():
     assert rgba_to_premultiplied_bgra(image) == bytes(
         (25, 50, 100, 128, 0, 0, 0, 0)
     )
+
+
+def test_alpha_hit_test_accepts_visible_pet_and_rejects_transparent_margin():
+    alpha = Image.new("L", (4, 3), 0)
+    alpha.putpixel((2, 1), 255)
+
+    assert alpha_hit_test(alpha, (12, 21), (10, 20)) is True
+    assert alpha_hit_test(alpha, (10, 20), (10, 20)) is False
+    assert alpha_hit_test(alpha, (99, 99), (10, 20)) is False
 
 
 def test_premultiply_keeps_max_pet_size_realtime():

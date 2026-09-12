@@ -1,5 +1,18 @@
 # 桌面宠物 V2.1 基线记录
 
+## 2026-09-09：期待真实帧与公共基础接入
+
+- 当前独立候选：`桌面宠物_期待逐帧与公共基础接入.exe`，版本 `2.1-expect-frames.1`。以下新增记录取代旧的 `NOT_INTEGRATED` 状态；旧轮次结果保留作历史。
+- 公共文件使用 PR5 `f617765` 与后续本地 `6af8446`，包含实际单一状态、时钟、协调器、STA 文件工作线程、图形恢复及受保护事务菜单修复；`eye_runtime.py` 和 `layered_window.py` 配套接口一并导入。
+- 从原期待云端任务取回生成脚本和清单，本地重建五张源 PNG；五个 SHA-256 与原任务清单逐张精确一致。源图包以文本保存，原 158 个认可素材不变。
+- 已将源帧相对默认姿态的局部变化预先合成到真实 640×768 中性画布；运行帧 0 与实际中性图逐像素相同，未变动身体区域保留，避免切换时脸部/画布跳动。运行 PNG 由脚本还原且不重复提交。
+- 进入用 0→1→2→3，前三步各 50ms；悬停 3/4 各 100ms；离开用 2→1→0 各 50ms。取消、失焦、异常、事务抢占和 Drop 立即恢复；粒子单独绘制，角色表情只读实际帧。
+- 唯一 OLE owner 使用真实 CF_HDROP 路径复制与释放，在共享 STA 线程读取文件身份和大小；无回收、移动、复制、文件内容读取或奖励。完整单文件头部命中且未满饱腹时才显示 Copy。异步结果会重新检查当前会话、坐标、饥饿和活动优先级。
+- Drop 只发出一次复制值事件供后续 FEED 消费。独立 EXPECT 版本不包含 FEED 消费者，也不重复启动 HUNGER 图形播放器；共享健康/tear 恢复已验证，泪眼画面联动留给总集成。
+- 二级调试入口提供 3 秒期待动画预览，不改饥饿状态或真实文件；正常跟随在预览结束后恢复。
+- 本地通过：真实源帧哈希还原、五帧 RGBA/画布/像素校验、原中性图一致、身体区域不变、共享拖放生命周期与迟到回调/满值/极端饥饿/优先级/一次性交接门禁、公共图形合同、Python 编译与 diff 检查。
+- 画面已查看全部五帧黑白底联系表，身体位置稳定；眼部变化较细微，源素材为预先加工眼层生成的图形帧。Windows 构建、实际 OLE、DPI/多屏及用户视觉验收仍待新候选验证，不能用本地门禁代替。
+
 ## 文档与代码基线
 
 - 基线编号：`BASE-001`。
@@ -19,6 +32,27 @@
 
 V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001 范围内，也未在本基线中实现。
 
+## V2.1-DRAG 独立增量
+
+- 候选文件名：`桌面宠物_文件拖动期待反馈修复.exe`；基础标签仍为 `BASE-001 / V2.1`。
+- 当前仅启用既有认可基线；文件拖动期待反馈列为 `incomplete_features`。一级“调试”子菜单含开始/结束演示，文档基线为本文件。
+- OLE 边界现调用 `GetData(CF_HDROP/TYMED_HGLOBAL)`，复制单个本地盘绝对路径和数量后立即 `ReleaseStgMedium`；多对象、目录、相对/网络/设备路径均拒绝，不把 `IDataObject` 留给异步代码。
+- Copy 仅是光标反馈。程序不复制、移动、删除、回收、打开、上传、读取或修改文件，也不改变饥饿值；未实现耳朵、前肢、舔手、饥饿或文件喂食。
+- 临时 compositor 使用 0.15 秒目标 120% 的局部眼区、按眼宽 1.5% 颤抖、真实 Alpha 轮廓高亮和独立 Alpha 粒子；不写入认可素材。独立眼层和共享 Coordinator Recovery 尚待 PR5 接线及实机视觉复核。
+- 版本化 adapter 已防止取消/换对象后的异步结果复活；完整中断恢复、最新 Health/泪眼恢复和实际注销链仍待公共基础接线验证。
+- 构建元数据版本为 `2.1-drag-repair-dev.1`，日期 `2026-09-06`；打包时注入实际 Git 短哈希，foundation 标记为 `NOT_INTEGRATED`。
+
+### V2.1-DRAG 验证状态
+
+- V2.1-DRAG 聚焦自动测试：28 项通过、2 项 Windows 跳过；既有眼球运行时/闲置转头/头颈形变门禁：175 项通过。Python 编译、既有 158 个认可素材的 SHA-256 前后清单对比和 `git diff --check`：通过。
+- 开发者可独立运行 `tools/verify_drag_source_diff.py` 检查相对 `c3b218d` 的源码 diff 与既有 158 个 `assets/` 文件；运行 #33963393479 证明该工具在 Windows cp1252/浅克隆环境不可靠，因此它不再属于候选打包门禁。QA PNG 不纳入 Git，候选发布工作流也不生成或上传 QA 预览。
+- 容器完整测试因缺少 PyInstaller/NumPy 在 3 个文件收集时报错；排除这些依赖文件后为 586 项通过、3 项跳过、12 项失败、42 项错误（737.66 秒），仍受无 DISPLAY、临时目录限制以及既有视觉金图与当前认可素材不一致影响。这些结果只记录，不将其写作通过，也不删除测试或修改金图。
+- Windows workflow 保留手动打包路线，但当前 artifact 明示 `Foundation integration: NOT COMPLETE` 与 `Not an acceptance candidate`。
+- Windows 分层窗口 OLE 实机拖入、透明区域穿透及真实桌面视觉验收：**尚不可开始**。Linux 预览不作为 Windows OLE/EXE 或人工视觉通过证据。
+- REPAIR-20260906 已撤回“功能完成”结论：当前仓库没有 PR5 foundation API/基础提交。PR #11 已添加共享服务 Protocol、版本化 adapter、实际 `CF_HDROP` 单路径提取与 `STGMEDIUM` 释放，并禁止未注入 adapter 时注册旧 format-only 目标；`main` 注入、共享异步文件策略、协调器 Recovery/泪眼联动及 Windows 证据仍未完成，所以修复版仅为 foundation-blocked 开发构建。
+- INTEGRATE-20260906 第二轮：请求的 PR5 提交 `1a02fe9680f28dda07add8b96c78445e0b3c0f59` 不在本地对象库；Git fetch、raw 和 codeload 均被代理 403 拒绝，web retrieval 返回 401。未读取 `docs/v21-runtime-api.md`，因此没有将猜测接口冒充实际 `create_application_services` / `ApplicationServices` 接线；详见 `qa/drag-expectation/pr5-fetch-blocked-20260906.md`。
+- 转头角度不属于本增量门禁且未调整；旧视觉回归失败只记录，不删测试、不改金图。
+
 ## 验证与状态
 
 - BASE-001 聚焦自动测试：35 项通过（角度、minimum-jerk、运行时集成、版本、依赖声明、Windows 工作流契约）。
@@ -27,3 +61,12 @@ V2.1 耳朵、前肢、舔手、饥饿、拖放和喂食功能均不在 BASE-001
 - Windows Actions：待提交/PR 后在 `windows-latest` 手动或 PR 触发构建，校验唯一 EXE、输出 SHA-256 并上传 artifact。
 - Windows EXE 真实运行与桌面视觉验收：**待用户验收**。Linux 云容器结果不作为 Windows EXE 或视觉验收证据。
 - Git：BASE-001 实现提交为 `5a7338d8d8c53b880a4a05ea783b1352df4add18`；PR 因当前容器没有 GitHub 凭据/远端而待创建。
+# EXPECT 后续修复记录（2026-09-10）
+
+版本范围：V2.1-EXPECT。退出帧渲染/调度失败，以及退场期间拖回窗口时的取消/渲染/调度失败，均立即释放期待活动并恢复默认显示；菜单与普通动作不抢占期待，受保护事务仍可抢占且期待不会复活。不更改批准素材、文件安全区域或外围首次触发限制。自动证据：退出/重入异常与仲裁定向回归 6 项通过、`verify_drag_runtime.py` 通过。Windows 构建与用户视觉验收尚待本提交后验证；全猫口水新帧未接入。
+
+## 2026-09-11：PR #5 发布来源与 Windows 回归门禁
+
+- 公共基础 PR #5 的最新正式发布来源为完整提交 `1a18477faa4caa28170e648437d7cb8b39612ac0`。已按核验完整源文件同步 `src/desktop_pet/foundation/animation.py`，同步后 Git blob 为 `a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb`；播放、取消或恢复回调异常均释放逻辑所有权，旧 token 的恢复不能清除替代活动。
+- Windows workflow 在构建前运行 CORE 动画播放/取消/恢复异常、旧 token 隔离、OLE 进入/离开/Drop、退出与重入回调异常恢复、重复/迟到触发、头部限定交接以及不修改共享饥饿状态的自动回归。候选仍不安装 FEED consumer，因此不会移动、删除或回收文件；`CF_HDROP` 只复制路径值并及时释放 OLE medium。
+- 自动代码验证、Windows 构建、artifact 上传、Windows 实机 OLE/DPI/多屏验证和用户视觉验收分别记录。后四项必须等待真实 Actions/Windows 证据，不以 Linux 测试或元数据替代。

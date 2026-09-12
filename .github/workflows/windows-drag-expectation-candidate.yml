@@ -1,0 +1,60 @@
+name: Windows drag expectation candidate
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  windows-drag-expectation-candidate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+      - run: python -m pip install . "pytest>=8,<9" "PyInstaller>=6,<7"
+      - name: Verify OLE lifecycle, recovery, repeated triggers, and non-destructive behavior
+        run: >-
+          python -m pytest tests/test_expectation_exit_recovery.py
+          tests/test_foundation_animation_recovery.py
+          tests/test_drag_expectation.py tests/test_drag_foundation_adapter.py
+          tests/test_ole_drop_target.py -q
+      - name: Verify shared drag runtime contract
+        run: python tools/verify_drag_runtime.py
+      - name: Verify graphic animation contract
+        run: python tools/verify_graphic_animation_contract.py
+      - run: .\build_drag_expectation_candidate.ps1 -SkipTests
+        shell: pwsh
+      - name: Verify isolated startup and actual expectation frames
+        shell: pwsh
+        run: .\tools\smoke_test_expectation_candidate.ps1
+      - name: Verify unique EXE, size, and publish SHA-256
+        shell: pwsh
+        run: |
+          $exes = @(Get-ChildItem -LiteralPath dist-drag-expectation-candidate -Filter *.exe -File)
+          if ($exes.Count -ne 1) { throw "Expected exactly one EXE; found $($exes.Count)." }
+          if ($exes[0].Name -ne '桌面宠物_期待逐帧与公共基础接入.exe') { throw "Unexpected EXE: $($exes[0].Name)" }
+          if ($exes[0].Length -gt 52428800) { throw "EXE exceeds 50 MiB." }
+          $hash = Get-FileHash -LiteralPath $exes[0].FullName -Algorithm SHA256
+          "Shared runtime and real graphic gates: PASS; user visual acceptance: PENDING" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Windows lifecycle/non-destructive tests: PASS" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Foundation source: PR #5 1a18477faa4caa28170e648437d7cb8b39612ac0" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "foundation/animation.py blob: a58b54aa1d3cb1bfe1b88e9554697a417e7e2dcb" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "Independent expectation candidate; feeding consumer is a separate integration" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+          "SHA-256: $($hash.Hash)" | Tee-Object -FilePath "$env:GITHUB_STEP_SUMMARY" -Append
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-pet-v2-1-drag-expectation
+          path: dist-drag-expectation-candidate/桌面宠物_期待逐帧与公共基础接入.exe
+          retention-days: 7
+          if-no-files-found: error

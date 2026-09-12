@@ -1,0 +1,24 @@
+{
+  "version": "2.1-expect-frames.3",
+  "date": "2026-09-11",
+  "git_short_hash": "BUILD_TIME_REQUIRED",
+  "foundation_commit": "1a18477faa4caa28170e648437d7cb8b39612ac0",
+  "baseline": "BASE-001 / V2.1",
+  "enabled_features": [
+    "approved-v2.1-baseline",
+    "common-foundation",
+    "expectation-5-real-frames",
+    "shared-hunger-preview-gate"
+  ],
+  "incomplete_features": [
+    "feed-business-handoff-consumer-in-independent-candidate"
+  ],
+  "test_build": true,
+  "debug_menu": true,
+  "documentation_baseline": "BASELINE_V2.1.md",
+  "file_operations": "none",
+  "hunger_changes": "none; shared hunger is read only for preview eligibility",
+  "visual_acceptance": "pending",
+  "automated_test_status": "windows-ci-lifecycle-and-non-destructive-gates",
+  "candidate_status": "pending-windows-build-real-machine-and-visual-review"
+}

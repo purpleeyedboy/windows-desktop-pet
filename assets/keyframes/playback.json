@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "canvas": [512, 768],
+  "clips": {
+    "jump": {
+      "anchor": [256, 768],
+      "layer_mode": "full",
+      "loop": null,
+      "frames": [
+        {"file": "00.png", "duration_ms": 90},
+        {"file": "01.png", "duration_ms": 90},
+        {"file": "02.png", "duration_ms": 90},
+        {"file": "03.png", "duration_ms": 90},
+        {"file": "04.png", "duration_ms": 90},
+        {"file": "05.png", "duration_ms": 90}
+      ]
+    },
+    "squash": {
+      "anchor": [256, 768],
+      "layer_mode": "full",
+      "loop": null,
+      "frames": [
+        {"file": "00.png", "duration_ms": 90},
+        {"file": "01.png", "duration_ms": 90},
+        {"file": "02.png", "duration_ms": 90},
+        {"file": "03.png", "duration_ms": 90},
+        {"file": "04.png", "duration_ms": 90},
+        {"file": "05.png", "duration_ms": 90}
+      ]
+    },
+    "shake": {
+      "anchor": [256, 768],
+      "layer_mode": "full",
+      "loop": null,
+      "frames": [
+        {"file": "00.png", "duration_ms": 90},
+        {"file": "01.png", "duration_ms": 90},
+        {"file": "02.png", "duration_ms": 90},
+        {"file": "03.png", "duration_ms": 90},
+        {"file": "04.png", "duration_ms": 90},
+        {"file": "05.png", "duration_ms": 90}
+      ]
+    }
+  }
+}
