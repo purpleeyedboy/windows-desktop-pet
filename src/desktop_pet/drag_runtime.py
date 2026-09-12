@@ -177,7 +177,7 @@ class DragExpectationRuntime:
             if token is None:
                 return 0
             self._token = token
-            coordinator.attach_recovery(token, self._recover_visual)
+            coordinator.attach_recovery(token, lambda: self._recover_owned_visual(token))
             self._frame_index = 0
             try:
                 self._show(self.frames[0])
@@ -230,6 +230,12 @@ class DragExpectationRuntime:
             self._stop_preview()
             raise
 
+    def _recover_owned_visual(self, token):
+        # Recovery belongs to the activity that registered it, never its successor.
+        if token != self._token:
+            return
+        self._recover_visual()
+
     def _recover_visual(self):
         was_active = self._token is not None
         self._tail_until = None
@@ -281,7 +287,11 @@ class DragExpectationRuntime:
         self._version += 1
         self._candidate = self._validation = self._request = None
         self._debug_until = None
+        version = self._version
         self._refresh_health()
+        # Health publication drains queued events and may start another drag.
+        if version != self._version:
+            return
         if reason == "leave" and self._token is not None:
             self._begin_exit()
         else:
