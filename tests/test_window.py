@@ -1100,6 +1100,38 @@ def test_headless_menu_and_window_protocol_share_close_path(monkeypatch):
     assert root.protocols["WM_DELETE_WINDOW"].__func__ is window.close.__func__
 
 
+def test_headless_focus_loss_interrupts_idle_motion(monkeypatch):
+    window, root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    calls = []
+    window.eye_session.interrupt_idle = lambda: calls.append("interrupt")
+
+    root.bindings["<FocusOut>"](object())
+
+    assert calls == ["interrupt"]
+
+
+def test_headless_window_renderer_receives_distinct_left_right_lick_pixels(monkeypatch):
+    from desktop_pet.idle_lick import LickPose
+    from desktop_pet.lick_compositor import compose_lick
+
+    window, _root, renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    center = window._current_image
+    left = compose_lick(center, LickPose("left", "contact", 1.0, 1.0))
+    right = compose_lick(center, LickPose("right", "contact", 1.0, 1.0))
+
+    window._display_eye_frame(left)
+    left_pixels = renderer.attempts[-1][0].tobytes()
+    window._display_eye_frame(right)
+    right_pixels = renderer.attempts[-1][0].tobytes()
+
+    assert left_pixels != right_pixels
+    assert left_pixels != center.resize(renderer.attempts[-1][0].size).tobytes()
+
+
 def test_headless_menu_routes_all_seven_commands_to_exact_runtime_requests(
     monkeypatch,
 ):
