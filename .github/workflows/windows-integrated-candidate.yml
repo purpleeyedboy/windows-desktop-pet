@@ -25,6 +25,7 @@ jobs:
         run: >-
           python -m pytest -q
           tests/test_integrated_runtime.py tests/test_integrated_release.py
+          tests/test_integrated_transitions.py
           tests/test_integrated_pointer.py tests/test_activity_recovery_reentrancy.py
           tests/test_foundation_animation.py tests/test_ear_interaction.py
           tests/test_ear_touch_recoil.py tests/test_paw_press.py

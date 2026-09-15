@@ -244,3 +244,19 @@ def test_real_integrated_window_initializes_all_layers_and_closes_hunger_once(tm
     assert checkpoints == [True]
     assert root.destroyed
     assert registered == []
+
+
+def test_integrated_entry_resolves_all_feature_loaders_before_instance_handoff(monkeypatch):
+    import desktop_pet.main as legacy
+    import desktop_pet.integrated_main as integrated
+    from desktop_pet.foundation.config import BuildInfo, FeatureConfig
+    info = BuildInfo('2.1-integrated', date(2026, 9, 15), 'test', 'test',
+        FeatureConfig(enabled_features=integrated.INTEGRATED_FEATURES, test_build=True))
+    activated = []
+    monkeypatch.setattr(BuildInfo, 'load_embedded', lambda: info)
+    monkeypatch.setattr(legacy, 'enable_per_monitor_dpi_awareness', lambda: None)
+    monkeypatch.setattr(legacy, 'SingleInstanceMutex',
+        lambda name: SimpleNamespace(acquire=lambda: False, close=lambda: None))
+    monkeypatch.setattr(legacy, 'notify_existing_instance', activated.append)
+    assert integrated.main() == 0
+    assert activated == [info]

@@ -49,7 +49,7 @@ class HungerGraphicRuntime:
             current = runtime.coordinator.current_token
             cancel_activities = set(self.HUNGER_ACTIVITIES)
             if snapshot.level is HungerLevel.CRITICAL_HUNGRY:
-                cancel_activities.update({Activity.BODY_ACTION, Activity.GROOM, Activity.BLINK})
+                cancel_activities.update({Activity.EAR_ACTION, Activity.BODY_ACTION, Activity.GROOM, Activity.BLINK})
             if current is not None and current.activity in cancel_activities:
                 runtime.coordinator.cancel_and_recover(current)
             self._level = snapshot.level

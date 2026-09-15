@@ -311,7 +311,7 @@ class FeedRuntime:
         return (self.ready and not self.closed and not self.recovery.feed_blocked and
                 not getattr(self.recycler, 'busy', False) and
                 self.business._active is None and self.hunger.snapshot().units < 100_000 and
-                self.runtime.snapshot().activity in {Activity.IDLE, Activity.BLINK, Activity.GROOM,
+                self.runtime.snapshot().activity in {Activity.IDLE, Activity.BLINK, Activity.GROOM, Activity.EAR_ACTION,
                     Activity.BODY_ACTION, Activity.NORMAL_HUNGER_ANIMATION,
                     Activity.SEVERE_HUNGER_ANIMATION, Activity.DRAG_PREVIEW})
 
