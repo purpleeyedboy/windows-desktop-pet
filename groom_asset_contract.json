@@ -1,0 +1,25 @@
+{
+  "schema": "desktop-pet-v2.1-groom-assets-v1",
+  "status": "required-not-present",
+  "canvas_size": [672, 768],
+  "required_sides": ["left", "right"],
+  "required_per_side": [
+    "paw.png",
+    "paw-mask.png",
+    "vacancy-fill.png",
+    "mouth.png",
+    "tongue.png",
+    "paw_rest_anchor",
+    "paw_contact_anchor",
+    "mouth_anchor",
+    "safe_frames",
+    "sha256"
+  ],
+  "requirements": {
+    "paw": "original cat forepaw texture; original location vacated",
+    "vacancy_fill": "adjacent torso shadow and fur continuity",
+    "mouth_tongue": "reviewed local photographic layers, not geometry",
+    "anchors": "mapped through current head translation, rotation, scale and deformation",
+    "alpha": "RGBA edges, zero RGB where alpha is zero"
+  }
+}

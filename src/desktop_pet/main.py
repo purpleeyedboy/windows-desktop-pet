@@ -2,18 +2,46 @@ from __future__ import annotations
 
 import ctypes
 import os
+import json
+from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 
-from .assets import load_frames, load_head_neck_compositor, load_playback_sequences
+from .assets import (
+    load_frames,
+    load_head_neck_compositor,
+    load_paw_compositor,
+    load_paw_motion_config,
+)
+from .assets import load_playback_sequences
 from .eye_follow import Win32CursorProvider
 from .foundation.config import BuildInfo
 from .foundation.services import DEFAULT_STATE, ApplicationServices, create_application_services
 from .foundation.runtime import Activity
 from .window import PetWindow
+from .release_status import release_status_text
+from .win32_pointer import Win32ButtonState, Win32CursorMovementService
 
 
 ERROR_ALREADY_EXISTS = 183
+from .paths import asset_path
+
+
+ERROR_ALREADY_EXISTS = 183
+
+
+def load_groom_debug_enabled(path: Path | None = None) -> bool:
+    """Only an explicitly marked test build exposes the grooming test command."""
+    try:
+        data = json.loads((path or asset_path("build-info.json")).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return False
+    return (
+        isinstance(data, dict)
+        and data.get("version") == "2.1-LICK"
+        and data.get("test_build") is True
+        and data.get("debug_menu") is True
+    )
 
 
 def build_mutex_name() -> str:
@@ -71,7 +99,7 @@ def notify_existing_instance(build_info: BuildInfo) -> None:
             def visit(candidate, _parameter):
                 buffer = ctypes.create_unicode_buffer(512)
                 user32.GetWindowTextW(candidate, buffer, len(buffer))
-                if buffer.value.startswith("桌面宠物 V2.1-CORE"):
+                if buffer.value.startswith("桌面宠物"):
                     found.append(int(candidate))
                     return False
                 return True
@@ -149,10 +177,23 @@ def main() -> int:
             compositor=compositor,
             cursor_provider=cursor_provider,
             head_follow=True,
+            cursor_service_factory=lambda _hwnd: Win32CursorMovementService(),
+            button_state_factory=lambda _hwnd: Win32ButtonState(),
+            paw_compositor=load_paw_compositor(),
+            paw_motion_config=load_paw_motion_config(),
             services=services,
             persisted_state=state,
             animation_sequences=animation_sequences,
         )
+        if os.environ.get("DESKTOP_PET_GROOM_SMOKE_CHECK") == "1" and build_info.feature_config.test_build:
+            def report_smoke_ready():
+                payload = pet_window.groom_readiness()
+                embedded = json.loads(asset_path("build-info.json").read_text(encoding="utf-8-sig"))
+                payload["source_head_sha"] = embedded["source_head_sha"]
+                payload["git_short_hash"] = build_info.git_short_hash
+                with (services.paths.root / "groom-smoke-ready.json").open("x", encoding="utf-8") as stream:
+                    json.dump(payload, stream)
+            root.after_idle(report_smoke_ready)
         root.mainloop()
         return 0
     except (OSError, RuntimeError, ValueError, tk.TclError) as error:

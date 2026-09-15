@@ -1,0 +1,33 @@
+{
+  "version": "2.1.0",
+  "date": "2026-09-09",
+  "git_short_hash": "c3b218d",
+  "base_label": "V2.1-FEED-CORE",
+  "features": {
+    "foundation_feed_input_adapter": true,
+    "native_ole_copy_only_snapshot": true,
+    "shared_foundation_connected": true,
+    "trusted_recycle_progress_sink": true,
+    "real_user_confirmed_feed": true,
+    "feed_business_handler_ports": true,
+    "windows_file_id_info_inspector": true,
+    "nonblocking_30s_confirmation": true,
+    "progress_sink_receipt_assembler": true,
+    "com_progress_sink_connected": true,
+    "reconstructible_feed_frame_sources": true,
+    "real_full_frame_feed_animation": false,
+    "persistent_skip_all_feed_confirmations": true,
+    "whole_cat_import_pipeline_available": true,
+    "animation_debug_without_recycle": true,
+    "fixed_canonical_body_local_face_frames": true
+  },
+  "test_build": true,
+  "debug_menu": true,
+  "documentation_baseline": "BASE-001",
+  "release_state": "confirmation preference candidate only: legacy local-face animation remains; whole-cat redraw rejected and incomplete",
+  "automated_test_gate": false,
+  "acceptance": "source_and_linux_checks_only_windows_build_and_user_visual_acceptance_pending",
+  "foundation_requested_commit": "f617765",
+  "foundation_actual_commit": "f617765 + e361579 graphic playback + 6af8446 input priority",
+  "source_head_sha": "source"
+}

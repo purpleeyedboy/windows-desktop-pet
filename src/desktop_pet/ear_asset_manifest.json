@@ -1,0 +1,129 @@
+{
+  "schema_version": 2,
+  "feature": "V2.1-EARS",
+  "source_asset_id": "approved-canonical-head-v1",
+  "source_size": [
+    512,
+    768
+  ],
+  "layer_order": [
+    "approved-eye-composed-source",
+    "authored-ear-raster-keyframe",
+    "existing-head-neck-deformation",
+    "existing-head-rotation"
+  ],
+  "alpha_rule": "mask_polygon intersect current composed frame alpha",
+  "safe_recovery_pose": {
+    "frame_id": "neutral-end",
+    "frame_index": null
+  },
+  "ears": {
+    "left": {
+      "asset_id": "cat-own-left-ear-v1",
+      "root": [
+        198,
+        318
+      ],
+      "mask_polygon": [
+        [
+          170,
+          290
+        ],
+        [
+          198,
+          218
+        ],
+        [
+          227,
+          207
+        ],
+        [
+          245,
+          252
+        ],
+        [
+          235,
+          310
+        ],
+        [
+          212,
+          320
+        ]
+      ],
+      "outward_sign": 1.0,
+      "frame_count": 12,
+      "frame_sequence": [
+        "neutral-start",
+        "shake-1-out",
+        "shake-1-in",
+        "shake-2-out",
+        "shake-2-in",
+        "shake-3-out",
+        "shake-3-in",
+        "throw-approach",
+        "throw-maximum",
+        "recover-ease",
+        "rebound",
+        "neutral-end"
+      ]
+    },
+    "right": {
+      "asset_id": "cat-own-right-ear-v1",
+      "root": [
+        74,
+        324
+      ],
+      "mask_polygon": [
+        [
+          28,
+          211
+        ],
+        [
+          43,
+          218
+        ],
+        [
+          94,
+          286
+        ],
+        [
+          89,
+          315
+        ],
+        [
+          74,
+          324
+        ],
+        [
+          43,
+          310
+        ]
+      ],
+      "outward_sign": -1.0,
+      "frame_count": 12,
+      "frame_sequence": [
+        "neutral-start",
+        "shake-1-out",
+        "shake-1-in",
+        "shake-2-out",
+        "shake-2-in",
+        "shake-3-out",
+        "shake-3-in",
+        "throw-approach",
+        "throw-maximum",
+        "recover-ease",
+        "rebound",
+        "neutral-end"
+      ]
+    }
+  },
+  "animation_resource": "ear_keyframes.json",
+  "animation_encoding": "zlib+base85 lossless RGBA PNG crops",
+  "timing_ms": {
+    "total": 550,
+    "shake_3_cycles": 180,
+    "throw": 120,
+    "recovery_rebound": 250,
+    "cooldown": 500
+  }
+}
