@@ -186,6 +186,16 @@ def test_queued_drop_keeps_real_confirmation_transaction_and_reward_chain(rig, o
 
 
 def test_real_integrated_window_initializes_all_layers_and_closes_hunger_once(tmp_path, monkeypatch):
+    from desktop_pet.ole_drop_target import DropTargetRegistration
+    registered = []
+    registrar = SimpleNamespace(
+        register=lambda hwnd, target: registered.append(hwnd),
+        revoke=lambda hwnd: registered.remove(hwnd),
+    )
+    # This fixture creates a fake HWND. Exercise registration ownership with an
+    # injected native boundary; the separate EXE smoke tests a real Windows HWND.
+    monkeypatch.setattr('desktop_pet.drag_runtime.DropTargetRegistration',
+        lambda hwnd, target: DropTargetRegistration(hwnd, target, registrar))
     from test_window import prepare_headless, HeadlessCompositor
     from desktop_pet.integrated_window import IntegratedWindow, IntegratedDropService
     from desktop_pet.foundation.config import BuildInfo, FeatureConfig
@@ -233,3 +243,4 @@ def test_real_integrated_window_initializes_all_layers_and_closes_hunger_once(tm
     pet.close()
     assert checkpoints == [True]
     assert root.destroyed
+    assert registered == []
