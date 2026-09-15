@@ -1,3 +1,4 @@
+import tempfile
 import hashlib
 import json
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from .model import ACTIONS
 from .animation import AnimationSequence, FrameStep
 from .neutral_eye_compositor import NeutralEyeCompositor
 from .paths import asset_path
+from .paw_compositor import PawCompositor, load_generated_paw_frames, load_paw_frames, load_rle_masks
+from .paw_press import PawMotionConfig
 
 
 EXPECTED_SIZE = (512, 768)
@@ -95,6 +98,25 @@ def load_head_neck_compositor() -> ContinuousHeadNeckCompositor:
         body_backplate=backplate,
         head_cutout=head_cutout,
     )
+
+
+def load_paw_compositor() -> PawCompositor:
+    root = asset_path("assets", "paws", "v1")
+    return PawCompositor(
+        *load_rle_masks(root / "authoring.json"),
+        load_generated_paw_frames(
+            root / "generated-frames.json", source_sha256=HEAD_TILT_BACKPLATE_SHA256
+        ),
+    )
+
+
+def load_paw_motion_config() -> PawMotionConfig:
+    path = asset_path("assets", "paws", "v1", "authoring.json")
+    definition = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return PawMotionConfig(**definition["motion"])
+    except (KeyError, TypeError) as error:
+        raise ValueError("invalid paw motion configuration") from error
 
 
 def load_neutral_eye_source_probe(
@@ -197,3 +219,49 @@ def validate_runtime_graphic_frame(image: Image.Image, canvas: tuple[int, int]) 
     pixels = image.tobytes()
     if any(pixels[index + 3] == 0 and any(pixels[index:index + 3]) for index in range(0, len(pixels), 4)):
         raise ValueError("graphic frame has dirty RGB beneath transparent Alpha")
+
+
+def load_groom_frames(side: str = "left") -> tuple[Image.Image, ...]:
+    """Load packaged verified frames, or rebuild them in a source checkout."""
+    from .groom_import import import_groom_frames
+    if side not in ("left", "right"):
+        raise ValueError("groom side must identify separately authored left or right frames")
+    runtime = asset_path("assets", "groom", "v2.1", "runtime" if side == "left" else "runtime-right")
+    paths = sorted(runtime.glob("*.png"))
+    if paths:
+        expected = tuple(f"{index:02d}.png" for index in range(12))
+        if tuple(path.name for path in paths) != expected:
+            raise RuntimeError("packaged grooming action must contain exactly 12 ordered frames")
+        frames = tuple(Image.open(path).convert("RGBA") for path in paths)
+        if any(frame.size != (640, 768) for frame in frames):
+            raise RuntimeError("packaged grooming frames must be 640x768 RGBA")
+        if frames[0].tobytes() != frames[-1].tobytes():
+            raise RuntimeError("packaged grooming endpoints must be canonical idle")
+        return frames
+    manifest = asset_path("assets", "groom", "v2.1", "manifest.json" if side == "left" else "manifest-right.json")
+    if not manifest.is_file():
+        raise RuntimeError(f"reviewed {side} grooming assets are missing")
+    with tempfile.TemporaryDirectory(prefix="desktop-pet-groom-") as directory:
+        return import_groom_frames(manifest, Path(directory))
+
+
+def runtime_feed_frame_root() -> Path:
+    if getattr(sys, "_MEIPASS", None):
+        return asset_path("assets", "feed", "v1", "frames")
+    return Path(__file__).resolve().parents[2] / "assets/generated/work/feed/v1"
+
+
+def load_feed_frames(root: Path | None = None) -> tuple[Image.Image, ...]:
+    frame_root = root or runtime_feed_frame_root()
+    paths = sorted(frame_root.glob("*.png"))
+    if tuple(path.name for path in paths) != tuple(f"{i:02d}.png" for i in range(6)):
+        raise RuntimeError("feed animation must contain exactly 00.png through 05.png")
+    frames = []
+    for path in paths:
+        with Image.open(path) as image:
+            if image.mode != "RGBA" or image.size != (640, 768):
+                raise RuntimeError(f"{path.name} must be 640x768 RGBA")
+            if image.getchannel("A").getextrema() != (0, 255):
+                raise RuntimeError(f"{path.name} has invalid alpha")
+            frames.append(image.copy())
+    return tuple(frames)

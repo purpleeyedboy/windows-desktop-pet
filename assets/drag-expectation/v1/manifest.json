@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "canvas": [
+    512,
+    768
+  ],
+  "approved_default_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+  "source_sha256": {
+    "canonical-idle.png": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7",
+    "underlay.png": "d83230b60fe753b7344ae0b349d0c1409b47dc2002df66c5689765fcb0ca2495",
+    "eye-left.png": "6140a3a4085d8514795ea2c17ee2173964553c604f0d096a120a508fa9f7308c",
+    "eye-right.png": "9528b5f3c985b8366003fd77d413ff564b50ae547c705e5e6aee85fc86542906",
+    "eye-left-mask.png": "27bee30342e67cab45d77a14ad7eebb0125f72d4b19039b5c3c1bf506623a81c",
+    "eye-right-mask.png": "fba54f4eb10884d5a284ea6c16cd762d0786f61e09ddc5297e99d793c3a092e4",
+    "head-cutout.png": "6e57c1be03db1a97a484576f6f88be8639d8f01bbfe5b0d792c68e3d985864e6"
+  },
+  "enter_duration_ms": 150,
+  "hold_duration_ms": 100,
+  "exit_duration_ms": 150,
+  "refresh_hz": 30,
+  "frames": [
+    {
+      "id": "neutral",
+      "eye_scale": 1.0,
+      "left_dx": 0,
+      "right_dx": 0,
+      "duration_ms": 50,
+      "png_sha256": "48f710b9811ebf6edc60764bc7a52fd1af4274a761589677df365450d8a2fec7"
+    },
+    {
+      "id": "enter-1",
+      "eye_scale": 1.067,
+      "left_dx": 0,
+      "right_dx": 0,
+      "duration_ms": 50,
+      "png_sha256": "677c14fbe22b445c5ff425392e2c6353b251af45215d2d13cb4bc467a8096085"
+    },
+    {
+      "id": "enter-2",
+      "eye_scale": 1.133,
+      "left_dx": 0,
+      "right_dx": 0,
+      "duration_ms": 50,
+      "png_sha256": "b8fc9ce8647a24a8cb00b2c90b769903e128c7000e1056dab2372aa46cc6a680"
+    },
+    {
+      "id": "hold-left",
+      "eye_scale": 1.2,
+      "left_dx": -1,
+      "right_dx": 1,
+      "duration_ms": 100,
+      "png_sha256": "95ebbbc02b5fc74bd69a900dd0b6a9348a581e49c208ab7d4acf688eda7e4e60"
+    },
+    {
+      "id": "hold-right",
+      "eye_scale": 1.2,
+      "left_dx": 1,
+      "right_dx": -1,
+      "duration_ms": 100,
+      "png_sha256": "759f4e293f77661481d4f37c05313115c2a92202294dd96d8f091ee0a7b55e05"
+    }
+  ],
+  "sequence": {
+    "enter": [
+      "neutral",
+      "enter-1",
+      "enter-2",
+      "hold-left"
+    ],
+    "hold": [
+      "hold-left",
+      "hold-right"
+    ],
+    "exit": [
+      "enter-2",
+      "enter-1",
+      "neutral"
+    ]
+  },
+  "acceptance": "pending-user-windows"
+}

@@ -1,0 +1,164 @@
+{
+  "alpha_processing": {
+    "bell_original_mask_opaque_pixels": 520,
+    "bell_recovered_opaque_pixels": 633,
+    "checker_chroma_tolerance": 9,
+    "checker_rgb_tolerance": 18,
+    "edge_contract_source_pixels": 0,
+    "edge_feather_sigma": 0.35,
+    "mask_threshold": 128,
+    "method": "border-connected-checker-removal-with-protected-mask-interior",
+    "previous_solid_rgb_match_pixels": 594030,
+    "uncertainty_inner_pixels": 10,
+    "uncertainty_outer_pixels": 3
+  },
+  "input_alpha_luma_sha256": "9f8c832f31e87223c4c69c7c616f521c2399b539da6288098bd0a61564f51b6c",
+  "input_alpha_sha256": "5a6409f0f20d334b27cdbeb7c49e7ed24892a3ef36c9724ff748003d34ec983d",
+  "input_color_rgb_sha256": "8eabe7b0f74e7a70406a4d6181db606c00574e3725493e226599719f7bfee994",
+  "input_color_sha256": "3994729610cc692d4e7e508c7266f1d2f84c377e0f63ad77ca166d619ed85b6e",
+  "matte_revision": 2,
+  "normalization": {
+    "anchor": "bottom-center",
+    "canvas": [
+      512,
+      768
+    ],
+    "fit_box": [
+      32,
+      212,
+      480,
+      736
+    ],
+    "runtime_canvas": [
+      640,
+      768
+    ],
+    "runtime_offset": [
+      64,
+      0
+    ],
+    "scale_mode": "contain-preserve-aspect"
+  },
+  "poses": [
+    {
+      "cell": [
+        0,
+        0,
+        580,
+        679
+      ],
+      "id": "hungry_open"
+    },
+    {
+      "cell": [
+        580,
+        0,
+        1159,
+        679
+      ],
+      "id": "severe_tears"
+    },
+    {
+      "cell": [
+        0,
+        679,
+        580,
+        1358
+      ],
+      "id": "critical_open"
+    },
+    {
+      "cell": [
+        644,
+        679,
+        1159,
+        1358
+      ],
+      "id": "critical_closed"
+    }
+  ],
+  "previous_alpha_processing": {
+    "bottom_right_inner_guard_pixels": 64,
+    "edge_contract_source_pixels": 4,
+    "edge_feather_sigma": 0.35,
+    "mask_threshold": 8
+  },
+  "previous_input_color_sha256": "41bb419a5e0780eab9c12dac75820640525b1d40d192f4f2ca4c04c92c536193",
+  "previous_source_webp_sha256": "f0526b427e8bc79da332bdc02a3a00d52b95dbfdbe703384d6f6f6542f7160d6",
+  "sequences": {
+    "critical": [
+      {
+        "duration_ms": 240,
+        "phase": "loop",
+        "pose": "critical_open"
+      },
+      {
+        "duration_ms": 240,
+        "phase": "loop",
+        "pose": "critical_closed"
+      }
+    ],
+    "hungry": [
+      {
+        "duration_ms": 170,
+        "phase": "open",
+        "pose": "canonical"
+      },
+      {
+        "duration_ms": 180,
+        "phase": "open",
+        "pose": "hungry_open"
+      },
+      {
+        "duration_ms": 1000,
+        "phase": "hold",
+        "pose": "hungry_open"
+      },
+      {
+        "duration_ms": 170,
+        "phase": "close",
+        "pose": "hungry_open"
+      },
+      {
+        "duration_ms": 180,
+        "phase": "close",
+        "pose": "canonical"
+      }
+    ],
+    "severe": [
+      {
+        "duration_ms": 170,
+        "phase": "open",
+        "pose": "canonical"
+      },
+      {
+        "duration_ms": 180,
+        "phase": "open",
+        "pose": "severe_tears"
+      },
+      {
+        "duration_ms": 1000,
+        "phase": "hold",
+        "pose": "severe_tears"
+      },
+      {
+        "duration_ms": 170,
+        "phase": "close",
+        "pose": "severe_tears"
+      },
+      {
+        "duration_ms": 180,
+        "phase": "close",
+        "pose": "canonical"
+      }
+    ]
+  },
+  "source_canvas": [
+    1159,
+    1358
+  ],
+  "source_file": "hunger-poses.rgba.webp.base64",
+  "source_rgba_sha256": "6c530c5d8036fc7cf4ee99ab00d2f461e893d5428c43a49deb4b822ba0373b24",
+  "source_webp_sha256": "6a5907af497debcf8e1f137ceab869997bfd0925d2fec6eb821b362f3d0f73f0",
+  "version": 1
+}

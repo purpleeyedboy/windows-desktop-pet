@@ -23,6 +23,7 @@ from .idle_head_tilt import (
     TiltMode,
 )
 from .model import ACTIONS, ActionCycle
+from .groom_frames import GroomFramePlayer
 
 
 RECENTER_DURATION_SECONDS = 0.132
@@ -87,7 +88,16 @@ class RuntimeEyeSession:
         blink_motion: NaturalBlinkMotion | None = None,
         idle_tilt_motion: IdleHeadTiltMotion | None = None,
         on_ambient_blink_due: Callable[[], None] | None = None,
+        groom_player: GroomFramePlayer | None = None,
+        on_groom_due: Callable[[], None] | None = None,
+        on_groom_interrupt: Callable[[], None] | None = None,
     ) -> None:
+        self._groom_player = groom_player
+        self._groom_frame: object | None = None
+        self._on_groom_due = on_groom_due
+        self._on_groom_interrupt = on_groom_interrupt
+        self._groom_is_current: Callable[[], bool] = lambda: False
+        self._groom_complete: Callable[[], None] | None = None
         self._compositor = compositor
         self._head_follow = bool(head_follow)
         if self._head_follow and not callable(
@@ -179,6 +189,7 @@ class RuntimeEyeSession:
                 if (
                     self._blink_motion is not None
                     or self._idle_tilt_motion is not None
+                    or self._groom_player is not None
                 )
                 else None
             ),
@@ -199,6 +210,17 @@ class RuntimeEyeSession:
     @property
     def action_failure(self) -> tuple[str, ActionFailure] | None:
         return self._action_failure
+
+    def refresh_current_pose(self) -> bool:
+        """Redraw a changed local graphic without moving eyes or resetting tilt."""
+        if self._terminal or self._state != "following":
+            return False
+        return self._try_display_pose(
+            self._last_displayed_pose or (0.0, 0.0),
+            self._lifecycle_epoch,
+            "following",
+            self._last_displayed_head_pose or (0.0, 0.0),
+        )
 
     def start(self) -> SessionResult:
         if self._state == "disabled":
@@ -246,6 +268,7 @@ class RuntimeEyeSession:
         if self._state != "following":
             return SessionResult.REJECTED
 
+        self._interrupt_groom()
         self._transition("recentering")
         epoch = self._lifecycle_epoch
         try:
@@ -359,6 +382,38 @@ class RuntimeEyeSession:
             )
         return SessionResult.ACCEPTED
 
+    def start_groom(
+        self, repetitions: int | None, *, side: str | None = None, is_current: Callable[[], bool], on_complete: Callable[[], None]
+    ) -> SessionResult:
+        if self._terminal or self._state != "following" or self._groom_player is None or not is_current():
+            return SessionResult.REJECTED
+        count = self._groom_player.choose_repetitions() if repetitions is None else repetitions
+        selected_side = self._groom_player.choose_side() if side is None else side
+        if not self._groom_player.trigger(self._clock(), repetitions=count, side=selected_side):
+            return SessionResult.REJECTED
+        self._groom_is_current = is_current
+        self._groom_complete = on_complete
+        return SessionResult.ACCEPTED
+
+    def cancel_groom(self) -> None:
+        # Physical recovery only: the bridge owns coordinator cancellation.
+        had_frame = self._groom_frame is not None
+        self._groom_frame = None
+        self._groom_is_current = lambda: False
+        self._groom_complete = None
+        if self._groom_player is not None:
+            self._groom_player.interrupt(self._clock())
+        if had_frame and not self._terminal and self._state == "following":
+            self._try_display_pose(
+                self._last_displayed_pose or (0.0, 0.0), self._lifecycle_epoch,
+                "following", self._last_displayed_head_pose or (0.0, 0.0),
+            )
+
+    def _interrupt_groom(self) -> None:
+        if self._on_groom_interrupt is not None:
+            self._on_groom_interrupt()
+        self.cancel_groom()
+
     def cancel_blink(self) -> SessionResult:
         """Cancel blink output while preserving cursor/head following."""
         if self._terminal or self._state != "following" or self._blink_motion is None:
@@ -379,6 +434,8 @@ class RuntimeEyeSession:
 
     def interrupt_idle(self) -> SessionResult:
         """Cancel a tilt and restart its cooldown for click or drag priority."""
+
+        self._interrupt_groom()
 
         if self._terminal:
             return SessionResult.REJECTED
@@ -535,6 +592,7 @@ class RuntimeEyeSession:
         if self._terminal:
             return
         self._terminal = True
+        self._interrupt_groom()
         self._lifecycle_epoch += 1
         self._state = "stopped"
         self._pending_action = None
@@ -555,6 +613,24 @@ class RuntimeEyeSession:
         except Exception:
             return
         changed = False
+        if self._groom_player is not None:
+            if self._groom_player.idle_due(now) and self._on_groom_due is not None:
+                self._on_groom_due()
+            if self._terminal or self._state != "following":
+                return
+            was_active = self._groom_player.active
+            if was_active and not self._groom_is_current():
+                self.cancel_groom()
+            groom_frame = self._groom_player.sample(now)
+            if groom_frame is not self._groom_frame:
+                self._groom_frame = groom_frame
+                changed = True
+            if was_active and not self._groom_player.active:
+                complete = self._groom_complete
+                self._groom_complete = None
+                self._groom_is_current = lambda: False
+                if complete is not None:
+                    complete()
         if self._blink_motion is not None:
             try:
                 if (
@@ -634,7 +710,9 @@ class RuntimeEyeSession:
         if not self._work_is_current(epoch, expected_state):
             return False
         try:
-            if self._head_follow:
+            if expected_state == "following" and self._groom_frame is not None and self._groom_is_current():
+                frame = self._groom_frame
+            elif self._head_follow:
                 idle_pose = (
                     self._idle_tilt_pose
                     if expected_state == "following"
@@ -929,6 +1007,7 @@ class RuntimeEyeSession:
         if self._state == "disabled" or self._terminal:
             return
         self._transition("disabled")
+        self._interrupt_groom()
         self._pending_action = None
         self._active_action = None
         self._starting_action = None

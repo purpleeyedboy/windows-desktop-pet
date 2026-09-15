@@ -10,12 +10,21 @@ import tkinter as tk
 from tkinter import messagebox
 from typing import Callable, Mapping, Protocol, Sequence
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .animation import AnimationController
 from .animation import AnimationSequence
 from .bubble import BubbleWindow
+from .build_metadata import runtime_window_title
 from .dialogue import DialogueChooser, load_phrase_pools
+from .ear_interaction import (
+    EarActionContext,
+    EAR_ASSETS,
+    EarFeatureAdapter,
+    EarHitMasks,
+    EarRasterPose,
+    EarSide,
+)
 from .eye_follow import CursorProvider
 from .foundation.platform import Point, Rect as FoundationRect
 from .foundation.runtime import Activity, ActivityToken, RuntimeEvent
@@ -31,6 +40,19 @@ from .head_neck_deformation import HeadPose
 from .idle_head_tilt import TILT_MODES, TiltMode
 from .layered_window import LayeredWindowRenderer
 from .model import ACTIONS, ActionCycle, Rect, clamp_height, format_position
+from .paw_compositor import PawCompositor
+from .paw_press import (
+    FoundationPawActivityAdapter,
+    CursorMovementService,
+    LocalPawActivityAdapter,
+    PawActivityService,
+    PawPressController,
+    PawMotionConfig,
+    PawPose,
+    PawSide,
+    PawState,
+)
+from .release_status import release_status_text
 
 
 SIZE_PRESETS = {"小": 180, "中": 280, "大": 420}
@@ -53,6 +75,8 @@ GRAPHIC_ACTIVITIES = frozenset({
 })
 CLICK_THRESHOLD = 8
 MONITOR_DEFAULTTONEAREST = 2
+SM_CXDRAG = 68
+SM_CYDRAG = 69
 
 
 class WinRect(ctypes.Structure):
@@ -193,6 +217,10 @@ class _CachedCenterCompositor:
         compose_head_blink = getattr(self._compositor, "compose_head_blink")
         return compose_head_blink(eye_x, eye_y, head_pose, closure)
 
+    def set_ear_keyframe(self, side: str | None, frame_index: int | None) -> None:
+        self._compositor.set_ear_keyframe(side, frame_index)
+        self.center_frame = None
+
     def hit_test_eye(self, point: tuple[float, float]) -> bool:
         hit_test = getattr(self._compositor, "hit_test_eye", None)
         if callable(hit_test):
@@ -202,6 +230,12 @@ class _CachedCenterCompositor:
             left <= x < right and top <= y < bottom
             for left, top, right, bottom in self.eye_interaction_boxes
         )
+
+    def map_head_point(self, point: tuple[float, float]) -> tuple[float, float]:
+        mapper = getattr(self._compositor, "map_head_point", None)
+        if callable(mapper):
+            return mapper(point)
+        return point
 
 
 @dataclass(frozen=True)
@@ -238,6 +272,31 @@ def screen_work_area_for_rect(rect: Rect, fallback: Rect) -> Rect:
     return _monitor_work_area(user32, monitor, fallback)
 
 
+def system_drag_threshold(window_id: int) -> tuple[int, int]:
+    if os.name != "nt":
+        return CLICK_THRESHOLD, CLICK_THRESHOLD
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    dpi = 96
+    get_dpi = getattr(user32, "GetDpiForWindow", None)
+    if get_dpi is not None:
+        get_dpi.argtypes = [wintypes.HWND]
+        get_dpi.restype = wintypes.UINT
+        dpi = int(get_dpi(window_id)) or 96
+    get_metric = getattr(user32, "GetSystemMetricsForDpi", None)
+    if get_metric is None:
+        return CLICK_THRESHOLD, CLICK_THRESHOLD
+    get_metric.argtypes = [ctypes.c_int, wintypes.UINT]
+    get_metric.restype = ctypes.c_int
+    return (
+        max(1, int(get_metric(SM_CXDRAG, dpi))),
+        max(1, int(get_metric(SM_CYDRAG, dpi))),
+    )
+from functools import partial
+
+from .groom_frames import GroomFramePlayer
+from .groom_adapter import GroomFeatureAdapter
+
+
 class PetWindow:
     def __init__(
         self,
@@ -251,6 +310,14 @@ class PetWindow:
         runtime_failure_reporter: RuntimeFailureReporter | None = None,
         clock: Callable[[], float] = time.monotonic,
         head_follow: bool = False,
+        cursor_service_factory: Callable[[int], CursorMovementService] | None = None,
+        button_state_factory: Callable[[int], object] | None = None,
+        paw_activity_service: PawActivityService | None = None,
+        paw_compositor: PawCompositor | None = None,
+        paw_motion_config: PawMotionConfig = PawMotionConfig(),
+        groom_frames: Sequence[Image.Image] | None = None,
+        groom_other_frames: Mapping[str, Sequence[Image.Image]] | None = None,
+        groom_debug_menu: bool = False,
         services: ApplicationServices | None = None,
         persisted_state: dict | None = None,
         animation_sequences: Mapping[str, AnimationSequence] | None = None,
@@ -268,6 +335,10 @@ class PetWindow:
             )
 
         self.root = root
+        self._clock = services.runtime.clock.monotonic if services is not None else clock
+        self._groom_debug_menu = bool(groom_debug_menu)
+        self._groom_sides = ("left", *(groom_other_frames or {}))
+        self.groom_adapter: GroomFeatureAdapter | None = None
         self.services = services
         self._persisted_state = dict(persisted_state or {})
         self._runtime_timer: object | None = None
@@ -284,7 +355,31 @@ class PetWindow:
         self._resized_image = self._current_image
         self._press_pointer: tuple[int, int] | None = None
         self._press_window: tuple[int, int] | None = None
+        self._ear_press_candidate: EarSide | None = None
+        self._ear_press_dragged = False
+        self._latest_composed_frame: Image.Image | None = None
+        self._ear_pose = EarRasterPose()
+        self._ear_context: ActivityToken | object | None = None
+        self._ear_point_mapper_callback = None
+        self._ear_compositor = None
+        self._clock = clock
         self._closed = False
+        self._paw_controller: PawPressController | None = None
+        self._paw_compositor = paw_compositor
+        self._paw_after: object | None = None
+        self._paw_base_image: Image.Image | None = None
+        self._paw_paused_eye = False
+        self._paw_pose = PawPose(PawState.IDLE)
+        self._paw_candidate: PawSide | None = None
+        self._paw_candidate_exceeded = False
+        self._paw_click_consumed = False
+        self._window_dragging = False
+        self._ole_drag_active = False
+        self._paw_activity = paw_activity_service or (
+            FoundationPawActivityAdapter(services.runtime.coordinator)
+            if services is not None else LocalPawActivityAdapter()
+        )
+        self._button_state = None
         self._legacy_fallback = bool(legacy_mode)
         self._rendering_available = True
         self._consecutive_renderer_failures = 0
@@ -313,7 +408,9 @@ class PetWindow:
         )
 
         try:
-            if self.services is not None:
+            if self._groom_debug_menu:
+                root.title("桌面宠物 V2.1-LICK 调试候选")
+            elif self.services is not None:
                 info = self.services.build_info
                 root.title(
                     "桌面宠物 V2.1-CORE | "
@@ -329,6 +426,20 @@ class PetWindow:
             self.renderer = renderer_factory(root.winfo_id())
             self.renderer.set_topmost(True)
             self.bubble = BubbleWindow(root, renderer_factory=renderer_factory)
+            if cursor_service_factory is not None:
+                if paw_compositor is None:
+                    raise ValueError("cursor service requires paw compositor")
+                if button_state_factory is None:
+                    raise ValueError("cursor service requires input-router adapter")
+                self._button_state = button_state_factory(root.winfo_id())
+                self._paw_controller = PawPressController(
+                    cursor_service_factory(root.winfo_id()),
+                    self,
+                    approval_validator=self._paw_activity.validate_paw,
+                    on_complete=self._paw_activity.complete_paw,
+                    on_cancel=self._paw_activity.cancel_paw,
+                    config=paw_motion_config,
+                )
             self.animation = AnimationController(
                 animation_sequences
                 or {
@@ -340,6 +451,13 @@ class PetWindow:
                 lambda action: self._animation_finished(action, ""),
                 cancel=self._cancel_after,
                 finished_with_id=self._animation_finished,
+            )
+            self._ear_adapter = EarFeatureAdapter(
+                self._schedule_ear,
+                self._cancel_after,
+                clock,
+                self._display_ear_feedback,
+                self._ear_recovered,
             )
             self._topmost_var = tk.BooleanVar(root, value=True)
             self.menu = self._create_menu()
@@ -355,6 +473,8 @@ class PetWindow:
                 self._eye_interaction_boxes = cached_compositor.eye_interaction_boxes
                 self._eye_source_size = tuple(cached_compositor.source_size)
                 self._eye_hit_test = cached_compositor.hit_test_eye
+                self._ear_point_mapper_callback = cached_compositor.map_head_point
+                self._ear_compositor = cached_compositor
                 midpoint = tuple(int(round(value)) for value in cached_compositor.eye_midpoint)
                 self._region_anchors = {"eye-center": midpoint}
                 for index, box in enumerate(self._eye_interaction_boxes, start=1):
@@ -377,12 +497,17 @@ class PetWindow:
                     present_phrase=self._present_phrase,
                     on_action_failed=self._on_action_failed,
                     head_follow=head_follow,
+                    groom_player=(GroomFramePlayer(groom_frames, rng=self._rng, other_sides=groom_other_frames) if groom_frames is not None else None),
+                    on_groom_due=lambda: self.groom_adapter.request() if self.groom_adapter is not None else None,
+                    on_groom_interrupt=lambda: self.groom_adapter.cancel() if self.groom_adapter is not None else None,
                     on_ambient_blink_due=(
                         lambda: self._post_and_drain("input.blink")
                         if self.services is not None
                         else None
                     ),
                 )
+                if self.services is not None and groom_frames is not None:
+                    self.groom_adapter = GroomFeatureAdapter(self.services.runtime, self.eye_session)
                 result = self.eye_session.start()
                 self._neutral_center_frame = cached_compositor.center_frame
                 if self._startup_presentation_error is not None:
@@ -418,19 +543,46 @@ class PetWindow:
             command=lambda: self.request_topmost(self._topmost_var.get()),
         )
         menu.add_separator()
-        menu.add_command(label=about_title(), command=self._show_about)
-        if self.services is not None and self.services.build_info.feature_config.debug_menu_enabled:
-            menu.add_command(label="调试", command=self._show_debug_commands)
+        menu.add_command(label="关于 / 运行状态", command=self._show_about)
+        self._groom_debug_commands = {}
+        runtime_debug = self.services is not None and self.services.build_info.feature_config.debug_menu_enabled
+        if self._groom_debug_menu or runtime_debug:
+            debug_menu = tk.Menu(menu, tearoff=False)
+            for side, label in (("left", "白色前爪舔手（3次）"), ("right", "橘色前爪舔手（3次）")):
+                if self._groom_debug_menu and side in self._groom_sides:
+                    command = partial(self.request_groom_debug, side)
+                    self._groom_debug_commands[side] = command
+                    debug_menu.add_command(label=label, command=lambda callback=command: self.root.after_idle(callback))
+            if runtime_debug:
+                # Read the live registry when opened: hunger and expectation
+                # attach their commands after PetWindow construction.
+                debug_menu.add_command(label="公共运行调试", command=self._show_debug_commands)
+            menu.add_cascade(label="调试", menu=debug_menu)
         menu.add_separator()
         menu.add_command(label="退出", command=self.close)
         return menu
 
+    def groom_readiness(self) -> dict:
+        player = self.eye_session._groom_player if self.eye_session is not None else None
+        return {
+            "ready": self._window_shown and self.eye_session is not None and self.eye_session.state == "following",
+            "same_runtime": self.groom_adapter is not None and self.services is not None and self.groom_adapter.runtime is self.services.runtime,
+            "sides": player.clip_summaries() if player is not None else {},
+            "debug_targets": list(self._groom_debug_commands),
+        }
+
+    def request_groom_debug(self, side: str = "left") -> None:
+        if not self._closed and self.groom_adapter is not None:
+            self.groom_adapter.request(3, side=side)
+
     def _bind_runtime(self) -> None:
         runtime = self.services.runtime
+        runtime.bind("input.paw", lambda event: self._trigger_paw_press_direct(PawSide(event.payload["side"])))
         runtime.bind("input.action", self._consume_action)
         runtime.bind("input.graphic-clip", self._consume_graphic_clip)
         runtime.bind("input.blink", self._consume_blink)
         runtime.bind("input.tilt", self._consume_tilt)
+        runtime.bind("input.ear", self._consume_ear)
         runtime.bind("activity.timer-complete", self._consume_timed_activity_complete)
         runtime.bind("window.move", self._consume_move)
         runtime.bind("input.context_menu", self._consume_context_menu)
@@ -444,6 +596,13 @@ class PetWindow:
             self._play_registered_graphic,
             self._recover_body_channel,
         )
+        self.services.animation.register(
+            "ears",
+            lambda side: self._ear_adapter.start_approved(
+                side, self.services.runtime.coordinator.current_token
+            ),
+            self._recover_ear_channel,
+        )
         config = self.services.build_info.feature_config
         if config.test_build or config.debug_enabled:
             for label, action in ACTION_MENU_ITEMS:
@@ -455,8 +614,32 @@ class PetWindow:
             self.services.debug.register("运行状态", self._show_about)
             self.services.debug.register("日志位置", self._show_log_location)
             self.services.debug.register("取消并安全恢复", self._debug_recover)
-            for name in ("饥饿", "舔手", "喂食", "耳朵", "前肢", "期待"):
-                self.services.debug.register(f"{name}（未接入）", lambda: None, enabled=False)
+            self.services.debug.register("左前肢按压", lambda: self.trigger_paw_press(PawSide.LEFT))
+            self.services.debug.register("右前肢按压", lambda: self.trigger_paw_press(PawSide.RIGHT))
+            self.services.debug.register(
+                "立即触发：猫自身左耳", lambda: self._request_ear_action("left")
+            )
+            self.services.debug.register(
+                "立即触发：猫自身右耳", lambda: self._request_ear_action("right")
+            )
+            self.services.debug.register("显示耳区 / 锚点", self._show_ear_debug_overlay)
+
+    def _consume_ear(self, event: RuntimeEvent) -> None:
+        side = event.payload.get("side")
+        if side not in ("left", "right") or self._ear_adapter.active:
+            return
+        animation_id = f"ear:{side}"
+        token = self.services.runtime.coordinator.request_activity(
+            Activity.EAR_ACTION,
+            animation_id=animation_id,
+            timeout_seconds=2.0,
+        )
+        if token is None:
+            return
+        self._ear_context = token
+        if not self.services.animation.play("ears", side, token):
+            self._ear_context = None
+            self.services.runtime.coordinator.cancel_and_recover(token)
 
     def _schedule_runtime_drain(self) -> None:
         if self._closed or self.services is None:
@@ -627,6 +810,18 @@ class PetWindow:
         self._active_animation_action = None
         return True
 
+    def _recover_ear_channel(self) -> bool:
+        self._ear_adapter.cancel_active()
+        self._ear_pose = EarRasterPose()
+        self._ear_context = None
+        # A timeout may arrive after the adapter has become inactive. Clear the
+        # compositor independently so a failed/old action cannot retain a crop.
+        if self._ear_compositor is not None:
+            self._ear_compositor.set_ear_keyframe(None, None)
+            if self.eye_session is not None:
+                self.eye_session.refresh_current_pose()
+        return True
+
     def _consume_drag_enter(self, _event: RuntimeEvent) -> None:
         self.services.runtime.coordinator.request_activity(Activity.DRAG_PREVIEW)
 
@@ -664,10 +859,26 @@ class PetWindow:
     def _show_region_status(self) -> None:
         messagebox.showinfo("区域与锚点", f"coordinate_version: {self.services.regions.coordinate_version}", parent=self.root)
 
+    def _show_ear_debug_overlay(self) -> None:
+        frame = self._latest_composed_frame
+        if frame is None or self._closed:
+            return
+        overlay = frame.copy()
+        draw = ImageDraw.Draw(overlay)
+        mapper = self._ear_point_mapper() or (lambda point: point)
+        for side, color in (("left", "#35ff72"), ("right", "#38b6ff")):
+            asset = EAR_ASSETS[side]
+            polygon = tuple(mapper(point) for point in asset.polygon)
+            draw.line(polygon + (polygon[0],), fill=color, width=2)
+            x, y = mapper(asset.root)
+            draw.ellipse((x - 3, y - 3, x + 3, y + 3), outline=color, width=2)
+        self._apply_image(overlay, self._anchor())
+
     def _show_log_location(self) -> None:
         messagebox.showinfo("日志位置", str(self.services.log_path), parent=self.root)
 
     def _debug_recover(self) -> None:
+        self.cancel_paw_press()
         self.services.animation.recover("body", self._activity_token)
         self._activity_token = None
 
@@ -702,6 +913,8 @@ class PetWindow:
         self.root.bind("<ButtonRelease-1>", self._on_left_release)
         self.root.bind("<Button-3>", self._on_context_menu)
         self.root.bind("<MouseWheel>", self._on_wheel)
+        self.root.bind("<FocusOut>", self._on_focus_lost)
+        self.root.bind("<Leave>", self._on_pointer_leave)
 
     def _prepare_default_rect(self, image: Image.Image) -> None:
         area = self.current_screen()
@@ -916,6 +1129,7 @@ class PetWindow:
         if not self._rendering_available:
             return
         self._rendering_available = False
+        self.cancel_paw_press()
         if self.eye_session is not None:
             self.eye_session.stop()
         animation = getattr(self, "animation", None)
@@ -1043,6 +1257,107 @@ class PetWindow:
             return False
         return self.eye_session.request_blink() is SessionResult.ACCEPTED
 
+    # PawInputGate adapter. Foundation InputRouter/ActivityCoordinator can
+    # replace these reads without changing the feature controller.
+    def any_button_down(self) -> bool:
+        return bool(self._button_state and self._button_state.any_button_down())
+
+    def pointer_interaction_blocked(self) -> bool:
+        return self._window_dragging or self._ole_drag_active
+
+    def paw_activity_allowed(self) -> bool:
+        return (
+            not self._closed
+            and self._rendering_available
+            and not self.animation.busy
+            and not self.pointer_interaction_blocked()
+        )
+
+    def trigger_paw_press(self, side: PawSide) -> None:
+        if self.services is not None:
+            self._post_and_drain("input.paw", side=side.value)
+        else:
+            self._trigger_paw_press_direct(side)
+
+    def _trigger_paw_press_direct(self, side: PawSide) -> None:
+        controller = self._paw_controller
+        if (controller is None or not self.paw_activity_allowed()
+                or not self._paw_activity.paw_allowed()):
+            return
+        approval = self._paw_activity.request_paw(side)
+        if approval is None:
+            return
+        self._paw_base_image = self._current_image
+        try:
+            if controller.start(side, approval, self._clock()):
+                self._paw_activity.attach_paw_recovery(
+                    approval, lambda: self.cancel_paw_press(notify=False)
+                )
+                def begin_presentation() -> None:
+                    if not controller.begin_presentation(self._clock()):
+                        return
+                    self._paw_base_image = self._current_image
+                    self._paw_tick()
+                if self.eye_session is not None and not self._legacy_fallback:
+                    self._paw_paused_eye = True
+                    outcome = self.eye_session.pause_and_recenter(begin_presentation)
+                    if outcome is SessionResult.FALLBACK:
+                        self._paw_paused_eye = False
+                        begin_presentation()
+                    elif outcome is not SessionResult.ACCEPTED:
+                        self._paw_paused_eye = False
+                        self.cancel_paw_press()
+                else:
+                    begin_presentation()
+            else:
+                self._paw_activity.complete_paw(approval)
+        except Exception:
+            self._paw_activity.complete_paw(approval)
+            self.cancel_paw_press()
+
+    def _paw_tick(self) -> None:
+        controller, base = self._paw_controller, self._paw_base_image
+        if controller is None or base is None or self._closed:
+            return
+        try:
+            pose = controller.sample(self._clock())
+            self._paw_pose = pose
+            if pose.state is PawState.IDLE:
+                self._apply_image(base, self._anchor())
+                self._paw_base_image = None
+                self._paw_pose = PawPose(PawState.IDLE)
+                self._paw_after = None
+                self._resume_paw_eye()
+                return
+            image = self._paw_compositor.compose_frame(
+                base, controller.side.value, pose.frame_index
+            )
+            self._apply_image(image, self._anchor())
+            self._paw_after = self.root.after(16, self._paw_tick)
+        except Exception:
+            self.cancel_paw_press()
+
+    def cancel_paw_press(self, *, notify: bool = True) -> None:
+        if self._paw_controller is not None:
+            self._paw_controller.cancel(notify=notify)
+        if self._paw_after is not None:
+            self._cancel_after(self._paw_after)
+            self._paw_after = None
+        base, self._paw_base_image = self._paw_base_image, None
+        self._paw_pose = PawPose(PawState.IDLE)
+        if base is not None and not self._closed and self._rendering_available:
+            try:
+                self._apply_image(base, self._anchor())
+            except Exception:
+                pass
+        self._resume_paw_eye()
+
+    def _resume_paw_eye(self) -> None:
+        if self._paw_paused_eye:
+            self._paw_paused_eye = False
+            if self.eye_session is not None:
+                self.eye_session.cancel_for_recovery()
+
     def trigger_idle_tilt(self, mode: TiltMode) -> None:
         if mode not in TILT_MODES:
             raise ValueError("idle tilt mode is invalid")
@@ -1062,6 +1377,7 @@ class PetWindow:
         return self.eye_session.request_idle_tilt(mode) is SessionResult.ACCEPTED
 
     def _trigger_action_direct(self, action: str | None) -> bool:
+        self.cancel_paw_press()
         if (
             self._closed
             or not self._rendering_available
@@ -1183,7 +1499,19 @@ class PetWindow:
     def _display_eye_frame(self, frame: object) -> None:
         if not isinstance(frame, Image.Image):
             raise TypeError("eye compositor must return a Pillow image")
-        self._apply_image(frame, self._anchor())
+        displayed = frame
+        if self._paw_base_image is not None and self._paw_compositor is not None:
+            side = self._paw_controller.side
+            if side is not None:
+                displayed = self._paw_compositor.compose_frame(
+                    frame, side.value, self._paw_pose.frame_index
+                )
+        self._apply_image(displayed, self._anchor())
+        # Hit masks and recovery bases must describe a successfully committed
+        # presentation, never a frame rejected by the renderer or geometry.
+        self._latest_composed_frame = frame
+        if self._paw_base_image is not None and self._paw_compositor is not None:
+            self._paw_base_image = frame
         if self._neutral_center_frame is None:
             self._neutral_center_frame = frame
         if self._constructing and not self._window_shown:
@@ -1214,6 +1542,74 @@ class PetWindow:
                 self._handle_action_callback_failure()
 
         return self.root.after(delay_ms, guarded_callback)
+
+    def _schedule_ear(
+        self, delay_ms: int, callback: Callable[[], None]
+    ) -> object:
+        def guarded_callback() -> None:
+            if self._closed:
+                return
+            callback()
+
+        return self.root.after(delay_ms, guarded_callback)
+
+    def _display_ear_feedback(self, side: EarSide, pose: EarRasterPose) -> None:
+        self._ear_pose = pose
+        if self._closed or not self._rendering_available or self._ear_compositor is None:
+            return
+        self._ear_compositor.set_ear_keyframe(side, pose.frame_index)
+        if self.eye_session is not None:
+            self.eye_session.refresh_current_pose()
+
+    def _ear_point_mapper(self):
+        return self._ear_point_mapper_callback
+
+    def _request_ear_action(self, side: EarSide) -> bool:
+        if self._closed or not self._rendering_available or self._ear_adapter.active:
+            return False
+        if self.services is not None:
+            self._post_and_drain("input.ear", side=side)
+            return self._ear_adapter.active
+        context = EarActionContext(f"ear:{side}", 0, object())
+        self._ear_context = context
+        accepted = self._ear_adapter.start_approved(side, context)
+        if accepted:
+            return True
+        self._ear_context = None
+        return accepted
+
+    def _cancel_ear_for_interruption(self) -> None:
+        if self._ear_context is not None:
+            if self.services is not None and isinstance(self._ear_context, ActivityToken):
+                self.services.animation.recover("ears", self._ear_context)
+            else:
+                self._ear_adapter.cancel_and_recover(self._ear_context)
+            self._ear_context = None
+
+    def _ear_recovered(self, context: object, safe: bool) -> None:
+        if context != self._ear_context or not safe:
+            return
+        self._ear_pose = EarRasterPose()
+        self._ear_context = None
+        if self._ear_compositor is not None:
+            self._ear_compositor.set_ear_keyframe(None, None)
+            if self.eye_session is not None:
+                self.eye_session.refresh_current_pose()
+        if self.services is not None and isinstance(context, ActivityToken):
+            self.services.animation.complete(
+                "ears", context, context.animation_id or ""
+            )
+
+    def _point_in_ear_region(self, point: tuple[int, int]) -> EarSide | None:
+        frame = self._latest_composed_frame
+        rect = self._window_rect
+        if frame is None or rect.width <= 0 or rect.height <= 0:
+            return None
+        masks = EarHitMasks.from_frame(frame, self._ear_point_mapper())
+        return masks.hit_display(
+            (point[0] - rect.x, point[1] - rect.y),
+            (rect.width, rect.height),
+        )
 
     def _cancel_after(self, token: object) -> None:
         try:
@@ -1255,6 +1651,7 @@ class PetWindow:
     def _handle_action_callback_failure(self) -> None:
         if self._closed or not self._rendering_available:
             return
+        self.cancel_paw_press()
         if not self.animation.busy:
             self._active_animation_action = None
         if self.eye_session is not None:
@@ -1296,6 +1693,12 @@ class PetWindow:
     def close(self) -> None:
         if self._closed:
             return
+        self._cancel_ear_for_interruption()
+        if self._paw_controller is not None:
+            self._paw_controller.close()
+        if self._paw_after is not None:
+            self._cancel_after(self._paw_after)
+            self._paw_after = None
         self._closed = True
         if self._runtime_timer is not None:
             self._cancel_after(self._runtime_timer)
@@ -1331,8 +1734,29 @@ class PetWindow:
         interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
         if callable(interrupt_idle):
             interrupt_idle()
+        if self._ear_adapter.active:
+            self._ear_press_candidate = None
+            return
+        ear = self._point_in_ear_region((event.x_root, event.y_root))
+        if ear is not None:
+            self._ear_press_candidate = ear
+            self._ear_press_dragged = False
+            self._press_pointer = (event.x_root, event.y_root)
+            self._press_window = (self._window_rect.x, self._window_rect.y)
+            return
+        self._ear_press_candidate = None
         self._press_pointer = (event.x_root, event.y_root)
         self._press_window = (self._window_rect.x, self._window_rect.y)
+        self._window_dragging = False
+        self._paw_candidate_exceeded = False
+        pressed_paw = self._paw_side_at(self._press_pointer)
+        self._paw_click_consumed = pressed_paw is not None
+        self._paw_candidate = (
+            pressed_paw
+            if self._paw_controller is not None
+            and self._paw_controller.state is PawState.IDLE
+            else None
+        )
 
     def _on_left_motion(self, event: tk.Event) -> None:
         if self._press_pointer is None or self._press_window is None:
@@ -1341,6 +1765,9 @@ class PetWindow:
         delta_y = event.y_root - self._press_pointer[1]
         if not self._drag_threshold_exceeded(delta_x, delta_y):
             return
+        self._ear_press_dragged = self._ear_press_candidate is not None
+        self._paw_candidate_exceeded = True
+        self._window_dragging = True
         try:
             x = self._press_window[0] + delta_x
             y = self._press_window[1] + delta_y
@@ -1353,15 +1780,83 @@ class PetWindow:
         self.bubble.reposition(self.pet_rect(), self.current_screen())
 
     def _on_left_release(self, event: tk.Event) -> None:
-        if self._press_pointer is not None:
+        candidate = self._ear_press_candidate
+        if candidate is not None:
+            exceeded = self._ear_press_dragged
+            if self._press_pointer is not None:
+                drag_x, drag_y = system_drag_threshold(self.root.winfo_id())
+                exceeded = exceeded or (
+                    abs(event.x_root - self._press_pointer[0]) >= drag_x
+                    or abs(event.y_root - self._press_pointer[1]) >= drag_y
+                )
+            same_ear = self._point_in_ear_region((event.x_root, event.y_root)) == candidate
+            if not exceeded and same_ear:
+                self._request_ear_action(candidate)
+            self._clear_pointer_candidates()
+            return
+        candidate = self._paw_candidate
+        should_start_paw = (
+            candidate is not None
+            and not self._paw_candidate_exceeded
+            and self._paw_side_at((event.x_root, event.y_root)) is candidate
+            and not self.any_button_down()
+            and not self._ole_drag_active
+        )
+        if (self._press_pointer is not None and candidate is None
+                and not self._paw_click_consumed):
             self.handle_left_release(
                 self._press_pointer,
                 (event.x_root, event.y_root),
             )
         self._press_pointer = None
         self._press_window = None
+        self._paw_candidate = None
+        self._paw_candidate_exceeded = False
+        self._paw_click_consumed = False
+        self._window_dragging = False
+        if should_start_paw:
+            self.trigger_paw_press(candidate)
+
+    def _paw_side_at(self, point: tuple[int, int]) -> PawSide | None:
+        compositor = self._paw_compositor
+        if compositor is None:
+            return None
+        if compositor.hit_test("left", point, self._window_rect):
+            return PawSide.LEFT
+        if compositor.hit_test("right", point, self._window_rect):
+            return PawSide.RIGHT
+        return None
+
+    def _clear_pointer_candidates(self) -> None:
+        self._ear_press_candidate = None
+        self._ear_press_dragged = False
+        self._paw_candidate = None
+        self._paw_candidate_exceeded = False
+        self._paw_click_consumed = False
+        self._press_pointer = None
+        self._press_window = None
+        self._window_dragging = False
+
+    def _on_pointer_leave(self, _event: tk.Event | None) -> None:
+        self._cancel_ear_for_interruption()
+        self._clear_pointer_candidates()
+        self.cancel_paw_press()
+
+    def _on_focus_lost(self, _event: tk.Event | None) -> None:
+        self._cancel_ear_for_interruption()
+        self._clear_pointer_candidates()
+        self.cancel_paw_press()
+        interrupt_idle = getattr(self.eye_session, "interrupt_idle", None)
+        if callable(interrupt_idle):
+            interrupt_idle()
 
     def _on_context_menu(self, event: tk.Event) -> None:
+        # Opening a native menu transfers pointer/focus ownership away from the
+        # pet. Recover first so neither a held candidate nor a rendered ear pose
+        # can survive that transfer, including in legacy mode.
+        self._cancel_ear_for_interruption()
+        self._clear_pointer_candidates()
+        self.cancel_paw_press()
         if self.services is not None:
             self._post_and_drain("input.context_menu", x=event.x_root, y=event.y_root)
             return

@@ -93,7 +93,7 @@ def normalized_archive_members(raw_names: Iterable[str]) -> dict[str, str]:
     return members
 
 
-def verify_archive(executable: Path) -> None:
+def verify_archive(executable: Path, metadata: Path | None = None) -> None:
     if not executable.is_file():
         raise VerificationError(f"candidate executable is missing: {executable}")
 
@@ -116,6 +116,10 @@ def verify_archive(executable: Path) -> None:
         unexpected = ", ".join(sorted(unexpected_runtime_members))
         raise VerificationError(f"unexpected neutral-eye runtime archive resource: {unexpected}")
     expected = stable | eyes
+    if metadata is not None:
+        if not metadata.is_file():
+            raise VerificationError(f"build metadata is missing: {metadata}")
+        expected["build-metadata.json"] = metadata
     for member_name, source_path in expected.items():
         if member_name not in names:
             raise VerificationError(f"required archive resource is missing: {member_name}")
@@ -139,9 +143,10 @@ def verify_archive(executable: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
+    parser.add_argument("--metadata", type=Path)
     args = parser.parse_args(argv)
     try:
-        verify_archive(args.executable)
+        verify_archive(args.executable, args.metadata)
     except VerificationError as error:
         print(f"archive verification failed: {error}", file=sys.stderr)
         return 1

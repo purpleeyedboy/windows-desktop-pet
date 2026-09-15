@@ -24,6 +24,7 @@ class Activity(str, Enum):
     BLINK = "blink"
     GROOM = "groom"
     NORMAL_HUNGER_ANIMATION = "normal_hunger_animation"
+    EAR_ACTION = "ear_action"
     BODY_ACTION = "body_action"
     SEVERE_HUNGER_ANIMATION = "severe_hunger_animation"
     CONTEXT_MENU_OPEN = "context_menu_open"
@@ -82,7 +83,10 @@ class ActivityCoordinator:
 
     def permits(self, activity: Activity) -> bool:
         if self._snapshot.health is Health.CRITICAL and activity in {
-            Activity.BODY_ACTION, Activity.GROOM, Activity.NORMAL_HUNGER_ANIMATION
+            Activity.EAR_ACTION,
+            Activity.BODY_ACTION,
+            Activity.GROOM,
+            Activity.NORMAL_HUNGER_ANIMATION,
         }:
             return False
         return self._snapshot.activity is Activity.IDLE or PRIORITY[activity] > PRIORITY[self._snapshot.activity]
@@ -240,4 +244,3 @@ class RuntimeContext:
         self._closed = True
         self.coordinator.request_activity(Activity.SHUTTING_DOWN)
         self.drain()
-

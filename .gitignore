@@ -1,13 +1,27 @@
 .worktrees/
 .venv/
 __pycache__/
+*.egg-info/
+assets/groom/v2.1/runtime/
+assets/groom/v2.1/runtime-right/
 .pytest_cache/
 *.py[cod]
 build/
 dist/
 assets/generated/work/
+qa/v2.1-paws/*.png
 
 # Reproducible V2.1 QA previews are local/generated evidence. Keep the text
 # report and its generator in Git; do not put binary preview output in PR diffs.
 qa/v21-frame-player/*.png
 qa/v21-frame-player/*.gif
+/qa/v21-ears-preview.png
+build-hunger/
+dist-hunger/
+build_identity.json
+build_metadata.json
+assets/hunger/v1/
+assets/hunger/v1.building/
+qa/drag-expectation/*.png
+assets/expectation/runtime/
+assets/generated/work/feed/

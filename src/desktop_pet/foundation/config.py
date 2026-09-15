@@ -25,7 +25,7 @@ class BuildInfo:
         root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
         path = root / "build_identity.json"
         if not path.is_file():
-            return cls("2.1.0", date.today(), "source", "source", FeatureConfig(test_build=True, debug_enabled=True, debug_menu_enabled=True))
+            return cls("2.1.0", date.today(), "source", "source", FeatureConfig(enabled_features=("common-foundation", "ears"), test_build=True, debug_enabled=True, debug_menu_enabled=True))
         payload = json.loads(path.read_text(encoding="utf-8"))
         features = FeatureConfig(
             enabled_features=tuple(payload["enabled_features"]),

@@ -44,6 +44,17 @@ class RegionService:
 
     def hit_test(self, screen_point: Point, purpose: str) -> RegionHit | None:
         with self._lock:
+            if purpose == "expectation":
+                if self._window is None:
+                    return None
+                head = self._regions.get("anchor:head-center") or self._regions.get("anchor:eye-center") or self._regions.get("head")
+                if head is None:
+                    return None
+                cx, cy = head.x + head.width // 2, head.y + head.height // 2
+                radius_squared = 2.25 * (self._window.width ** 2 + self._window.height ** 2)
+                if (screen_point.x - cx) ** 2 + (screen_point.y - cy) ** 2 <= radius_squared:
+                    return RegionHit("expectation", None, self._version)
+                return None
             order = ("sensing",) if purpose == "drag" else ("head", "cat-left", "cat-right")
             for name in order:
                 rect = self._regions.get(name)

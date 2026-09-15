@@ -1,0 +1,49 @@
+# -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+
+
+ROOT = Path(SPECPATH).resolve()
+EYE_SOURCE = ROOT / "assets/rig/v1/source/eye-neutral-v1"
+EYE_RUNTIME = "assets/rig/v1/runtime/eye-neutral-v1"
+EYE_FILES = (
+    "authoring.json", "body-backplate.png", "eye-left-mask.png",
+    "eye-left.png", "eye-right-mask.png", "eye-right.png",
+    "head-cutout.png", "underlay.png",
+)
+BUILD_INFO = ROOT / "build-idle-lick-metadata/build-info.json"
+GROOM_RUNTIME = ROOT / "build-idle-lick-metadata/groom-frames"
+
+datas = [
+    (str(ROOT / "assets" / "keyframes"), "assets/keyframes"),
+    (str(ROOT / "assets" / "bubble"), "assets/bubble"),
+    (str(ROOT / "assets" / "fonts"), "assets/fonts"),
+    (str(ROOT / "assets" / "dialogue"), "assets/dialogue"),
+    (str(ROOT / "assets" / "groom" / "v2.1"), "assets/groom/v2.1"),
+    (str(ROOT / "assets/rig/v1/source/canonical-idle.png"), "assets/rig/v1/source"),
+    (str(GROOM_RUNTIME), "assets/groom/v2.1/runtime"),
+    (str(ROOT / "build-idle-lick-metadata/groom-frames-right"), "assets/groom/v2.1/runtime-right"),
+    (str(ROOT / "THIRD_PARTY_NOTICES.txt"), "."),
+    (str(BUILD_INFO), "."),
+    (str(ROOT / "build-idle-lick-metadata/build_identity.json"), "."),
+    (str(ROOT / "docs/groom-foundation-source.json"), "docs"),
+]
+datas.extend((str(EYE_SOURCE / name), EYE_RUNTIME) for name in EYE_FILES)
+
+a = Analysis(
+    [str(ROOT / "run_desktop_pet.py")],
+    pathex=[str(ROOT / "src")],
+    binaries=[], datas=datas,
+    hiddenimports=["PIL._tkinter_finder"],
+    hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=["numpy", "cv2"], noarchive=False, optimize=0,
+)
+pyz = PYZ(a.pure)
+exe = EXE(
+    pyz, a.scripts, a.binaries, a.datas, [],
+    name='桌面宠物_双侧舔手与中断恢复', debug=False,
+    bootloader_ignore_signals=False, strip=False, upx=True,
+    upx_exclude=[], runtime_tmpdir=None, console=False,
+    disable_windowed_traceback=False, argv_emulation=False,
+    target_arch=None, codesign_identity=None, entitlements_file=None,
+    version=str(ROOT / 'version_info_idle_lick.txt'),
+)

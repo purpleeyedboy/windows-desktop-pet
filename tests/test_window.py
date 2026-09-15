@@ -16,6 +16,8 @@ from desktop_pet.eye_follow import CursorPoint
 from desktop_pet.eye_runtime import ActionFailure
 from desktop_pet.model import ACTIONS, Rect
 from desktop_pet.window import PetWindow, SIZE_PRESETS, format_position
+from desktop_pet.paw_compositor import PawCompositor
+from desktop_pet.paw_press import PawSide, PawState
 from tests.fakes import FakeRenderer
 
 
@@ -204,6 +206,9 @@ class HeadlessMenu:
     def add_checkbutton(self, *, label, variable, command):
         self.commands[label] = command
 
+    def add_cascade(self, *, label, menu):
+        self.commands[label] = menu
+
     def tk_popup(self, _x, _y):
         pass
 
@@ -263,6 +268,10 @@ class HeadlessCompositor:
         self.calls: list[tuple[float, float]] = []
         self.fail_next = False
         self.events: list[str] | None = None
+        self.ear_frames = []
+
+    def set_ear_keyframe(self, side, frame_index):
+        self.ear_frames.append((side, frame_index))
 
     def compose(self, eye_x, eye_y):
         if self.events is not None:
@@ -369,6 +378,87 @@ def make_headless_window(monkeypatch, *, compositor=None, cursor=None):
 def test_format_position_supports_negative_monitor_coordinates():
     assert format_position(-1920, 20) == "-1920+20"
     assert format_position(50, -100) == "+50-100"
+
+
+def test_real_window_press_release_on_same_alpha_paw_reaches_feature_request():
+    window = object.__new__(PetWindow)
+    left = Image.new("L", (8, 8)); left.putpixel((6, 6), 255)
+    right = Image.new("L", (8, 8)); right.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(left, right)
+    window._window_rect = Rect(-100, 50, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: False, drag_threshold=lambda: (8, 8)
+    )
+    window.eye_session = None
+    window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    requested = []
+    window.trigger_paw_press = requested.append
+
+    press = SimpleNamespace(x_root=-35, y_root=115)
+    window._on_left_press(press)
+    window._on_left_release(press)
+
+    assert requested == [PawSide.LEFT]
+
+
+def test_paw_drag_threshold_moves_window_and_never_backfills_press_request():
+    window = object.__new__(PetWindow)
+    mask = Image.new("L", (8, 8)); mask.putpixel((6, 6), 255)
+    other = Image.new("L", (8, 8)); other.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(mask, other)
+    window._window_rect = Rect(0, 0, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: False, drag_threshold=lambda: (4, 4)
+    )
+    window.eye_session = None; window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    window._move_to = lambda *_args: None
+    window.bubble = SimpleNamespace(reposition=lambda *_args: None)
+    window.current_screen = lambda: Rect(0, 0, 100, 100)
+    requested = []; window.trigger_paw_press = requested.append
+
+    window._on_left_press(SimpleNamespace(x_root=65, y_root=65))
+    window._on_left_motion(SimpleNamespace(x_root=70, y_root=65))
+    window._on_left_release(SimpleNamespace(x_root=70, y_root=65))
+
+    assert requested == []
+
+
+def test_paw_release_with_button_still_down_clears_click_ownership():
+    window = object.__new__(PetWindow)
+    mask = Image.new("L", (8, 8)); mask.putpixel((6, 6), 255)
+    other = Image.new("L", (8, 8)); other.putpixel((1, 6), 255)
+    window._paw_compositor = PawCompositor(mask, other)
+    window._window_rect = Rect(0, 0, 80, 80)
+    window._paw_controller = SimpleNamespace(state=PawState.IDLE)
+    window._button_state = SimpleNamespace(
+        any_button_down=lambda: True, drag_threshold=lambda: (4, 4)
+    )
+    window.eye_session = None; window._ole_drag_active = False
+    window._press_pointer = window._press_window = None
+    requested = []; window.trigger_paw_press = requested.append
+
+    event = SimpleNamespace(x_root=65, y_root=65)
+    window._on_left_press(event)
+    window._on_left_release(event)
+
+    assert requested == []
+    assert window._press_pointer is None and window._press_window is None
+    assert window._paw_candidate is None
+    assert window._paw_click_consumed is False
+
+
+def test_focus_loss_binding_routes_to_paw_cancellation(monkeypatch):
+    window, root, *_rest = make_headless_window(monkeypatch)
+    calls = []
+    window.cancel_paw_press = lambda **kwargs: calls.append(kwargs)
+
+    root.bindings["<FocusOut>"](SimpleNamespace())
+
+    assert calls == [{}]
 
 
 def test_constrain_rect_to_area_keeps_the_whole_pet_visible():
@@ -631,8 +721,138 @@ def test_bindings_are_on_root(tk_root, loaded_frames):
         "<ButtonRelease-1>",
         "<Button-3>",
         "<MouseWheel>",
+        "<FocusOut>",
+        "<Leave>",
     ):
         assert tk_root.bind(event_name)
+
+
+def test_headless_ear_press_release_is_independent_from_actions_and_restores(monkeypatch):
+    window, root, renderer, bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    render_count = len(renderer.successes)
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    assert window._ear_press_candidate == "left"
+    assert window._ear_adapter.active is False
+    assert window.animation.busy is False
+    assert bubble.messages == []
+    assert len(renderer.successes) == render_count
+
+    window._on_left_release(point)
+    assert window._ear_adapter.active is True
+    while window._ear_adapter.active:
+        root.run_next()
+    assert window._ear_pose.frame_index is None
+    assert _compositor.ear_frames[-1] == (None, None)
+    assert any(index is not None for _, index in _compositor.ear_frames)
+    assert window.eye_session.state == "following"
+
+
+def test_headless_ear_pointer_leave_focus_loss_and_close_restore_neutral(monkeypatch):
+    window, _root, renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    window._on_pointer_leave(None)
+    assert window._ear_press_candidate is None
+    window._on_left_press(point)
+    window._on_left_release(point)
+    window._on_focus_lost(None)
+    assert renderer.successes[-1][0].tobytes() == baseline
+    window._on_left_press(point)
+    window.close()
+    assert window._ear_adapter.active is False
+
+
+@pytest.mark.parametrize(
+    ("source_x", "expected_side"),
+    ((220, "left"), (50, "right")),
+)
+def test_headless_each_ear_requires_press_and_release_on_the_same_ear(
+    monkeypatch, source_x, expected_side
+):
+    window, root, _renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(source_x * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    assert window._ear_press_candidate == expected_side
+    assert compositor.ear_frames == []
+    window._on_left_release(point)
+
+    assert window._ear_adapter.active
+    assert compositor.ear_frames[0] == (expected_side, 0)
+    while window._ear_adapter.active:
+        root.run_next()
+    assert compositor.ear_frames[-1] == (None, None)
+
+
+def test_headless_ear_release_after_pointer_leave_is_ignored(monkeypatch):
+    window, _root, _renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+
+    window._on_left_press(point)
+    window._on_pointer_leave(None)
+    window._on_left_release(point)
+
+    assert not window._ear_adapter.active
+    assert compositor.ear_frames == []
+
+
+@pytest.mark.parametrize("interrupt", ("leave", "focus", "menu"))
+def test_headless_ear_animation_interruptions_restore_exact_neutral(
+    monkeypatch, interrupt
+):
+    window, _root, renderer, _bubble, compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    baseline = renderer.successes[-1][0].tobytes()
+    rect = window.pet_rect()
+    point = SimpleNamespace(
+        x_root=rect.x + round(220 * rect.width / 512),
+        y_root=rect.y + round(240 * rect.height / 768),
+    )
+    window._on_left_press(point)
+    window._on_left_release(point)
+    assert window._ear_adapter.active
+
+    if interrupt == "leave":
+        window._on_pointer_leave(None)
+    elif interrupt == "focus":
+        window._on_focus_lost(None)
+    else:
+        window._on_context_menu(SimpleNamespace(x_root=10, y_root=20))
+
+    assert not window._ear_adapter.active
+    assert window._ear_press_candidate is None
+    assert compositor.ear_frames[-1] == (None, None)
+    assert renderer.successes[-1][0].tobytes() == baseline
 
 
 def test_wheel_resize_preserves_foot_center(tk_root, loaded_frames):
@@ -1098,6 +1318,38 @@ def test_headless_menu_and_window_protocol_share_close_path(monkeypatch):
     assert window.menu.commands["退出"].__func__ is window.close.__func__
     assert root.protocols["WM_DELETE_WINDOW"].__self__ is window
     assert root.protocols["WM_DELETE_WINDOW"].__func__ is window.close.__func__
+
+
+def test_headless_focus_loss_interrupts_idle_motion(monkeypatch):
+    window, root, _renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    calls = []
+    window.eye_session.interrupt_idle = lambda: calls.append("interrupt")
+
+    root.bindings["<FocusOut>"](object())
+
+    assert calls == ["interrupt"]
+
+
+def test_headless_window_renderer_receives_distinct_left_right_lick_pixels(monkeypatch):
+    from desktop_pet.idle_lick import LickPose
+    from desktop_pet.lick_compositor import compose_lick
+
+    window, _root, renderer, _bubble, _compositor, _cursor, _frames, _reports = (
+        make_headless_window(monkeypatch)
+    )
+    center = window._current_image
+    left = compose_lick(center, LickPose("left", "contact", 1.0, 1.0))
+    right = compose_lick(center, LickPose("right", "contact", 1.0, 1.0))
+
+    window._display_eye_frame(left)
+    left_pixels = renderer.attempts[-1][0].tobytes()
+    window._display_eye_frame(right)
+    right_pixels = renderer.attempts[-1][0].tobytes()
+
+    assert left_pixels != right_pixels
+    assert left_pixels != center.resize(renderer.attempts[-1][0].size).tobytes()
 
 
 def test_headless_menu_routes_all_seven_commands_to_exact_runtime_requests(
