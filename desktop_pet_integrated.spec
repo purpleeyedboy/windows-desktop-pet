@@ -22,7 +22,9 @@ for name in ('authoring.json', 'body-backplate.png', 'eye-left-mask.png', 'eye-l
                   'assets/rig/v1/runtime/eye-neutral-v1'))
 
 a = Analysis([str(ROOT / 'run_integrated_pet.py')], pathex=[str(ROOT / 'src')],
-             binaries=[], datas=datas, hiddenimports=['PIL._tkinter_finder'],
+             binaries=[], datas=datas, hiddenimports=[
+                 'PIL._tkinter_finder', 'desktop_pet.feed_core.progress_receipt',
+                 'desktop_pet.feed_core.wiring', 'desktop_pet.feed_animation'],
              hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=['numpy', 'cv2'],
              noarchive=False, optimize=0)
 pyz = PYZ(a.pure)
