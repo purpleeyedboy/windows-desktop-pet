@@ -1,6 +1,6 @@
 """Integrated OLE boundary: real queue/activities; fake Windows I/O only."""
 import importlib.util
-from datetime import date
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -14,12 +14,15 @@ def integration():
 
 
 @pytest.fixture
-def rig(tmp_path):
+def rig(tmp_path, monkeypatch):
     DropService = integration()
     from desktop_pet.drag_runtime import DragExpectationRuntime
     from desktop_pet.drag_foundation_adapter import DragCandidate, FileValidation
     from desktop_pet.foundation.config import BuildInfo, FeatureConfig
     from desktop_pet.foundation.services import create_application_services
+    from desktop_pet.foundation.sources import FixedTimeSource
+    clock = FixedTimeSource(datetime(2026, 9, 15, tzinfo=timezone.utc), 0)
+    monkeypatch.setattr('desktop_pet.foundation.services.SystemTimeSource', lambda: clock)
     from desktop_pet.foundation.platform import Rect
     from desktop_pet.foundation_contract import SharedHungerState
     from desktop_pet.hunger import HungerService
